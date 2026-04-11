@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router';
 import { Dashboard } from './components/Dashboard';
 import { ReschedulingFlow } from './components/ReschedulingFlow';
+import { PagosPage } from './components/PagosPage';
 
 export const router = createBrowserRouter([
   {
@@ -10,5 +11,9 @@ export const router = createBrowserRouter([
   {
     path: '/reschedule',
     Component: ReschedulingFlow,
-  },
+    },
+    {
+        path: '/pagos',
+        Component: PagosPage,
+    }
 ]);

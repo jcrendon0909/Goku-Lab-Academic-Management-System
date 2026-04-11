@@ -1,3 +1,6 @@
+import 'dotenv/config';
+console.log("CONTENIDO DE LA URI:", process.env.MONGODB_URI);
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -6,6 +9,8 @@ import gruposRoutes from "./routes/grupos.js";
 import inscripcionesRoutes from "./routes/inscripciones.js";
 import reagendacionesRoutes from "./routes/reagendaciones.js";
 import calendarioRoutes from "./routes/calendario.js";
+import pagosRoutes from './routes/pagos.js';
+import abonosRouter from "./routes/abonos.js";
 
 dotenv.config({ path: "./server/.env" });
 
@@ -24,6 +29,8 @@ app.use("/api/grupos", gruposRoutes);
 app.use("/api/inscripciones", inscripcionesRoutes);
 app.use("/api/reagendaciones", reagendacionesRoutes);
 app.use("/api/calendario", calendarioRoutes);
+app.use('/api/pagos', pagosRoutes);
+app.use("/api/abonos", abonosRouter);
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {

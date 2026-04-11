@@ -1,3 +1,25 @@
-node_modules/
+# --- SEGURIDAD ---
 .env
+*.pem
+*.key
+
+# --- DEPENDENCIAS ---
+node_modules/
+jspm_packages/
+.npm/
+
+# --- VISUAL STUDIO ---
+.vs/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+out/
 dist/
+
+# --- SISTEMA ---
+Thumbs.db
+Desktop.ini
+.DS_Store
