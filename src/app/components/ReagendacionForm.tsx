@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { crearReagendacion } from '../../services/api';
+import * as React from 'react';
 
 interface ReagendacionFormProps {
   data: any;
@@ -18,7 +19,7 @@ export default function ReagendacionForm({ data, onClose }: ReagendacionFormProp
     setGuardando(true);
 
     const payload = {
-      _id: data.ragendacion._id,
+       _id: data.reagendacion?._id,
       ReagendacionId: `REA${Date.now()}`,
       idAlumno: data.alumno.idAlumno,
       nombreAlumno: data.alumno.nombreAlumno,
@@ -36,7 +37,7 @@ export default function ReagendacionForm({ data, onClose }: ReagendacionFormProp
 
     console.log('PAYLOAD REAGENDACION:', payload);
 
-    await crearReagendacion(payload);
+      await crearReagendacion(payload);
 
     alert('Reagendación guardada correctamente');
     onClose();
