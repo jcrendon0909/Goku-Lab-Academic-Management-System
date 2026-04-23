@@ -13,14 +13,25 @@ export async function getReagendaciones() {
 }
 
 export async function crearReagendacion(data: any) {
-    const res = await fetch(`${API_URL}/reagendaciones`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-    });
+  const res = await fetch("http://localhost:4000/api/reagendaciones", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(data)
+  });
+
+  const responseData = await res.json();
+
+  console.log("RESPUESTA POST /api/reagendaciones:", responseData);
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al guardar reagendación");
+  }
+
+  return responseData;
 }
+
 
 // --- SECCIÓN DE PAGOS ---
 export async function getPagosConEstatus() {

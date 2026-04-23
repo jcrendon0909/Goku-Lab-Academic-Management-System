@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import {
   ChevronLeft,
@@ -7,9 +8,9 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
-import { Badge } from './ui/badge';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { getCalendario } from '../../services/api';
+
 import { toast } from 'sonner';
 import ReagendacionForm from './ReagendacionForm';
 
@@ -29,6 +30,15 @@ const MONTHS = [
   'Diciembre',
 ];
 
+interface StudentItem {
+  idAlumno: string;
+  nombreAlumno: string;
+  reagendacion?: {
+    tipo: 'origen' | 'destino';
+    texto: string;
+  } | null;
+}
+
 interface CalendarClass {
   id: string;
   title: string;
@@ -39,12 +49,17 @@ interface CalendarClass {
     name: string;
     email: string;
   };
-  students: {
-    idAlumno: string;
-    nombreAlumno: string;
-  }[];
+  students: StudentItem[];
   color: string;
-  status: string;
+  status: 'scheduled' | 'rescheduled-origin' | 'rescheduled-destination';
+  tipoReagendacionClase?: 'origen' | 'destino' | null;
+
+  esReagendacion?: boolean;
+  reagendacionId?: string;
+  fechaHoraOriginal?: string;
+  fechaHoraNueva?: string;
+  fechaEspecifica?: string;
+  idGrupo?: string;
 }
 
 function obtenerFechasDelDiaEnMes(
@@ -88,6 +103,8 @@ function obtenerFechasDelDiaEnMes(
 }
 
 function calcularHoraFin(horaInicio: string) {
+  if (!horaInicio) return '';
+
   const [h, m] = horaInicio.split(':').map(Number);
   const fecha = new Date();
   fecha.setHours(h, m + 120);
@@ -108,34 +125,42 @@ function obtenerColorPorCurso(curso: string) {
     'Robótica 26-1 (Torneo)': '#ef4444',
     Robótica: '#ef4444',
     'Alfabetización Digital': '#8b5cf6',
+    Matemáticas: '#3b82f6',
+    Inglés: '#3b82f6',
+    'Diseño Gráfico': '#3b82f6',
   };
 
   return colores[curso] || '#3b82f6';
+}
+
+function obtenerColorEvento(item: any) {
+  if (item.esReagendacion) {
+    return '#f97316';
+  }
+
+  return obtenerColorPorCurso(item.nombreCurso);
 }
 
 export function Dashboard() {
   const [classes, setClasses] = useState<CalendarClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
   const [view, setView] = useState<'month' | 'day'>('month');
   const [selectedClass, setSelectedClass] = useState<CalendarClass | null>(null);
   const [reagendacionData, setReagendacionData] = useState<any>(null);
   const [showReagendacion, setShowReagendacion] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleReagendar = (student: any) => {
-    console.log("Alumno para reagendar:", student);
-    console.log("Clase seleccionada:", selectedClass);
-
     setReagendacionData({
       alumno: student,
-      clase: selectedClass
+      clase: selectedClass,
     });
 
     setShowReagendacion(true);
   };
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const fetchCalendario = async () => {
@@ -147,32 +172,157 @@ export function Dashboard() {
 
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
+//////////////////////////////////////////////////////////////////////////////////////
 
-        const transformedData: CalendarClass[] = data.reduce(
+        const clasesBase = data.clasesBase || [];
+        const reagendaciones = data.reagendaciones || [];
+
+        const transformedBase: CalendarClass[] = clasesBase.reduce(
           (acc: CalendarClass[], item: any) => {
             const fechas = obtenerFechasDelDiaEnMes(item.diaClase, year, month);
 
-            const eventos: CalendarClass[] = fechas.map((fecha, index) => ({
-              id: `${item.idGrupo || item.IdGrupo}-${index}`,
-              title: item.nombreCurso,
-              date: fecha,
-              startTime: item.horaClase,
-              endTime: calcularHoraFin(item.horaClase),
-              teacher: {
-                name: item.nombreProfesor,
-                email: '',
-              },
-              students: item.alumnos || [],
-              color: obtenerColorPorCurso(item.nombreCurso),
-              status: item.status || 'scheduled',
-            }));
+            const eventos: CalendarClass[] = fechas.map((fecha, index) => {
+              const fechaEvento = new Date(fecha);
+              const horaInicio = item.horaClase || '';
+
+              const studentsFiltrados = (item.alumnos || []).map((alumno: any) => {
+                if (!alumno.reagendacion) {
+                  return { ...alumno, reagendacion: null };
+                }
+
+                const reag = alumno.reagendacion;
+                const fechaOriginal = reag.fechaHoraOriginal
+                  ? new Date(reag.fechaHoraOriginal)
+                  : null;
+
+                const mismaFechaOriginal =
+                  reag.tipo === 'origen' &&
+                  fechaOriginal &&
+                  fechaOriginal.getFullYear() === fechaEvento.getFullYear() &&
+                  fechaOriginal.getMonth() === fechaEvento.getMonth() &&
+                  fechaOriginal.getDate() === fechaEvento.getDate();
+
+                if (mismaFechaOriginal) {
+                  const fechaNueva = reag.fechaHoraNueva ? new Date(reag.fechaHoraNueva) : null;
+
+                  return {
+                    ...alumno,
+                    reagendacion: {
+                      tipo: 'origen',
+                      texto: fechaNueva
+                        ? `Nuevo horario: ${fechaNueva.toLocaleDateString('es-MX', {
+                            weekday: 'short',
+                          })} ${reag.horaClaseNueva || fechaNueva.toLocaleTimeString('es-MX', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })}`
+                        : '',
+                    },
+                  };
+                }
+
+                return { ...alumno, reagendacion: null };
+              });
+
+              const tieneOrigen = studentsFiltrados.some(
+                (alumno: any) => alumno.reagendacion?.tipo === 'origen'
+              );
+
+              return {
+                id: `${item.idGrupo}-${index}`,
+                title: item.nombreCurso,
+                date: fechaEvento,
+                startTime: horaInicio,
+                endTime: calcularHoraFin(horaInicio),
+                teacher: {
+                  name: item.nombreProfesor || '',
+                  email: '',
+                },
+                students: studentsFiltrados,
+                color: obtenerColorPorCurso(item.nombreCurso),
+                status: tieneOrigen ? 'rescheduled-origin' : 'scheduled',
+                esReagendacion: false,
+                idGrupo: item.idGrupo || '',
+                tipoReagendacionClase: tieneOrigen ? 'origen' : null,
+              };
+            });
 
             return [...acc, ...eventos];
           },
           []
         );
-        console.log("DATA BACKEND:", data);
-        console.log("TRANSFORMED DATA:", transformedData);
+
+        const reagendacionesAgrupadas = Object.values(
+          reagendaciones
+            .filter((r: any) => {
+              if (!r.fechaHoraNueva) return false;
+              const fechaNueva = new Date(r.fechaHoraNueva);
+              return (
+                fechaNueva.getFullYear() === year &&
+                fechaNueva.getMonth() === month
+              );
+            })
+            .reduce((acc: Record<string, any>, r: any) => {
+              const fechaNueva = new Date(r.fechaHoraNueva);
+              const fechaKey = `${fechaNueva.getFullYear()}-${fechaNueva.getMonth()}-${fechaNueva.getDate()}`;
+              const horaNueva = r.horaClaseNueva || '00:00';
+
+              const key = `${r.idGrupoNuevo}-${fechaKey}-${horaNueva}`;
+
+              if (!acc[key]) {
+                acc[key] = {
+                  id: r.reagendacionId || `reag-${r.idGrupoNuevo}-${fechaKey}-${horaNueva}`,
+                  title: r.nombreCurso,
+                  date: fechaNueva,
+                  startTime: horaNueva,
+                  endTime: calcularHoraFin(horaNueva),
+                  teacher: {
+                    name: r.profesorNuevo || r.profesorOriginal || '',
+                    email: '',
+                  },
+                  students: [],
+                  color: obtenerColorPorCurso(r.nombreCurso),
+                  status: 'rescheduled-destination' as const,
+                  esReagendacion: true,
+                  reagendacionId: r.reagendacionId,
+                  fechaHoraOriginal: r.fechaHoraOriginal,
+                  fechaHoraNueva: r.fechaHoraNueva,
+                  idGrupo: r.idGrupoNuevo,
+                  tipoReagendacionClase: 'destino' as const,
+                };
+              }
+
+              const fechaOriginal = r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal) : null;
+
+              acc[key].students.push({
+                idAlumno: r.idAlumno,
+                nombreAlumno: r.nombreAlumno,
+                reagendacion: {
+                  tipo: 'destino',
+                  texto: fechaOriginal
+                    ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
+                        weekday: 'short',
+                      })} ${r.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                      })}`
+                    : '',
+                },
+              });
+
+              return acc;
+            }, {})
+        );
+
+        const transformedReagendaciones: CalendarClass[] = reagendacionesAgrupadas as CalendarClass[];        
+
+        const transformedData: CalendarClass[] = [
+          ...transformedBase,
+          ...transformedReagendaciones,
+        ];
+////////////////////////////////////////////////////////////////////////////////////////////////////////
         setClasses(transformedData);
       } catch (err: any) {
         setError(err.message || 'Error al cargar calendario');
@@ -187,7 +337,6 @@ export function Dashboard() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      // Aquí después puedes volver a llamar tu API real de sincronización
       toast.success('Datos sincronizados correctamente desde CRM y KOMO');
     } catch {
       toast.error('Error al sincronizar datos');
@@ -217,26 +366,18 @@ export function Dashboard() {
     return days;
   };
 
- 
-  //----------------------
   const getClassesForDate = (date: Date | null) => {
-  if (!date) return [];
+    if (!date) return [];
 
-  const result = classes.filter((cls) => {
-    const classDate = new Date(cls.date);
+    return classes.filter((cls) => {
+      const classDate = new Date(cls.date);
 
-    const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const d2 = new Date(classDate.getFullYear(), classDate.getMonth(), classDate.getDate());
+      const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const d2 = new Date(classDate.getFullYear(), classDate.getMonth(), classDate.getDate());
 
-    return d1.getTime() === d2.getTime();
-  });
-
-  if (result.length > 0) {
-    console.log("CLASES EN FECHA:", date, result);
-  }
-
-  return result;
-};
+      return d1.getTime() === d2.getTime();
+    });
+  };
 
   const handlePrevMonth = () => {
     setCurrentDate(
@@ -296,16 +437,28 @@ export function Dashboard() {
                       <button
                         key={cls.id}
                         onClick={() => handleClassClick(cls)}
-                        className="w-full text-left p-1.5 rounded text-xs text-white hover:opacity-90 transition-opacity relative"
+                        className={`w-full text-left p-1.5 rounded text-xs text-white hover:opacity-90 transition-opacity relative ${
+                          cls.tipoReagendacionClase === 'origen'
+                            ? 'ring-2 ring-yellow-400 shadow-md border-2 border-yellow-300'
+                            : cls.tipoReagendacionClase === 'destino'
+                            ? 'ring-2 ring-sky-300 shadow-md border-2 border-sky-200'
+                            : ''
+                        }`}
                         style={{ backgroundColor: cls.color }}
                       >
-                        <div className="font-medium truncate">{cls.title}</div>
+                        <div className="font-medium truncate pr-7">{cls.title}</div>
                         <div className="text-[10px] opacity-90">{cls.startTime}</div>
 
-                        {cls.status === 'rescheduled' && (
-                          <Badge className="absolute -top-1 -right-1 bg-amber-400 text-amber-900 text-[8px] px-1 py-0 h-4">
+                        {cls.tipoReagendacionClase === 'origen' && (
+                          <div className="absolute top-1 right-1 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                             RP
-                          </Badge>
+                          </div>
+                        )}
+
+                        {cls.tipoReagendacionClase === 'destino' && (
+                          <div className="absolute top-1 right-1 bg-sky-300 text-sky-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                            RP
+                          </div>
                         )}
                       </button>
                     ))}
@@ -342,14 +495,32 @@ export function Dashboard() {
                   <button
                     key={cls.id}
                     onClick={() => handleClassClick(cls)}
-                    className="w-full text-left p-3 rounded-lg text-white hover:opacity-90 transition-opacity"
+                    className={`w-full text-left p-3 rounded-lg text-white hover:opacity-90 transition-opacity relative min-h-[88px] ${
+                      cls.tipoReagendacionClase === 'origen'
+                        ? 'ring-2 ring-yellow-400 shadow-md'
+                        : cls.tipoReagendacionClase === 'destino'
+                        ? 'ring-2 ring-sky-300 shadow-md'
+                        : ''
+                    }`}
                     style={{ backgroundColor: cls.color }}
                   >
-                    <div className="font-medium">{cls.title}</div>
+                    <div className="font-medium pr-8">{cls.title}</div>
                     <div className="text-sm opacity-90">
                       {cls.startTime} - {cls.endTime}
                     </div>
                     <div className="text-xs opacity-90">{cls.teacher.name}</div>
+
+                    {cls.tipoReagendacionClase === 'origen' && (
+                      <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                        RP
+                      </div>
+                    )}
+
+                    {cls.tipoReagendacionClase === 'destino' && (
+                      <div className="absolute top-2 right-2 bg-sky-300 text-sky-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                        RP
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -367,8 +538,7 @@ export function Dashboard() {
   if (error) {
     return <div className="p-6 text-red-500">Error: {error}</div>;
   }
-  console.log("CLASSES STATE:", classes);
-  console.log("CURRENT DATE:", currentDate);
+
   return (
     <div className="min-h-screen bg-white">
       <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -474,12 +644,22 @@ export function Dashboard() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Badge className="bg-amber-400 text-amber-900">RP</Badge>
-              <span className="text-sm text-gray-600">Reprogramado</span>
+              <div className="w-6 h-6 rounded-full bg-yellow-400 text-yellow-900 text-[10px] font-bold flex items-center justify-center">
+                RP
+              </div>
+              <span className="text-sm text-gray-600">Reagendada (origen)</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-sky-300 text-sky-900 text-[10px] font-bold flex items-center justify-center">
+                RP
+              </div>
+              <span className="text-sm text-gray-600">Reagendada (destino)</span>
             </div>
           </div>
         </Card>
       </main>
+
       {selectedClass && (
         <ClassDetailsDialog
           classData={selectedClass}
@@ -495,8 +675,6 @@ export function Dashboard() {
           onClose={() => setShowReagendacion(false)}
         />
       )}
-
-
     </div>
   );
 }

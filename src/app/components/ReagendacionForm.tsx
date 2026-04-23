@@ -1,153 +1,218 @@
-import { useState } from 'react';
-import { crearReagendacion } from '../../services/api';
-import * as React from 'react';
+import { useState } from "react";
+import { crearReagendacion } from "../../services/api";
+
 
 interface ReagendacionFormProps {
   data: any;
   onClose: () => void;
 }
 
-export default function ReagendacionForm({ data, onClose }: ReagendacionFormProps) {
-  const [fecha, setFecha] = useState('');
-  const [hora, setHora] = useState('');
-  const [duracion, setDuracion] = useState('2 horas');
-  const [profesorNuevo, setProfesorNuevo] = useState('');
+
+export default function ReagendacionForm({ data, onClose }:  ReagendacionFormProps) {
+  const [fecha, setFecha] = useState("");
+  const [hora, setHora] = useState("");
+  const [duracion, setDuracion] = useState("2 horas");
+  const [profesorNuevo, setProfesorNuevo] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const handleSubmit = async () => {
   try {
     setGuardando(true);
 
-    const payload = {
-       _id: data.reagendacion?._id,
+    console.log("========== DEBUG REAGENDACIÓN ==========");
+    console.log("📌 data completa:", data);
+    console.log("📌 data.alumno:", data?.alumno);
+    console.log("📌 data.clase:", data?.clase);
+
+    const idGrupoOrigenDetectado =
+      data?.clase?.idGrupo ||
+      data?.clase?.IdgrupoOrigen ||
+      data?.clase?.GrupoId ||
+      data?.clase?.groupId ||
+      data?.clase?.id ||
+      data?.clase?._id ||
+      "";
+
+    console.log("📌 Posibles ids detectados:", {
+      idGrupo: data?.clase?.idGrupo,
+      IdgrupoOrigen: data?.clase?.IdgrupoOrigen,
+      GrupoId: data?.clase?.GrupoId,
+      groupId: data?.clase?.groupId,
+      id: data?.clase?.id,
+      _id: data?.clase?._id,
+    });
+
+    console.log("📌 idGrupoOrigenDetectado:", idGrupoOrigenDetectado);
+
+    if (!data?.alumno?.idAlumno) {
+      console.error("❌ Falta data.alumno.idAlumno");
+      alert("No se encontró el id del alumno");
+      return;
+    }
+
+    if (!idGrupoOrigenDetectado) {
+      console.error("❌ No se encontró el grupo de origen");
+      alert("No se encontró el grupo de origen. Revisa la consola.");
+      return;
+    }
+
+    if (!fecha || !hora) {
+      console.error("❌ Faltan fecha u hora");
+      alert("Debes seleccionar fecha y hora");
+      return;
+    }
+
+     const payload = {
       ReagendacionId: `REA${Date.now()}`,
       idAlumno: data.alumno.idAlumno,
-      nombreAlumno: data.alumno.nombreAlumno,
-      IdgrupoOrigen: data.clase.idGrupo,
-      idGrupoNuevo: data.clase.idGrupo,
-      nombreCurso: data.clase.title,
-      profesorOriginal: data.clase.teacher?.name || '',
-      profesorNuevo: profesorNuevo || data.clase.teacher?.name || '',
-      fechaHoraOriginal: `${new Date(data.clase.date).toISOString()} ${data.clase.startTime}`,
+      nombreAlumno:
+        data.alumno.nombreAlumno ||
+        data.alumno.Alumno ||
+        data.alumno.nombre ||
+        "",
+      IdgrupoOrigen: idGrupoOrigenDetectado,
+      idGrupoNuevo: idGrupoOrigenDetectado,
+      nombreCurso: data.clase.title || data.clase.nombreCurso || "",
+      profesorOriginal:
+        data.clase.teacher?.name || data.clase.nombreProfesor || "",
+      profesorNuevo:
+        profesorNuevo || data.clase.teacher?.name || data.clase.nombreProfesor || "",
+      fechaHoraOriginal: `${data.clase.date || ""} ${data.clase.startTime || ""}`,
       fechaHoraNueva: `${fecha} ${hora}`,
-      motivo: 'Reagendado desde sistema',
+      motivo: "Reagendado desde sistema",
       FechaMovimiento: new Date().toISOString(),
-      estatus: 'reagendado'
+      estatus: "reagendado",
     };
 
-    console.log('PAYLOAD REAGENDACION:', payload);
+    console.log("📤 PAYLOAD FINAL:", payload);
 
-      await crearReagendacion(payload);
+    const respuesta = await crearReagendacion(payload);
+    console.log("✅ RESPUESTA SERVIDOR:", respuesta);
 
-    alert('Reagendación guardada correctamente');
+    alert("Reagendación guardada correctamente");
     onClose();
   } catch (error) {
-    console.error(error);
-    alert('Error al guardar la reagendación');
+    console.error("❌ ERROR EN handleSubmit:", error);
+    alert("Error al guardar la reagendación");
   } finally {
     setGuardando(false);
+    console.log("========== FIN DEBUG ==========");
   }
 };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Reprogramación de Clase</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            ✕
-          </button>
-        </div>
+  const handleEnviarMensaje = async () => {
+    const mensaje = `Hola equipo 👋
 
-        <p className="text-sm text-cyan-600 font-medium">
-          Para {data.alumno.nombreAlumno}
+Se solicita reagendación:
+
+Alumno: ${data?.alumno?.nombreAlumno || data?.alumno?.Alumno || ""}
+Curso: ${data?.clase?.title || data?.clase?.nombreCurso || ""}
+Profesor actual: ${data?.clase?.teacher?.name || data?.clase?.nombreProfesor || ""}
+Horario original: ${data?.clase?.startTime || ""} - ${data?.clase?.endTime || ""}
+
+Nueva fecha: ${fecha || "[pendiente]"}
+Nueva hora: ${hora || "[pendiente]"}
+Duración: ${duracion}
+
+¿Quién puede cubrir esta clase?`;
+
+    try {
+      console.log("📲 Mensaje de WhatsApp generado:", mensaje);
+      await navigator.clipboard.writeText(mensaje);
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(mensaje)}`,
+        "_blank"
+      );
+    } catch (error) {
+      console.error("❌ Error al generar mensaje:", error);
+      alert("No se pudo generar el mensaje");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
+      <div className="bg-white w-[600px] rounded-xl p-6 shadow-lg">
+        <h2 className="text-xl font-bold mb-2">
+          Reprogramación de Clase
+        </h2>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Para {data?.alumno?.nombreAlumno || data?.alumno?.Alumno || "Alumno"}
         </p>
 
-        <div className="border rounded-xl p-4">
-          <h3 className="font-semibold mb-3">Clase Original</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <div className="text-gray-500">Materia</div>
-              <div className="font-medium">{data.clase.title}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Profesor</div>
-              <div className="font-medium">{data.clase.teacher?.name}</div>
-            </div>
-            <div>
-              <div className="text-gray-500">Horario Original</div>
-              <div className="font-medium">
-                {data.clase.startTime} - {data.clase.endTime}
-              </div>
-            </div>
-          </div>
+        <div className="bg-gray-100 p-4 rounded-lg mb-4">
+          <h3 className="font-semibold mb-2">Clase Original</h3>
+          <p><b>Materia:</b> {data?.clase?.title || data?.clase?.nombreCurso}</p>
+          <p><b>Profesor:</b> {data?.clase?.teacher?.name || data?.clase?.nombreProfesor}</p>
+          <p>
+            <b>Horario:</b> {data?.clase?.startTime} - {data?.clase?.endTime}
+          </p>
         </div>
 
-        <div className="border rounded-xl p-4 space-y-4">
-          <h3 className="font-semibold">Nueva Fecha, Hora y Duración</h3>
+        <button
+          onClick={handleEnviarMensaje}
+          className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg mb-4"
+        >
+          📲 Enviar Mensaje a Profesores
+        </button>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm mb-1">Fecha</label>
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
+        <div className="bg-gray-100 p-4 rounded-lg mb-4">
+          <h3 className="font-semibold mb-3">
+            Nueva Fecha, Hora y Duración
+          </h3>
 
-            <div>
-              <label className="block text-sm mb-1">Hora de Inicio</label>
-              <input
-                type="time"
-                value={hora}
-                onChange={(e) => setHora(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-1">Duración</label>
-              <select
-                value={duracion}
-                onChange={(e) => setDuracion(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option>1 hora</option>
-                <option>2 horas</option>
-                <option>3 horas</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm mb-1">Profesor nuevo</label>
+          <div className="flex gap-2 mb-2">
             <input
-              type="text"
-              value={profesorNuevo}
-              onChange={(e) => setProfesorNuevo(e.target.value)}
-              placeholder="Opcional"
-              className="w-full border rounded-lg px-3 py-2"
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="border p-2 rounded w-1/3"
             />
+
+            <input
+              type="time"
+              value={hora}
+              onChange={(e) => setHora(e.target.value)}
+              className="border p-2 rounded w-1/3"
+            />
+
+            <select
+              value={duracion}
+              onChange={(e) => setDuracion(e.target.value)}
+              className="border p-2 rounded w-1/3"
+            >
+              <option>1 hora</option>
+              <option>2 horas</option>
+              <option>3 horas</option>
+            </select>
           </div>
+
+          <input
+            placeholder="Profesor nuevo"
+            value={profesorNuevo}
+            onChange={(e) => setProfesorNuevo(e.target.value)}
+            className="border p-2 rounded w-full"
+          />
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
-          Esta clase quedará marcada como <strong>“Reprogramado”</strong>.
+        <div className="bg-yellow-100 text-yellow-800 p-3 rounded mb-4 text-sm">
+          Esta clase quedará marcada como <b>"Reprogramado"</b>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border">
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded"
+          >
             Cancelar
           </button>
 
           <button
             onClick={handleSubmit}
             disabled={guardando}
-            className="px-5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white disabled:opacity-50"
+            className="px-4 py-2 bg-blue-500 text-white rounded"
           >
-            {guardando ? 'Guardando...' : 'Confirmar Reprogramación'}
+            {guardando ? "Guardando..." : "Confirmar Reprogramación"}
           </button>
         </div>
       </div>
