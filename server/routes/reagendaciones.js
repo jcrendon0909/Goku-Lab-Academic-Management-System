@@ -1,5 +1,6 @@
 import express from "express";
 import Reagendacion from "../models/Reagendacion.js";
+import { generarId } from "../utils/generarId.js";
 
 const router = express.Router();
 
@@ -22,7 +23,6 @@ router.post("/", async (req, res) => {
     console.log("BODY REAGENDACION RECIBIDO:", req.body);
 
     const {
-      ReagendacionId,
       idAlumno,
       nombreAlumno,
       IdgrupoOrigen,
@@ -31,8 +31,11 @@ router.post("/", async (req, res) => {
       nombreCurso,
       profesorOriginal,
       profesorNuevo,
+      idProfesorOriginal,
+      idProfesorNuevo,
       fechaHoraOriginal,
       fechaHoraNueva,
+      duracion,
       motivo,
       FechaMovimiento,
       estatus,
@@ -40,12 +43,6 @@ router.post("/", async (req, res) => {
 
     const grupoOrigenFinal = IdgrupoOrigen || idGrupoOrigen || "";
     const grupoNuevoFinal = idGrupoNuevo || "";
-
-    if (!ReagendacionId) {
-      return res.status(400).json({
-        error: "Falta ReagendacionId",
-      });
-    }
 
     if (!idAlumno) {
       return res.status(400).json({
@@ -71,8 +68,22 @@ router.post("/", async (req, res) => {
       });
     }
 
+    if (!fechaHoraOriginal) {
+      return res.status(400).json({
+        error: "Falta fechaHoraOriginal",
+      });
+    }
+
+    if (!fechaHoraNueva) {
+      return res.status(400).json({
+        error: "Falta fechaHoraNueva",
+      });
+    }
+
+    const nuevoReagendacionId = await generarId("reagendacion");
+
     const nuevaReagendacion = new Reagendacion({
-      ReagendacionId,
+      ReagendacionId: nuevoReagendacionId,
       idAlumno,
       nombreAlumno,
       IdgrupoOrigen: grupoOrigenFinal,
@@ -80,8 +91,11 @@ router.post("/", async (req, res) => {
       nombreCurso: nombreCurso || "",
       profesorOriginal: profesorOriginal || "",
       profesorNuevo: profesorNuevo || "",
+      idProfesorOriginal: idProfesorOriginal || "",
+      idProfesorNuevo: idProfesorNuevo || "",
       fechaHoraOriginal: fechaHoraOriginal || "",
       fechaHoraNueva: fechaHoraNueva || "",
+      duracion: duracion || "2 horas",
       motivo: motivo || "Reagendado desde sistema",
       FechaMovimiento: FechaMovimiento || new Date().toISOString(),
       estatus: estatus || "reagendado",

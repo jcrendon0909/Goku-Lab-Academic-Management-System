@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import {
   ChevronLeft,
@@ -10,7 +9,6 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { getCalendario } from '../../services/api';
-
 import { toast } from 'sonner';
 import ReagendacionForm from './ReagendacionForm';
 
@@ -53,13 +51,17 @@ interface CalendarClass {
   color: string;
   status: 'scheduled' | 'rescheduled-origin' | 'rescheduled-destination';
   tipoReagendacionClase?: 'origen' | 'destino' | null;
-
   esReagendacion?: boolean;
   reagendacionId?: string;
   fechaHoraOriginal?: string;
   fechaHoraNueva?: string;
   fechaEspecifica?: string;
   idGrupo?: string;
+  idProfesor?: string;
+}
+
+function normalizar(valor: string) {
+  return String(valor || '').trim().toUpperCase();
 }
 
 function obtenerFechasDelDiaEnMes(
@@ -70,20 +72,29 @@ function obtenerFechasDelDiaEnMes(
   const diasMap: Record<string, number> = {
     Domingo: 0,
     Dom: 0,
+    domingo: 0,
     Lunes: 1,
     Lun: 1,
+    lunes: 1,
     Martes: 2,
     Mar: 2,
+    martes: 2,
     Miércoles: 3,
     Miercoles: 3,
     Mié: 3,
+    miércoles: 3,
+    miercoles: 3,
     Jueves: 4,
     Jue: 4,
+    jueves: 4,
     Viernes: 5,
     Vie: 5,
+    viernes: 5,
     Sábado: 6,
     Sabado: 6,
     Sáb: 6,
+    sábado: 6,
+    sabado: 6,
   };
 
   const targetDay = diasMap[diaClase];
@@ -128,17 +139,74 @@ function obtenerColorPorCurso(curso: string) {
     Matemáticas: '#3b82f6',
     Inglés: '#3b82f6',
     'Diseño Gráfico': '#3b82f6',
+    'Programación Avanzada': '#0ea5e9',
+    Emprendimiento: '#14b8a6',
+    'Taller de Creatividad': '#f97316',
+    'Caballero del Código': '#6366f1',
   };
 
   return colores[curso] || '#3b82f6';
 }
 
-function obtenerColorEvento(item: any) {
-  if (item.esReagendacion) {
-    return '#f97316';
+function parseFechaFlexible(valor: string) {
+  if (!valor) return null;
+
+  const directa = new Date(valor);
+  if (!isNaN(directa.getTime())) return directa;
+
+  const matchRaro = String(valor).match(
+    /([A-Za-z]{3}\s[A-Za-z]{3}\s\d{1,2}\s\d{4}).*?(\d{1,2}:\d{2})$/
+  );
+
+  if (matchRaro) {
+    const fechaTexto = matchRaro[1];
+    const horaTexto = matchRaro[2];
+    const base = new Date(fechaTexto);
+
+    if (!isNaN(base.getTime())) {
+      const [h, m] = horaTexto.split(':').map(Number);
+      base.setHours(h, m, 0, 0);
+      return base;
+    }
   }
 
-  return obtenerColorPorCurso(item.nombreCurso);
+  const matchSql = String(valor).match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/
+  );
+
+  if (matchSql) {
+    const [, y, mo, d, h, mi] = matchSql;
+    return new Date(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      0,
+      0
+    );
+  }
+
+  return null;
+}
+
+function soloFecha(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function obtenerHoraDesdeFecha(valor: string) {
+  const fecha = parseFechaFlexible(valor);
+  if (!fecha) return '';
+  return `${fecha.getHours().toString().padStart(2, '0')}:${fecha
+    .getMinutes()
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+function horaAMinutos(hora: string) {
+  if (!hora) return 9999;
+  const [h, m] = hora.split(':').map(Number);
+  return h * 60 + m;
 }
 
 export function Dashboard() {
@@ -158,7 +226,6 @@ export function Dashboard() {
       alumno: student,
       clase: selectedClass,
     });
-
     setShowReagendacion(true);
   };
 
@@ -172,17 +239,20 @@ export function Dashboard() {
 
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
-//////////////////////////////////////////////////////////////////////////////////////
 
         const clasesBase = data.clasesBase || [];
         const reagendaciones = data.reagendaciones || [];
 
         const transformedBase: CalendarClass[] = clasesBase.reduce(
           (acc: CalendarClass[], item: any) => {
+            if (!item.diaClase || !item.horaClase) {
+              return acc;
+            }
+
             const fechas = obtenerFechasDelDiaEnMes(item.diaClase, year, month);
 
             const eventos: CalendarClass[] = fechas.map((fecha, index) => {
-              const fechaEvento = new Date(fecha);
+              const fechaEvento = soloFecha(new Date(fecha));
               const horaInicio = item.horaClase || '';
 
               const studentsFiltrados = (item.alumnos || []).map((alumno: any) => {
@@ -192,18 +262,18 @@ export function Dashboard() {
 
                 const reag = alumno.reagendacion;
                 const fechaOriginal = reag.fechaHoraOriginal
-                  ? new Date(reag.fechaHoraOriginal)
+                  ? parseFechaFlexible(reag.fechaHoraOriginal)
                   : null;
 
                 const mismaFechaOriginal =
                   reag.tipo === 'origen' &&
                   fechaOriginal &&
-                  fechaOriginal.getFullYear() === fechaEvento.getFullYear() &&
-                  fechaOriginal.getMonth() === fechaEvento.getMonth() &&
-                  fechaOriginal.getDate() === fechaEvento.getDate();
+                  soloFecha(fechaOriginal).getTime() === fechaEvento.getTime();
 
                 if (mismaFechaOriginal) {
-                  const fechaNueva = reag.fechaHoraNueva ? new Date(reag.fechaHoraNueva) : null;
+                  const fechaNueva = reag.fechaHoraNueva
+                    ? parseFechaFlexible(reag.fechaHoraNueva)
+                    : null;
 
                   return {
                     ...alumno,
@@ -244,6 +314,7 @@ export function Dashboard() {
                 status: tieneOrigen ? 'rescheduled-origin' : 'scheduled',
                 esReagendacion: false,
                 idGrupo: item.idGrupo || '',
+                idProfesor: item.idProfesor || '',
                 tipoReagendacionClase: tieneOrigen ? 'origen' : null,
               };
             });
@@ -253,76 +324,126 @@ export function Dashboard() {
           []
         );
 
-        const reagendacionesAgrupadas = Object.values(
-          reagendaciones
-            .filter((r: any) => {
-              if (!r.fechaHoraNueva) return false;
-              const fechaNueva = new Date(r.fechaHoraNueva);
+        const baseConDestinos: CalendarClass[] = transformedBase.map((item) => ({
+          ...item,
+          students: [...item.students],
+        }));
+
+        const transformedReagendaciones: CalendarClass[] = [];
+
+        reagendaciones.forEach((r: any, index: number) => {
+          const fechaNuevaTexto =
+            r.alumnos?.[0]?.reagendacion?.fechaHoraNueva || r.fechaHoraNueva || '';
+
+          const fechaNueva = parseFechaFlexible(fechaNuevaTexto);
+          if (!fechaNueva) return;
+
+          if (
+            fechaNueva.getFullYear() !== year ||
+            fechaNueva.getMonth() !== month
+          ) {
+            return;
+          }
+
+          const fechaSolo = soloFecha(fechaNueva);
+          const horaNueva = r.horaClase || obtenerHoraDesdeFecha(fechaNuevaTexto) || '00:00';
+
+          if (!r.esVirtual) {
+            const existente = baseConDestinos.find((cls) => {
               return (
-                fechaNueva.getFullYear() === year &&
-                fechaNueva.getMonth() === month
+                normalizar(cls.idGrupo || '') === normalizar(r.idGrupo || '') &&
+                soloFecha(new Date(cls.date)).getTime() === fechaSolo.getTime() &&
+                normalizar(cls.startTime) === normalizar(horaNueva)
               );
-            })
-            .reduce((acc: Record<string, any>, r: any) => {
-              const fechaNueva = new Date(r.fechaHoraNueva);
-              const fechaKey = `${fechaNueva.getFullYear()}-${fechaNueva.getMonth()}-${fechaNueva.getDate()}`;
-              const horaNueva = r.horaClaseNueva || '00:00';
+            });
 
-              const key = `${r.idGrupoNuevo}-${fechaKey}-${horaNueva}`;
+            if (existente) {
+              (r.alumnos || []).forEach((alumno: any) => {
+                const fechaOriginal = alumno.reagendacion?.fechaHoraOriginal
+                  ? parseFechaFlexible(alumno.reagendacion.fechaHoraOriginal)
+                  : null;
 
-              if (!acc[key]) {
-                acc[key] = {
-                  id: r.reagendacionId || `reag-${r.idGrupoNuevo}-${fechaKey}-${horaNueva}`,
-                  title: r.nombreCurso,
-                  date: fechaNueva,
-                  startTime: horaNueva,
-                  endTime: calcularHoraFin(horaNueva),
-                  teacher: {
-                    name: r.profesorNuevo || r.profesorOriginal || '',
-                    email: '',
-                  },
-                  students: [],
-                  color: obtenerColorPorCurso(r.nombreCurso),
-                  status: 'rescheduled-destination' as const,
-                  esReagendacion: true,
-                  reagendacionId: r.reagendacionId,
-                  fechaHoraOriginal: r.fechaHoraOriginal,
-                  fechaHoraNueva: r.fechaHoraNueva,
-                  idGrupo: r.idGrupoNuevo,
-                  tipoReagendacionClase: 'destino' as const,
-                };
-              }
+                const yaExiste = existente.students.some(
+                  (s) =>
+                    normalizar(s.idAlumno) === normalizar(alumno.idAlumno) &&
+                    s.reagendacion?.tipo === 'destino'
+                );
 
-              const fechaOriginal = r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal) : null;
-
-              acc[key].students.push({
-                idAlumno: r.idAlumno,
-                nombreAlumno: r.nombreAlumno,
-                reagendacion: {
-                  tipo: 'destino',
-                  texto: fechaOriginal
-                    ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
-                        weekday: 'short',
-                      })} ${r.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false,
-                      })}`
-                    : '',
-                },
+                if (!yaExiste) {
+                  existente.students.push({
+                    idAlumno: alumno.idAlumno,
+                    nombreAlumno: alumno.nombreAlumno,
+                    reagendacion: {
+                      tipo: 'destino',
+                      texto: fechaOriginal
+                        ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
+                            weekday: 'short',
+                          })} ${alumno.reagendacion?.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })}`
+                        : '',
+                    },
+                  });
+                }
               });
 
-              return acc;
-            }, {})
-        );
+              existente.tipoReagendacionClase = 'destino';
+              existente.status = 'rescheduled-destination';
+            }
 
-        const transformedReagendaciones: CalendarClass[] = reagendacionesAgrupadas as CalendarClass[];        
+            return;
+          }
+
+          const studentsDestino = (r.alumnos || []).map((alumno: any) => {
+            const fechaOriginal = alumno.reagendacion?.fechaHoraOriginal
+              ? parseFechaFlexible(alumno.reagendacion.fechaHoraOriginal)
+              : null;
+
+            return {
+              idAlumno: alumno.idAlumno,
+              nombreAlumno: alumno.nombreAlumno,
+              reagendacion: {
+                tipo: 'destino' as const,
+                texto: fechaOriginal
+                  ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
+                      weekday: 'short',
+                    })} ${alumno.reagendacion?.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}`
+                  : '',
+              },
+            };
+          });
+
+          transformedReagendaciones.push({
+            id: `${r.idGrupo || 'virtual'}-${index}-${fechaNueva.getTime()}`,
+            title: r.nombreCurso,
+            date: fechaSolo,
+            startTime: horaNueva,
+            endTime: calcularHoraFin(horaNueva),
+            teacher: {
+              name: r.nombreProfesor || '',
+              email: '',
+            },
+            students: studentsDestino,
+            color: obtenerColorPorCurso(r.nombreCurso),
+            status: 'rescheduled-destination',
+            esReagendacion: true,
+            idGrupo: r.idGrupo || '',
+            idProfesor: r.idProfesor || '',
+            tipoReagendacionClase: 'destino',
+          });
+        });
 
         const transformedData: CalendarClass[] = [
-          ...transformedBase,
+          ...baseConDestinos,
           ...transformedReagendaciones,
         ];
-////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         setClasses(transformedData);
       } catch (err: any) {
         setError(err.message || 'Error al cargar calendario');
@@ -369,14 +490,13 @@ export function Dashboard() {
   const getClassesForDate = (date: Date | null) => {
     if (!date) return [];
 
-    return classes.filter((cls) => {
-      const classDate = new Date(cls.date);
-
-      const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      const d2 = new Date(classDate.getFullYear(), classDate.getMonth(), classDate.getDate());
-
-      return d1.getTime() === d2.getTime();
-    });
+    return classes
+      .filter((cls) => {
+        const classDate = soloFecha(new Date(cls.date));
+        const currentCell = soloFecha(new Date(date));
+        return classDate.getTime() === currentCell.getTime();
+      })
+      .sort((a, b) => horaAMinutos(a.startTime) - horaAMinutos(b.startTime));
   };
 
   const handlePrevMonth = () => {

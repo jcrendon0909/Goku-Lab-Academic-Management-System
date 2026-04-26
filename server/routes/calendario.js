@@ -2,6 +2,7 @@ import express from "express";
 import Grupo from "../models/Grupo.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
+import Profesor from "../models/Profesor.js";
 
 const router = express.Router();
 
@@ -14,13 +15,98 @@ const limpiarFecha = (valor) => {
   return String(valor);
 };
 
+const parseFechaFlexible = (valor) => {
+  if (!valor) return null;
+
+  const directa = new Date(valor);
+  if (!isNaN(directa.getTime())) return directa;
+
+  const matchRaro = String(valor).match(
+    /([A-Za-z]{3}\s[A-Za-z]{3}\s\d{1,2}\s\d{4}).*?(\d{1,2}:\d{2})$/
+  );
+
+  if (matchRaro) {
+    const fechaTexto = matchRaro[1];
+    const horaTexto = matchRaro[2];
+    const base = new Date(fechaTexto);
+
+    if (!isNaN(base.getTime())) {
+      const [h, m] = horaTexto.split(":").map(Number);
+      base.setHours(h, m, 0, 0);
+      return base;
+    }
+  }
+
+  const matchSql = String(valor).match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/
+  );
+
+  if (matchSql) {
+    const [, y, mo, d, h, mi] = matchSql;
+    return new Date(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      0,
+      0
+    );
+  }
+
+  return null;
+};
+
+const obtenerHoraDesdeFecha = (valor) => {
+  const fecha = parseFechaFlexible(valor);
+  if (!fecha) return "";
+
+  return `${fecha.getHours().toString().padStart(2, "0")}:${fecha
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}`;
+};
+
+const obtenerDiaDesdeFecha = (valor) => {
+  const fecha = parseFechaFlexible(valor);
+  if (!fecha) return "";
+
+  const dias = [
+    "domingo",
+    "lunes",
+    "martes",
+    "miércoles",
+    "jueves",
+    "viernes",
+    "sábado",
+  ];
+
+  return dias[fecha.getDay()];
+};
+
 router.get("/", async (req, res) => {
   try {
     const gruposRaw = await Grupo.find().lean();
     const inscripcionesRaw = await Inscripcion.find().lean();
     const reagendacionesRaw = await Reagendacion.find().lean();
+    const profesoresRaw = await Profesor.find().lean();
 
     const gruposMap = new Map();
+    const profesoresMap = new Map();
+    const profesoresNombreMap = new Map();
+
+    for (const profesor of profesoresRaw) {
+      const idProfesor = profesor.idProfesor || profesor.IdProfesor || "";
+      const nombreProfesor = profesor.nombre || profesor.nombreProfesor || "";
+
+      if (idProfesor) {
+        profesoresMap.set(normalizar(idProfesor), profesor);
+      }
+
+      if (nombreProfesor) {
+        profesoresNombreMap.set(normalizar(nombreProfesor), profesor);
+      }
+    }
 
     for (const grupo of gruposRaw) {
       const key = normalizar(grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId);
@@ -31,10 +117,37 @@ router.get("/", async (req, res) => {
 
     const grupos = Array.from(gruposMap.values());
 
+    const obtenerNombreProfesorCompleto = ({
+      idProfesor,
+      nombreProfesor,
+    }) => {
+      const profesorPorId = profesoresMap.get(normalizar(idProfesor || ""));
+      if (profesorPorId?.nombre) {
+        return profesorPorId.nombre;
+      }
+
+      const profesorPorNombre = profesoresNombreMap.get(
+        normalizar(nombreProfesor || "")
+      );
+      if (profesorPorNombre?.nombre) {
+        return profesorPorNombre.nombre;
+      }
+
+      return nombreProfesor || "";
+    };
+
     const clasesBase = grupos.map((grupo) => {
       const grupoKey = normalizar(
         grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId
       );
+
+      const idProfesorGrupo =
+        grupo.idProfesor || grupo.IdProfesor || grupo.profesorId || "";
+
+      const nombreProfesorCompleto = obtenerNombreProfesorCompleto({
+        idProfesor: idProfesorGrupo,
+        nombreProfesor: grupo.nombreProfesor,
+      });
 
       const alumnosBase = inscripcionesRaw
         .filter((ins) => {
@@ -49,7 +162,6 @@ router.get("/", async (req, res) => {
           reagendacion: null,
         }));
 
-      // Alumnos que salen de este grupo por reagendación
       const alumnosOrigen = reagendacionesRaw
         .filter((r) => {
           const grupoOrigen = normalizar(
@@ -59,7 +171,9 @@ router.get("/", async (req, res) => {
         })
         .map((r) => {
           const grupoNuevo = gruposMap.get(
-            normalizar(r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo)
+            normalizar(
+              r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo || ""
+            )
           );
 
           return {
@@ -72,40 +186,12 @@ router.get("/", async (req, res) => {
               horaClaseNueva:
                 (grupoNuevo &&
                   (grupoNuevo.horaClase || grupoNuevo["horaClase "])) ||
+                obtenerHoraDesdeFecha(r.fechaHoraNueva) ||
                 "",
             },
           };
         });
 
-      // Alumnos que llegan a este grupo por reagendación
-      const alumnosDestino = reagendacionesRaw
-        .filter((r) => {
-          const grupoDestino = normalizar(
-            r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo
-          );
-          return grupoDestino === grupoKey;
-        })
-        .map((r) => {
-          const grupoOrigen = gruposMap.get(
-            normalizar(r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen)
-          );
-
-          return {
-            idAlumno: r.idAlumno || "",
-            nombreAlumno: r.nombreAlumno || "",
-            reagendacion: {
-              tipo: "destino",
-              fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
-              fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
-              horaClaseOriginal:
-                (grupoOrigen &&
-                  (grupoOrigen.horaClase || grupoOrigen["horaClase "])) ||
-                "",
-            },
-          };
-        });
-
-      // Unir sin duplicar alumnos
       const alumnosMap = new Map();
 
       for (const alumno of alumnosBase) {
@@ -114,12 +200,16 @@ router.get("/", async (req, res) => {
 
       for (const alumno of alumnosOrigen) {
         const keyAlumno = normalizar(alumno.idAlumno);
-        alumnosMap.set(keyAlumno, alumno);
-      }
 
-      for (const alumno of alumnosDestino) {
-        const keyAlumno = normalizar(alumno.idAlumno);
-        alumnosMap.set(keyAlumno, alumno);
+        if (alumnosMap.has(keyAlumno)) {
+          const existente = alumnosMap.get(keyAlumno);
+          alumnosMap.set(keyAlumno, {
+            ...existente,
+            reagendacion: alumno.reagendacion,
+          });
+        } else {
+          alumnosMap.set(keyAlumno, alumno);
+        }
       }
 
       const alumnos = Array.from(alumnosMap.values());
@@ -128,9 +218,10 @@ router.get("/", async (req, res) => {
         tipo: "base",
         idGrupo: grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId,
         nombreCurso: grupo.nombreCurso,
-        diaClase: grupo.diaClase,
+        diaClase: grupo.diaClase || "",
         horaClase: grupo.horaClase || grupo["horaClase "] || "",
-        nombreProfesor: grupo.nombreProfesor,
+        idProfesor: idProfesorGrupo,
+        nombreProfesor: nombreProfesorCompleto,
         modalidad: grupo.modalidad,
         capacidadMaxima: grupo.CapacidadMaxima,
         alumnosInscritos: alumnos.length,
@@ -139,48 +230,109 @@ router.get("/", async (req, res) => {
       };
     });
 
-    const eventosReagendados = reagendacionesRaw.map((r) => {
-      const grupoNuevo = gruposMap.get(
-        normalizar(r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo)
-      );
+    const reagendacionesAgrupadas = {};
+
+    for (const r of reagendacionesRaw) {
+      const idGrupoNuevo =
+        r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo || "";
+
+      const grupoNuevo = gruposMap.get(normalizar(idGrupoNuevo));
+      const fechaHoraNueva = limpiarFecha(r.fechaHoraNueva);
+      const fechaNuevaObj = parseFechaFlexible(fechaHoraNueva);
+
+      const idProfesorNuevo =
+        r.idProfesorNuevo ||
+        r.IdProfesorNuevo ||
+        (grupoNuevo &&
+          (grupoNuevo.idProfesor ||
+            grupoNuevo.IdProfesor ||
+            grupoNuevo.profesorId)) ||
+        "";
+
+      const nombreProfesorNuevo = obtenerNombreProfesorCompleto({
+        idProfesor: idProfesorNuevo,
+        nombreProfesor:
+          r.profesorNuevo || (grupoNuevo && grupoNuevo.nombreProfesor) || "",
+      });
+
+      const horaClaseNueva =
+        (grupoNuevo &&
+          (grupoNuevo.horaClase || grupoNuevo["horaClase "])) ||
+        obtenerHoraDesdeFecha(fechaHoraNueva) ||
+        "";
+
+      const diaClaseNueva =
+        (grupoNuevo && grupoNuevo.diaClase) ||
+        obtenerDiaDesdeFecha(fechaHoraNueva) ||
+        "";
+
+      const fechaKey =
+        fechaNuevaObj && !isNaN(fechaNuevaObj.getTime())
+          ? `${fechaNuevaObj.getFullYear()}-${fechaNuevaObj.getMonth()}-${fechaNuevaObj.getDate()}`
+          : fechaHoraNueva;
+
+      const key = `${normalizar(idGrupoNuevo)}|${fechaKey}|${horaClaseNueva}`;
+
+      if (!reagendacionesAgrupadas[key]) {
+        reagendacionesAgrupadas[key] = {
+          tipo: "reagendacion",
+          idGrupo:
+            idGrupoNuevo ||
+            `REAGENDACION_${Object.keys(reagendacionesAgrupadas).length}`,
+          nombreCurso:
+            r.nombreCurso || (grupoNuevo && grupoNuevo.nombreCurso) || "",
+          diaClase: diaClaseNueva,
+          horaClase: horaClaseNueva,
+          idProfesor: idProfesorNuevo,
+          nombreProfesor: nombreProfesorNuevo,
+          modalidad: (grupoNuevo && grupoNuevo.modalidad) || "Presencial",
+          capacidadMaxima: (grupoNuevo && grupoNuevo.CapacidadMaxima) || 8,
+          alumnos: [],
+          estatus: "Reagendado",
+          esVirtual: !grupoNuevo,
+        };
+      }
+
       const grupoOrigen = gruposMap.get(
-        normalizar(r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen)
+        normalizar(r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen || "")
       );
 
-      return {
-        tipo: "reagendacion",
-        reagendacionId: r.ReagendacionId || r.reagendacionId || "",
+      const idProfesorOriginal =
+        r.idProfesorOriginal ||
+        r.IdProfesorOriginal ||
+        (grupoOrigen &&
+          (grupoOrigen.idProfesor ||
+            grupoOrigen.IdProfesor ||
+            grupoOrigen.profesorId)) ||
+        "";
+
+      reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
-        idGrupoOrigen:
-          r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen || "",
-        idGrupoNuevo:
-          r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo || "",
-        nombreCurso: r.nombreCurso || "",
-        profesorOriginal:
-          r.profesorOriginal ||
-          (grupoOrigen && grupoOrigen.nombreProfesor) ||
-          "",
-        profesorNuevo:
-          r.profesorNuevo ||
-          (grupoNuevo && grupoNuevo.nombreProfesor) ||
-          "",
-        fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
-        fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
-        horaClaseOriginal:
-          (grupoOrigen && (grupoOrigen.horaClase || grupoOrigen["horaClase "])) ||
-          "",
-        horaClaseNueva:
-          (grupoNuevo && (grupoNuevo.horaClase || grupoNuevo["horaClase "])) ||
-          "",
-        motivo: r.motivo || "",
-        estatus: r.estatus || "reagendado",
-      };
-    });
+        reagendacion: {
+          tipo: "destino",
+          fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
+          fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
+          idProfesorOriginal: idProfesorOriginal,
+          horaClaseOriginal:
+            (grupoOrigen &&
+              (grupoOrigen.horaClase || grupoOrigen["horaClase "])) ||
+            obtenerHoraDesdeFecha(r.fechaHoraOriginal) ||
+            "",
+        },
+      });
+    }
+
+    const clasesReagendadas = Object.values(reagendacionesAgrupadas).map(
+      (grupo) => ({
+        ...grupo,
+        alumnosInscritos: grupo.alumnos.length,
+      })
+    );
 
     res.json({
       clasesBase,
-      reagendaciones: eventosReagendados,
+      reagendaciones: clasesReagendadas,
     });
   } catch (error) {
     console.error("Error al construir calendario:", error);

@@ -21,6 +21,7 @@ export async function crearReagendacion(data: any) {
     body: JSON.stringify(data)
   });
 
+
   const responseData = await res.json();
 
   console.log("RESPUESTA POST /api/reagendaciones:", responseData);
@@ -57,4 +58,10 @@ export async function registrarAbono(data: {
         throw new Error(error.error || "Error al registrar el abono");
     }
     return res.json();
+}
+
+export async function getProfesores() {
+  const res = await fetch(`${API_URL}/profesores`);
+  if (!res.ok) throw new Error("Error al obtener profesores");
+  return res.json();
 }

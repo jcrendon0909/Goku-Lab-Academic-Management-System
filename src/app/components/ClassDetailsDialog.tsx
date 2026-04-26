@@ -144,13 +144,13 @@ export function ClassDetailsDialog({
 
                           {student.reagendacion?.tipo === 'origen' && (
                             <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
-                              RP
+                              Reagendada (origen)
                             </Badge>
                           )}
 
                           {student.reagendacion?.tipo === 'destino' && (
-                            <Badge className="bg-sky-300 text-sky-900 rounded-lg">
-                              RP
+                            <Badge className="bg-blue-400 text-blue-900 rounded-lg">
+                              Reagendada (destino)
                             </Badge>
                           )}
                         </div>
