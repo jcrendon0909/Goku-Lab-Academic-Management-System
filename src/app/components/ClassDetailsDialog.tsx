@@ -14,6 +14,7 @@ interface ClassDetailsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onReagendar: (student: any) => void;
+  onInscribirAlumno: (classData: any) => void;
 }
 
 export function ClassDetailsDialog({
@@ -21,6 +22,7 @@ export function ClassDetailsDialog({
   isOpen,
   onClose,
   onReagendar,
+  onInscribirAlumno,
 }: ClassDetailsDialogProps) {
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('es-ES', {
@@ -40,7 +42,7 @@ export function ClassDetailsDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl rounded-xl">
         <DialogHeader>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <DialogTitle className="text-2xl font-bold text-gray-900">
                 {classData.title}
@@ -50,18 +52,27 @@ export function ClassDetailsDialog({
               </DialogDescription>
             </div>
 
-            <div className="flex gap-2">
-              {classData.tipoReagendacionClase === 'origen' && (
-                <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
-                  RP
-                </Badge>
-              )}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-2">
+                {classData.tipoReagendacionClase === 'origen' && (
+                  <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
+                    RP
+                  </Badge>
+                )}
 
-              {classData.tipoReagendacionClase === 'destino' && (
-                <Badge className="bg-sky-300 text-sky-900 rounded-lg">
-                  RP
-                </Badge>
-              )}
+                {classData.tipoReagendacionClase === 'destino' && (
+                  <Badge className="bg-sky-300 text-sky-900 rounded-lg">
+                    RP
+                  </Badge>
+                )}
+              </div>
+
+              <button
+                onClick={() => onInscribirAlumno(classData)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"
+              >
+                Inscribir alumno
+              </button>
             </div>
           </div>
         </DialogHeader>

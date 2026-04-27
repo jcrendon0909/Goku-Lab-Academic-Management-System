@@ -11,6 +11,7 @@ import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { getCalendario } from '../../services/api';
 import { toast } from 'sonner';
 import ReagendacionForm from './ReagendacionForm';
+import InscripcionForm from './InscripcionForm';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MONTHS = [
@@ -218,8 +219,15 @@ export function Dashboard() {
   const [selectedClass, setSelectedClass] = useState<CalendarClass | null>(null);
   const [reagendacionData, setReagendacionData] = useState<any>(null);
   const [showReagendacion, setShowReagendacion] = useState(false);
+  const [inscripcionClass, setInscripcionClass] = useState<CalendarClass | null>(null);
+  const [showInscripcion, setShowInscripcion] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const recargarCalendario = () => {
+    setReloadKey((prev) => prev + 1);
+  };
 
   const handleReagendar = (student: any) => {
     setReagendacionData({
@@ -227,6 +235,11 @@ export function Dashboard() {
       clase: selectedClass,
     });
     setShowReagendacion(true);
+  };
+
+  const handleInscribirAlumno = (classData: CalendarClass) => {
+    setInscripcionClass(classData);
+    setShowInscripcion(true);
   };
 
   useEffect(() => {
@@ -346,7 +359,8 @@ export function Dashboard() {
           }
 
           const fechaSolo = soloFecha(fechaNueva);
-          const horaNueva = r.horaClase || obtenerHoraDesdeFecha(fechaNuevaTexto) || '00:00';
+          const horaNueva =
+            r.horaClase || obtenerHoraDesdeFecha(fechaNuevaTexto) || '00:00';
 
           if (!r.esVirtual) {
             const existente = baseConDestinos.find((cls) => {
@@ -453,7 +467,7 @@ export function Dashboard() {
     };
 
     fetchCalendario();
-  }, [currentDate]);
+  }, [currentDate, reloadKey]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -786,6 +800,7 @@ export function Dashboard() {
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
           onReagendar={handleReagendar}
+          onInscribirAlumno={handleInscribirAlumno}
         />
       )}
 
@@ -793,6 +808,18 @@ export function Dashboard() {
         <ReagendacionForm
           data={reagendacionData}
           onClose={() => setShowReagendacion(false)}
+        />
+      )}
+
+      {showInscripcion && inscripcionClass && (
+        <InscripcionForm
+          classData={inscripcionClass}
+          onClose={() => setShowInscripcion(false)}
+          onSuccess={() => {
+            setShowInscripcion(false);
+            setIsDialogOpen(false);
+            recargarCalendario();
+          }}
         />
       )}
     </div>

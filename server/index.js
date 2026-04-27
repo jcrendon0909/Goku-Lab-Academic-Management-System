@@ -12,6 +12,7 @@ import calendarioRoutes from "./routes/calendario.js";
 import pagosRoutes from './routes/pagos.js';
 import abonosRouter from "./routes/abonos.js";
 import profesoresRoutes from "./routes/profesores.js";
+import alumnosRoutes from "./routes/alumnos.js";
 
 dotenv.config({ path: "./server/.env" });
 
@@ -33,6 +34,7 @@ app.use("/api/calendario", calendarioRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use("/api/abonos", abonosRouter);
 app.use("/api/profesores", profesoresRoutes);
+app.use("/api/alumnos", alumnosRoutes);
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
