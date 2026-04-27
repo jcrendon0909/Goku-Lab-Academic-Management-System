@@ -38,6 +38,12 @@ export async function getProfesores() {
   return res.json();
 }
 
+export async function getCursos() {
+  const res = await fetch(`${API_URL}/cursos`);
+  if (!res.ok) throw new Error("Error al obtener cursos");
+  return res.json();
+}
+
 export async function getAlumnos(busqueda: string = "") {
   const url = busqueda
     ? `${API_URL}/alumnos?q=${encodeURIComponent(busqueda)}`
@@ -115,6 +121,50 @@ export async function getInscripcionesPorAlumno(idAlumno: string) {
   const res = await fetch(`${API_URL}/inscripciones/alumno/${idAlumno}`);
   if (!res.ok) throw new Error("Error al obtener inscripciones del alumno");
   return res.json();
+}
+
+export async function crearGrupoConAlumno(data: {
+  grupo: {
+    idCurso?: string;
+    nombreCurso: string;
+    diaClase: string;
+    horaClase: string;
+    idProfesor?: string;
+    nombreProfesor: string;
+    modalidad: string;
+    capacidadMaxima: number;
+    Estatus?: string;
+  };
+  alumnoExistente?: {
+    idAlumno: string;
+    nombreAlumno?: string;
+    nombre?: string;
+  };
+  alumnoNuevo?: {
+    nombreAlumno: string;
+    telefono?: string;
+    tutor?: string;
+    observaciones?: string;
+    estatus?: string;
+  };
+}) {
+  const res = await fetch(`${API_URL}/grupos/crear-con-alumno`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  const responseData = await res.json();
+
+  console.log("RESPUESTA POST /api/grupos/crear-con-alumno:", responseData);
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al crear grupo con alumno");
+  }
+
+  return responseData;
 }
 
 // --- SECCIÓN DE PAGOS ---

@@ -13,6 +13,7 @@ import pagosRoutes from './routes/pagos.js';
 import abonosRouter from "./routes/abonos.js";
 import profesoresRoutes from "./routes/profesores.js";
 import alumnosRoutes from "./routes/alumnos.js";
+import cursosRoutes from "./routes/cursos.js";
 
 dotenv.config({ path: "./server/.env" });
 
@@ -35,6 +36,7 @@ app.use('/api/pagos', pagosRoutes);
 app.use("/api/abonos", abonosRouter);
 app.use("/api/profesores", profesoresRoutes);
 app.use("/api/alumnos", alumnosRoutes);
+app.use("/api/cursos", cursosRoutes);
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {

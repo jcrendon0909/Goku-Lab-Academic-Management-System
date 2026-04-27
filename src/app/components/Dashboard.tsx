@@ -12,6 +12,7 @@ import { getCalendario } from '../../services/api';
 import { toast } from 'sonner';
 import ReagendacionForm from './ReagendacionForm';
 import InscripcionForm from './InscripcionForm';
+import NuevoGrupoForm from './NuevoGrupoForm';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MONTHS = [
@@ -221,6 +222,7 @@ export function Dashboard() {
   const [showReagendacion, setShowReagendacion] = useState(false);
   const [inscripcionClass, setInscripcionClass] = useState<CalendarClass | null>(null);
   const [showInscripcion, setShowInscripcion] = useState(false);
+  const [showNuevoGrupo, setShowNuevoGrupo] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -680,14 +682,23 @@ export function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-3xl font-bold text-gray-900">Goku Lab</h1>
 
-            <Button
-              onClick={handleSync}
-              disabled={isSyncing}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              Sincronizar datos
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowNuevoGrupo(true)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
+              >
+                Nuevo grupo
+              </Button>
+
+              <Button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                Sincronizar datos
+              </Button>
+            </div>
           </div>
 
           <p className="text-gray-600">Sistema de Gestión Académica</p>
@@ -818,6 +829,16 @@ export function Dashboard() {
           onSuccess={() => {
             setShowInscripcion(false);
             setIsDialogOpen(false);
+            recargarCalendario();
+          }}
+        />
+      )}
+
+      {showNuevoGrupo && (
+        <NuevoGrupoForm
+          onClose={() => setShowNuevoGrupo(false)}
+          onSuccess={() => {
+            setShowNuevoGrupo(false);
             recargarCalendario();
           }}
         />
