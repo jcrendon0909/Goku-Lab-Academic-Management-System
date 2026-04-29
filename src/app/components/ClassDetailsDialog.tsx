@@ -15,6 +15,9 @@ interface ClassDetailsDialogProps {
   onClose: () => void;
   onReagendar: (student: any) => void;
   onInscribirAlumno: (classData: any) => void;
+  onEliminarGrupo: (classData: any) => void;
+  onEliminarReagendacion: (classData: any) => void;
+  onBajaAlumno: (student: any, classData: any) => void;
 }
 
 export function ClassDetailsDialog({
@@ -23,6 +26,9 @@ export function ClassDetailsDialog({
   onClose,
   onReagendar,
   onInscribirAlumno,
+  onEliminarGrupo,
+  onEliminarReagendacion,
+  onBajaAlumno,
 }: ClassDetailsDialogProps) {
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('es-ES', {
@@ -37,6 +43,8 @@ export function ClassDetailsDialog({
     classData?.teacher?.available !== undefined
       ? classData.teacher.available
       : false;
+
+  const esReagendada = Boolean(classData?.tipoReagendacionClase);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -67,12 +75,32 @@ export function ClassDetailsDialog({
                 )}
               </div>
 
-              <button
-                onClick={() => onInscribirAlumno(classData)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"
-              >
-                Inscribir alumno
-              </button>
+              {!esReagendada && (
+                <>
+                  <button
+                    onClick={() => onInscribirAlumno(classData)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                  >
+                    Inscribir alumno
+                  </button>
+
+                  <button
+                    onClick={() => onEliminarGrupo(classData)}
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                  >
+                    Eliminar grupo
+                  </button>
+                </>
+              )}
+
+              {esReagendada && (
+                <button
+                  onClick={() => onEliminarReagendacion(classData)}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                >
+                  Eliminar reagendación
+                </button>
+              )}
             </div>
           </div>
         </DialogHeader>
@@ -177,12 +205,34 @@ export function ClassDetailsDialog({
                         )}
                       </div>
 
-                      <button
-                        onClick={() => onReagendar(student)}
-                        className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg"
-                      >
-                        Reprogramar
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        {!esReagendada && (
+                          <>
+                            <button
+                              onClick={() => onReagendar(student)}
+                              className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg"
+                            >
+                              Reprogramar
+                            </button>
+
+                            <button
+                              onClick={() => onBajaAlumno(student, classData)}
+                              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
+                            >
+                              Dar de baja
+                            </button>
+                          </>
+                        )}
+
+                        {esReagendada && (
+                          <button
+                            onClick={() => onBajaAlumno(student, classData)}
+                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
+                          >
+                            Dar de baja
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 ))}

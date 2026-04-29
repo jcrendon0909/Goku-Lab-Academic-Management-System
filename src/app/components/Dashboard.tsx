@@ -8,7 +8,12 @@ import {
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
-import { getCalendario } from '../../services/api';
+import {
+  bajaAlumnoDeGrupo,
+  eliminarGrupo,
+  eliminarReagendacion,
+  getCalendario,
+} from '../../services/api';
 import { toast } from 'sonner';
 import ReagendacionForm from './ReagendacionForm';
 import InscripcionForm from './InscripcionForm';
@@ -244,6 +249,86 @@ export function Dashboard() {
     setShowInscripcion(true);
   };
 
+  const handleEliminarReagendacion = async (classData: CalendarClass) => {
+    try {
+      const idAEliminar =
+        classData.reagendacionId || classData.idGrupo || classData.id;
+
+      if (!idAEliminar) {
+        alert('No se encontró la reagendación a eliminar');
+        return;
+      }
+
+      const confirmado = window.confirm(
+        `¿Seguro que deseas eliminar esta reagendación de "${classData.title}"?`
+      );
+
+      if (!confirmado) return;
+
+      await eliminarReagendacion(idAEliminar);
+      toast.success('Reagendación eliminada correctamente');
+      setIsDialogOpen(false);
+      setSelectedClass(null);
+      recargarCalendario();
+    } catch (error: any) {
+      console.error('Error al eliminar reagendación:', error);
+      toast.error(error.message || 'Error al eliminar reagendación');
+    }
+  };
+
+  const handleBajaAlumno = async (student: any, classData: CalendarClass) => {
+    try {
+      const idAlumno = student?.idAlumno;
+      const grupoId = classData?.idGrupo;
+
+      if (!idAlumno || !grupoId) {
+        alert('No se encontró el alumno o el grupo');
+        return;
+      }
+
+      const confirmado = window.confirm(
+        `¿Seguro que deseas dar de baja a ${student.nombreAlumno} de este grupo?`
+      );
+
+      if (!confirmado) return;
+
+      await bajaAlumnoDeGrupo(idAlumno, grupoId);
+      toast.success('Alumno dado de baja correctamente');
+      setIsDialogOpen(false);
+      setSelectedClass(null);
+      recargarCalendario();
+    } catch (error: any) {
+      console.error('Error al dar de baja al alumno:', error);
+      toast.error(error.message || 'Error al dar de baja al alumno');
+    }
+  };
+
+  const handleEliminarGrupo = async (classData: CalendarClass) => {
+    try {
+      const grupoId = classData?.idGrupo;
+
+      if (!grupoId) {
+        alert('No se encontró el grupo');
+        return;
+      }
+
+      const confirmado = window.confirm(
+        `¿Seguro que deseas eliminar el grupo "${classData.title}"?`
+      );
+
+      if (!confirmado) return;
+
+      await eliminarGrupo(grupoId);
+      toast.success('Grupo eliminado correctamente');
+      setIsDialogOpen(false);
+      setSelectedClass(null);
+      recargarCalendario();
+    } catch (error: any) {
+      console.error('Error al eliminar grupo:', error);
+      toast.error(error.message || 'Error al eliminar grupo');
+    }
+  };
+
   useEffect(() => {
     const fetchCalendario = async () => {
       try {
@@ -297,11 +382,14 @@ export function Dashboard() {
                       texto: fechaNueva
                         ? `Nuevo horario: ${fechaNueva.toLocaleDateString('es-MX', {
                             weekday: 'short',
-                          })} ${reag.horaClaseNueva || fechaNueva.toLocaleTimeString('es-MX', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false,
-                          })}`
+                          })} ${
+                            reag.horaClaseNueva ||
+                            fechaNueva.toLocaleTimeString('es-MX', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false,
+                            })
+                          }`
                         : '',
                     },
                   };
@@ -394,11 +482,14 @@ export function Dashboard() {
                       texto: fechaOriginal
                         ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                             weekday: 'short',
-                          })} ${alumno.reagendacion?.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false,
-                          })}`
+                          })} ${
+                            alumno.reagendacion?.horaClaseOriginal ||
+                            fechaOriginal.toLocaleTimeString('es-MX', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false,
+                            })
+                          }`
                         : '',
                     },
                   });
@@ -425,11 +516,14 @@ export function Dashboard() {
                 texto: fechaOriginal
                   ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                       weekday: 'short',
-                    })} ${alumno.reagendacion?.horaClaseOriginal || fechaOriginal.toLocaleTimeString('es-MX', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    })}`
+                    })} ${
+                      alumno.reagendacion?.horaClaseOriginal ||
+                      fechaOriginal.toLocaleTimeString('es-MX', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                      })
+                    }`
                   : '',
               },
             };
@@ -451,6 +545,7 @@ export function Dashboard() {
             esReagendacion: true,
             idGrupo: r.idGrupo || '',
             idProfesor: r.idProfesor || '',
+            reagendacionId: r._id || r.ReagendacionId || '',
             tipoReagendacionClase: 'destino',
           });
         });
@@ -812,6 +907,9 @@ export function Dashboard() {
           onClose={() => setIsDialogOpen(false)}
           onReagendar={handleReagendar}
           onInscribirAlumno={handleInscribirAlumno}
+          onEliminarGrupo={handleEliminarGrupo}
+          onEliminarReagendacion={handleEliminarReagendacion}
+          onBajaAlumno={handleBajaAlumno}
         />
       )}
 

@@ -2,6 +2,7 @@ import express from "express";
 import Grupo from "../models/Grupo.js";
 import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
+import Reagendacion from "../models/Reagendacion.js";
 import { generarId } from "../utils/generarId.js";
 
 const router = express.Router();
@@ -108,11 +109,7 @@ router.post("/", async (req, res) => {
 
 router.post("/crear-con-alumno", async (req, res) => {
   try {
-    const {
-      grupo,
-      alumnoExistente,
-      alumnoNuevo,
-    } = req.body;
+    const { grupo, alumnoExistente, alumnoNuevo } = req.body;
 
     if (!grupo) {
       return res.status(400).json({ error: "Faltan datos del grupo" });
@@ -286,6 +283,62 @@ router.post("/crear-con-alumno", async (req, res) => {
     console.error("ERROR POST /crear-con-alumno:", error);
     res.status(500).json({
       error: "Error al crear grupo con alumno",
+      detalle: error.message,
+    });
+  }
+});
+
+router.delete("/:grupoId", async (req, res) => {
+  try {
+    const { grupoId } = req.params;
+
+    const grupo = await Grupo.findOne({
+      $or: [{ IdGrupo: grupoId }, { idGrupo: grupoId }, { GrupoId: grupoId }],
+    });
+
+    if (!grupo) {
+      return res.status(404).json({
+        error: "No se encontró el grupo",
+      });
+    }
+
+    const inscripciones = await Inscripcion.find({
+      grupoId,
+    }).lean();
+
+    if (inscripciones.length > 0) {
+      return res.status(409).json({
+        error: "No se puede eliminar el grupo porque tiene alumnos inscritos",
+        alumnosInscritos: inscripciones.length,
+      });
+    }
+
+    const reagendacionesRelacionadas = await Reagendacion.find({
+      $or: [
+        { IdgrupoOrigen: grupoId },
+        { idGrupoOrigen: grupoId },
+        { idGrupoNuevo: grupoId },
+      ],
+    }).lean();
+
+    if (reagendacionesRelacionadas.length > 0) {
+      return res.status(409).json({
+        error: "No se puede eliminar el grupo porque tiene reagendaciones relacionadas",
+        reagendacionesRelacionadas: reagendacionesRelacionadas.length,
+      });
+    }
+
+    await Grupo.deleteOne({ _id: grupo._id });
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Grupo eliminado correctamente",
+      grupoEliminado: grupo,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE GRUPO:", error);
+    res.status(500).json({
+      error: "Error al eliminar grupo",
       detalle: error.message,
     });
   }

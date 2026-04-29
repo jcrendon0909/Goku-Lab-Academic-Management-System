@@ -192,3 +192,45 @@ export async function registrarAbono(data: {
   }
   return res.json();
 }
+
+export async function eliminarReagendacion(id: string) {
+  const res = await fetch(`${API_URL}/reagendaciones/${id}`, {
+    method: "DELETE",
+  });
+
+  const responseData = await res.json();
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al eliminar reagendación");
+  }
+
+  return responseData;
+}
+
+export async function bajaAlumnoDeGrupo(idAlumno: string, grupoId: string) {
+  const res = await fetch(`${API_URL}/inscripciones/${idAlumno}/${grupoId}`, {
+    method: "DELETE",
+  });
+
+  const responseData = await res.json();
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al dar de baja al alumno");
+  }
+
+  return responseData;
+}
+
+export async function eliminarGrupo(grupoId: string) {
+  const res = await fetch(`${API_URL}/grupos/${grupoId}`, {
+    method: "DELETE",
+  });
+
+  const responseData = await res.json();
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al eliminar grupo");
+  }
+
+  return responseData;
+}

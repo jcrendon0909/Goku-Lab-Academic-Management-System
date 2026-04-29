@@ -45,39 +45,27 @@ router.post("/", async (req, res) => {
     const grupoNuevoFinal = idGrupoNuevo || "";
 
     if (!idAlumno) {
-      return res.status(400).json({
-        error: "Falta idAlumno",
-      });
+      return res.status(400).json({ error: "Falta idAlumno" });
     }
 
     if (!nombreAlumno) {
-      return res.status(400).json({
-        error: "Falta nombreAlumno",
-      });
+      return res.status(400).json({ error: "Falta nombreAlumno" });
     }
 
     if (!grupoOrigenFinal) {
-      return res.status(400).json({
-        error: "Falta IdgrupoOrigen",
-      });
+      return res.status(400).json({ error: "Falta IdgrupoOrigen" });
     }
 
     if (!grupoNuevoFinal) {
-      return res.status(400).json({
-        error: "Falta idGrupoNuevo",
-      });
+      return res.status(400).json({ error: "Falta idGrupoNuevo" });
     }
 
     if (!fechaHoraOriginal) {
-      return res.status(400).json({
-        error: "Falta fechaHoraOriginal",
-      });
+      return res.status(400).json({ error: "Falta fechaHoraOriginal" });
     }
 
     if (!fechaHoraNueva) {
-      return res.status(400).json({
-        error: "Falta fechaHoraNueva",
-      });
+      return res.status(400).json({ error: "Falta fechaHoraNueva" });
     }
 
     const nuevoReagendacionId = await generarId("reagendacion");
@@ -112,6 +100,34 @@ router.post("/", async (req, res) => {
     console.error("ERROR AL GUARDAR REAGENDACION:", error);
     res.status(500).json({
       error: "Error al guardar reagendación",
+      detalle: error.message,
+    });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const eliminada =
+      (await Reagendacion.findByIdAndDelete(id)) ||
+      (await Reagendacion.findOneAndDelete({ ReagendacionId: id }));
+
+    if (!eliminada) {
+      return res.status(404).json({
+        error: "No se encontró la reagendación",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Reagendación eliminada correctamente",
+      reagendacion: eliminada,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE REAGENDACION:", error);
+    res.status(500).json({
+      error: "Error al eliminar reagendación",
       detalle: error.message,
     });
   }
