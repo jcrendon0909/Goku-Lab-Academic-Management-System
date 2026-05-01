@@ -29,12 +29,19 @@ export default function InscripcionForm({
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
 
-  const grupoId =
-    classData?.idGrupo ||
-    classData?.IdGrupo ||
-    classData?.grupoId ||
-    classData?.GrupoId ||
-    "";
+  const grupoId = useMemo(() => {
+    if (!classData) return "";
+
+    return (
+      classData?.idGrupo ||
+      classData?.IdGrupo ||
+      classData?.grupoId ||
+      classData?.GrupoId ||
+      classData?.id_grupo ||
+      classData?.id ||
+      ""
+    );
+  }, [classData]);
 
   useEffect(() => {
     const buscar = async () => {
@@ -74,47 +81,68 @@ export default function InscripcionForm({
     try {
       setGuardando(true);
 
-      let alumnoFinal = alumnoSeleccionado;
-
-      if (!grupoId) {
-        alert("No se encontró el grupo para la inscripción");
+      if (!grupoId || !grupoId.trim()) {
+        console.error("Error: grupoId vacío. classData:", classData);
+        alert(
+          "❌ No se encontró el identificador del grupo. Por favor recarga la página e intenta de nuevo."
+        );
         return;
       }
 
+      let alumnoFinal = alumnoSeleccionado;
+
       if (modo === "existente") {
         if (!alumnoSeleccionado) {
-          alert("Debes seleccionar un alumno");
+          alert("❌ Debes seleccionar un alumno");
           return;
         }
       }
 
       if (modo === "nuevo") {
         if (!nombreAlumno.trim()) {
-          alert("Debes capturar el nombre del alumno");
+          alert("❌ Debes capturar el nombre del alumno");
           return;
         }
 
-        alumnoFinal = await crearAlumno({
-          nombreAlumno: nombreAlumno.trim(),
-          telefono,
-          tutor,
-          observaciones,
-          estatus: "Activo",
-        });
+        try {
+          alumnoFinal = await crearAlumno({
+            nombreAlumno: nombreAlumno.trim(),
+            telefono,
+            tutor,
+            observaciones,
+            estatus: "Activo",
+          });
+        } catch (errorAlumno: any) {
+          console.error("Error al crear alumno:", errorAlumno);
+          alert(`❌ Error al crear alumno: ${errorAlumno.message || "Error desconocido"}`);
+          return;
+        }
       }
 
       if (!alumnoFinal?.idAlumno) {
-        alert("No se pudo obtener el alumno");
+        console.error("Error: alumnoFinal sin idAlumno:", alumnoFinal);
+        alert("❌ No se pudo obtener el alumno creado");
         return;
       }
 
-      await crearInscripcion({
-        idAlumno: alumnoFinal.idAlumno,
-        nombreAlumno: alumnoFinal.nombreAlumno,
-        grupoId: grupoId,
-      });
+      console.log("classData completo:", classData);
+      console.log("grupoId final enviado:", grupoId);
 
-      alert("Alumno inscrito correctamente");
+      try {
+        await crearInscripcion({
+          idAlumno: alumnoFinal.idAlumno,
+          nombreAlumno: alumnoFinal.nombreAlumno || alumnoFinal.nombre,
+          grupoId: grupoId.trim(),
+        });
+      } catch (errorInscripcion: any) {
+        console.error("Error al crear inscripción:", errorInscripcion);
+        alert(
+          `❌ Error al inscribir alumno: ${errorInscripcion.message || "Error desconocido"}`
+        );
+        return;
+      }
+
+      alert("✓ Alumno inscrito correctamente");
 
       if (onSuccess) {
         onSuccess();
@@ -122,17 +150,18 @@ export default function InscripcionForm({
 
       onClose();
     } catch (error: any) {
-      console.error("Error al crear inscripción:", error);
-      alert(error.message || "Error al inscribir alumno");
+      console.error("Error inesperado al inscribir:", error);
+      alert(`❌ Error inesperado: ${error.message || "Error al inscribir alumno"}`);
     } finally {
       setGuardando(false);
     }
   };
 
   const puedeConfirmar =
-    modo === "existente"
+    Boolean(grupoId && grupoId.trim()) &&
+    (modo === "existente"
       ? Boolean(alumnoSeleccionado)
-      : Boolean(nombreAlumno.trim());
+      : Boolean(nombreAlumno.trim()));
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">

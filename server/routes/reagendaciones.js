@@ -105,6 +105,36 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Eliminar reagendación de un alumno específico (mantiene la inscripción)
+router.delete("/alumno/:idAlumno/:idGrupoNuevo", async (req, res) => {
+  try {
+    const { idAlumno, idGrupoNuevo } = req.params;
+
+    const eliminada = await Reagendacion.findOneAndDelete({
+      idAlumno,
+      idGrupoNuevo,
+    });
+
+    if (!eliminada) {
+      return res.status(404).json({
+        error: "No se encontró la reagendación del alumno",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Reagendación eliminada correctamente",
+      reagendacion: eliminada,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE REAGENDACION ALUMNO:", error);
+    res.status(500).json({
+      error: "Error al eliminar reagendación",
+      detalle: error.message,
+    });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;

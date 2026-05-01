@@ -38,6 +38,12 @@ export async function getProfesores() {
   return res.json();
 }
 
+export async function getGrupos() {
+  const res = await fetch(`${API_URL}/grupos`);
+  if (!res.ok) throw new Error("Error al obtener grupos");
+  return res.json();
+}
+
 export async function getCursos() {
   const res = await fetch(`${API_URL}/cursos`);
   if (!res.ok) throw new Error("Error al obtener cursos");
@@ -195,6 +201,20 @@ export async function registrarAbono(data: {
 
 export async function eliminarReagendacion(id: string) {
   const res = await fetch(`${API_URL}/reagendaciones/${id}`, {
+    method: "DELETE",
+  });
+
+  const responseData = await res.json();
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al eliminar reagendación");
+  }
+
+  return responseData;
+}
+
+export async function eliminarReagendacionAlumno(idAlumno: string, idGrupoNuevo: string) {
+  const res = await fetch(`${API_URL}/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
     method: "DELETE",
   });
 

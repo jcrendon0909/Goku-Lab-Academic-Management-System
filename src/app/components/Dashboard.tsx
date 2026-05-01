@@ -12,6 +12,7 @@ import {
   bajaAlumnoDeGrupo,
   eliminarGrupo,
   eliminarReagendacion,
+  eliminarReagendacionAlumno,
   getCalendario,
 } from '../../services/api';
 import { toast } from 'sonner';
@@ -303,6 +304,33 @@ export function Dashboard() {
     }
   };
 
+  const handleEliminarReagendacionAlumno = async (student: any, classData: CalendarClass) => {
+    try {
+      const idAlumno = student?.idAlumno;
+      const idGrupoNuevo = classData?.idGrupo;
+
+      if (!idAlumno || !idGrupoNuevo) {
+        alert('No se encontró la información necesaria');
+        return;
+      }
+
+      const confirmado = window.confirm(
+        `¿Seguro que deseas eliminar la reagendación de ${student.nombreAlumno}? Se mantendrá inscrito en su grupo original.`
+      );
+
+      if (!confirmado) return;
+
+      await eliminarReagendacionAlumno(idAlumno, idGrupoNuevo);
+      toast.success('Reagendación eliminada correctamente');
+      setIsDialogOpen(false);
+      setSelectedClass(null);
+      recargarCalendario();
+    } catch (error: any) {
+      console.error('Error al eliminar reagendación:', error);
+      toast.error(error.message || 'Error al eliminar reagendación');
+    }
+  };
+
   const handleEliminarGrupo = async (classData: CalendarClass) => {
     try {
       const grupoId = classData?.idGrupo;
@@ -351,7 +379,22 @@ export function Dashboard() {
 
             const fechas = obtenerFechasDelDiaEnMes(item.diaClase, year, month);
 
-            const eventos: CalendarClass[] = fechas.map((fecha, index) => {
+            const eventos: CalendarClass[] = fechas
+              .filter((fecha) => {
+                // Si el grupo tiene fechaCreacion, solo mostrar desde esa semana en adelante
+                if (item.fechaCreacion) {
+                  const fechaCreacion = new Date(item.fechaCreacion);
+                  // Obtener el inicio de la semana de creación
+                  const diaCreacion = fechaCreacion.getDay();
+                  const inicioSemanCreacion = new Date(fechaCreacion);
+                  inicioSemanCreacion.setDate(fechaCreacion.getDate() - diaCreacion);
+                  
+                  const fechaEvento = new Date(fecha);
+                  return fechaEvento >= inicioSemanCreacion;
+                }
+                return true;
+              })
+              .map((fecha, index) => {
               const fechaEvento = soloFecha(new Date(fecha));
               const horaInicio = item.horaClase || '';
 
@@ -910,6 +953,7 @@ export function Dashboard() {
           onEliminarGrupo={handleEliminarGrupo}
           onEliminarReagendacion={handleEliminarReagendacion}
           onBajaAlumno={handleBajaAlumno}
+          onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}
         />
       )}
 

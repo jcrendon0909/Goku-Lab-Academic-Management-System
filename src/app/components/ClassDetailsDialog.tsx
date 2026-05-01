@@ -7,7 +7,7 @@ import {
 } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
-import { Calendar, Clock, User, Users } from 'lucide-react';
+import { Calendar, Clock, User, Users, RotateCcw, X, Trash2 } from 'lucide-react';
 
 interface ClassDetailsDialogProps {
   classData: any;
@@ -18,6 +18,7 @@ interface ClassDetailsDialogProps {
   onEliminarGrupo: (classData: any) => void;
   onEliminarReagendacion: (classData: any) => void;
   onBajaAlumno: (student: any, classData: any) => void;
+  onEliminarReagendacionAlumno: (student: any, classData: any) => void;
 }
 
 export function ClassDetailsDialog({
@@ -29,6 +30,7 @@ export function ClassDetailsDialog({
   onEliminarGrupo,
   onEliminarReagendacion,
   onBajaAlumno,
+  onEliminarReagendacionAlumno,
 }: ClassDetailsDialogProps) {
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('es-ES', {
@@ -93,7 +95,7 @@ export function ClassDetailsDialog({
                 </>
               )}
 
-              {esReagendada && (
+              {classData.tipoReagendacionClase === 'destino' && (
                 <button
                   onClick={() => onEliminarReagendacion(classData)}
                   className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
@@ -205,33 +207,27 @@ export function ClassDetailsDialog({
                         )}
                       </div>
 
-                      <div className="flex flex-col gap-2">
-                        {!esReagendada && (
-                          <>
-                            <button
-                              onClick={() => onReagendar(student)}
-                              className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg"
-                            >
-                              Reprogramar
-                            </button>
-
-                            <button
-                              onClick={() => onBajaAlumno(student, classData)}
-                              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
-                            >
-                              Dar de baja
-                            </button>
-                          </>
-                        )}
-
-                        {esReagendada && (
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        {/* Reprogramar: solo si el alumno NO tiene reagendación */}
+                        {!student.reagendacion && (
                           <button
-                            onClick={() => onBajaAlumno(student, classData)}
-                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
+                            onClick={() => onReagendar(student)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded-lg transition-colors"
+                            title="Reprogramar alumno"
                           >
-                            Dar de baja
+                            <RotateCcw className="w-4 h-4" />
+                            <span className="hidden sm:inline">Reprogramar</span>
                           </button>
                         )}
+
+                        <button
+                          onClick={() => onBajaAlumno(student, classData)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+                          title="Dar de baja al alumno"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Dar de baja</span>
+                        </button>
                       </div>
                     </div>
                   </Card>
