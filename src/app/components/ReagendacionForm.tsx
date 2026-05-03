@@ -258,133 +258,163 @@ ${
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-      <div className="bg-white w-[650px] rounded-xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-2">Reprogramación de Clase</h2>
+      <div className="bg-white w-[900px] max-h-[90vh] overflow-y-auto rounded-2xl p-8 shadow-2xl">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Reprogramación de Clase</h2>
+          <p className="text-lg text-cyan-600 font-semibold">
+            Alumno: {data?.alumno?.nombreAlumno || data?.alumno?.Alumno || ""}
+          </p>
+        </div>
 
-        <p className="text-sm text-gray-500 mb-4">
-          Para {data?.alumno?.nombreAlumno || data?.alumno?.Alumno || "Alumno"}
-        </p>
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl">
+            <h3 className="font-bold text-lg text-blue-900 mb-4">Clase Original</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <span className="text-blue-600 font-semibold">Materia:</span>
+                <p className="text-gray-800">{cursoActual}</p>
+              </div>
+              <div>
+                <span className="text-blue-600 font-semibold">Profesor:</span>
+                <p className="text-gray-800">{profesorOriginal}</p>
+              </div>
+              <div>
+                <span className="text-blue-600 font-semibold">Horario:</span>
+                <p className="text-gray-800">{data?.clase?.startTime} - {data?.clase?.endTime}</p>
+              </div>
+              <div>
+                <span className="text-blue-600 font-semibold">Grupo:</span>
+                <p className="text-gray-800 font-mono">{idGrupoOrigenDetectado}</p>
+              </div>
+            </div>
+          </div>
 
-        <div className="bg-gray-100 p-4 rounded-lg mb-4">
-          <h3 className="font-semibold mb-2">Clase Original</h3>
-          <p>
-            <b>Materia:</b> {cursoActual}
-          </p>
-          <p>
-            <b>Profesor:</b> {profesorOriginal}
-          </p>
-          <p>
-            <b>Horario:</b> {data?.clase?.startTime} - {data?.clase?.endTime}
-          </p>
-          <p>
-            <b>Grupo origen:</b> {idGrupoOrigenDetectado}
-          </p>
-          <p>
-            <b>ID profesor origen:</b> {idProfesorOriginal || "No disponible"}
-          </p>
+          <div className="bg-cyan-50 border border-cyan-200 p-6 rounded-xl">
+            <h3 className="font-bold text-lg text-cyan-900 mb-4">Detalles Técnicos</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <span className="text-cyan-600 font-semibold">ID Profesor Origen:</span>
+                <p className="text-gray-800 font-mono">{idProfesorOriginal || "No disponible"}</p>
+              </div>
+              <div>
+                <span className="text-cyan-600 font-semibold">Estado:</span>
+                <p className="text-gray-800"><span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold">Pendiente Reagendación</span></p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <button
           onClick={handleEnviarMensaje}
-          className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg mb-4"
+          className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 rounded-lg mb-6 font-semibold shadow-md transition-all"
         >
-          Enviar Mensaje a Profesores
+          📲 Enviar Mensaje a Profesores (WhatsApp)
         </button>
 
-        <div className="bg-gray-100 p-4 rounded-lg mb-4">
-          <h3 className="font-semibold mb-3">Nueva Fecha, Hora y Duración</h3>
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 p-6 rounded-xl mb-6">
+          <h3 className="font-bold text-lg text-gray-900 mb-4">Nueva Fecha, Hora y Profesor</h3>
 
-          <div className="flex gap-2 mb-2">
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="border p-2 rounded w-1/3"
-            />
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha</label>
+              <input
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+              />
+            </div>
 
-            <input
-              type="time"
-              value={hora}
-              onChange={(e) => setHora(e.target.value)}
-              className="border p-2 rounded w-1/3"
-            />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Hora</label>
+              <input
+                type="time"
+                value={hora}
+                onChange={(e) => setHora(e.target.value)}
+                className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+              />
+            </div>
 
-            <select
-              value={duracion}
-              onChange={(e) => setDuracion(e.target.value)}
-              className="border p-2 rounded w-1/3"
-            >
-              <option value="1 hora">1 hora</option>
-              <option value="1:30 horas">1:30 horas</option>
-              <option value="2 horas">2 horas</option>
-              <option value="2:30 horas">2:30 horas</option>
-              <option value="3 horas">3 horas</option>
-              <option value="3:30 horas">3:30 horas</option>
-              <option value="4 horas">4 horas</option>
-            </select>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Duración</label>
+              <select
+                value={duracion}
+                onChange={(e) => setDuracion(e.target.value)}
+                className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+              >
+                <option value="1 hora">1 hora</option>
+                <option value="1:30 horas">1:30 horas</option>
+                <option value="2 horas">2 horas</option>
+                <option value="2:30 horas">2:30 horas</option>
+                <option value="3 horas">3 horas</option>
+                <option value="3:30 horas">3:30 horas</option>
+                <option value="4 horas">4 horas</option>
+              </select>
+            </div>
           </div>
 
-          <select
-            value={idProfesorNuevo}
-            onChange={(e) => setIdProfesorNuevo(e.target.value)}
-            className="border p-2 rounded w-full"
-          >
-            <option value="">Selecciona profesor</option>
-            {profesoresDisponibles.map((profesor) => (
-              <option key={profesor.idProfesor} value={profesor.idProfesor}>
-                {profesor.nombre}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Profesor Nuevo</label>
+            <select
+              value={idProfesorNuevo}
+              onChange={(e) => setIdProfesorNuevo(e.target.value)}
+              className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+            >
+              <option value="">Selecciona profesor disponible</option>
+              {profesoresDisponibles.map((profesor) => (
+                <option key={profesor.idProfesor} value={profesor.idProfesor}>
+                  {profesor.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-6">
           {buscandoGrupo ? (
-            <div className="bg-blue-50 text-blue-700 p-3 rounded text-sm">
-              Buscando grupo compatible...
+            <div className="bg-blue-50 border border-blue-300 text-blue-700 p-4 rounded-lg text-sm font-semibold">
+              🔍 Buscando grupo compatible...
             </div>
           ) : grupoSugerido ? (
-            <div className="bg-green-50 text-green-800 p-3 rounded text-sm">
-              <b>Grupo existente encontrado</b>
-              <br />
-              Id: {grupoSugerido.idGrupo}
-              <br />
-              Curso: {grupoSugerido.nombreCurso}
-              <br />
-              Profesor: {grupoSugerido.nombreProfesor}
-              <br />
-              Día: {grupoSugerido.diaClase}
-              <br />
-              Hora: {grupoSugerido.horaClase}
+            <div className="bg-green-50 border border-green-300 text-green-900 p-4 rounded-lg text-sm">
+              <div className="font-bold mb-3 text-lg">✅ Grupo Existente Encontrado</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="font-semibold">ID Grupo:</span> <span className="font-mono">{grupoSugerido.idGrupo}</span></div>
+                <div><span className="font-semibold">Curso:</span> {grupoSugerido.nombreCurso}</div>
+                <div><span className="font-semibold">Profesor:</span> {grupoSugerido.nombreProfesor}</div>
+                <div><span className="font-semibold">Día:</span> {grupoSugerido.diaClase}</div>
+                <div><span className="font-semibold">Hora:</span> {grupoSugerido.horaClase}</div>
+              </div>
             </div>
           ) : fecha && hora ? (
-            <div className="bg-yellow-50 text-yellow-800 p-3 rounded text-sm">
-              No se encontró un grupo compatible. Se creará una clase
-              reagendada nueva.
+            <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-lg text-sm font-semibold">
+              ⚠️ No se encontró un grupo compatible. Se creará una clase reagendada nueva.
             </div>
           ) : (
-            <div className="bg-gray-100 text-gray-600 p-3 rounded text-sm">
-              Selecciona fecha, hora y profesor para buscar automáticamente un
-              grupo compatible.
+            <div className="bg-gray-100 border border-gray-300 text-gray-600 p-4 rounded-lg text-sm">
+              ℹ️ Selecciona fecha, hora y profesor para buscar automáticamente un grupo compatible.
             </div>
           )}
         </div>
 
-        <div className="bg-yellow-100 text-yellow-800 p-3 rounded mb-4 text-sm">
-          Esta clase quedará marcada como <b>"Reprogramado"</b>
+        <div className="bg-amber-100 border-2 border-amber-400 text-amber-900 p-4 rounded-lg mb-6 text-sm font-semibold">
+          ⏱️ Esta clase quedará marcada como <span className="font-bold">"Reprogramado"</span> en el sistema.
         </div>
 
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 border rounded">
+        <div className="flex justify-end gap-3">
+          <button 
+            onClick={onClose} 
+            className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+          >
             Cancelar
           </button>
 
           <button
             onClick={handleSubmit}
             disabled={guardando}
-            className="px-4 py-2 bg-blue-500 text-white rounded"
+            className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg font-semibold shadow-md transition-all"
           >
-            {guardando ? "Guardando..." : "Confirmar Reprogramación"}
+            {guardando ? "Guardando Reagendación..." : "✓ Confirmar Reprogramación"}
           </button>
         </div>
       </div>

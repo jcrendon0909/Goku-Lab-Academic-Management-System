@@ -50,7 +50,7 @@ export function ClassDetailsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl rounded-xl">
+      <DialogContent className="max-w-5xl rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div>

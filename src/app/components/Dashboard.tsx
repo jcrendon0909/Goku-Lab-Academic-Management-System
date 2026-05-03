@@ -221,7 +221,10 @@ export function Dashboard() {
   const [classes, setClasses] = useState<CalendarClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1));
+  const [currentDate, setCurrentDate] = useState(() => {
+    const hoy = new Date();
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
   const [view, setView] = useState<'month' | 'day'>('month');
   const [selectedClass, setSelectedClass] = useState<CalendarClass | null>(null);
   const [reagendacionData, setReagendacionData] = useState<any>(null);
@@ -243,6 +246,7 @@ export function Dashboard() {
       clase: selectedClass,
     });
     setShowReagendacion(true);
+    setIsDialogOpen(false);
   };
 
   const handleInscribirAlumno = (classData: CalendarClass) => {
@@ -674,9 +678,9 @@ export function Dashboard() {
     const days = getDaysInMonth(currentDate);
 
     return (
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-5 w-full">
         {DAYS.map((day) => (
-          <div key={day} className="p-2 text-center text-sm font-medium text-gray-600">
+          <div key={day} className="p-4 text-center text-sm font-bold text-cyan-600">
             {day}
           </div>
         ))}
@@ -692,45 +696,45 @@ export function Dashboard() {
           return (
             <div
               key={index}
-              className={`min-h-[120px] p-2 border rounded-lg ${
-                !day ? 'bg-gray-50' : 'bg-white hover:bg-gray-50'
-              } ${isToday ? 'border-cyan-500 border-2' : 'border-gray-200'}`}
+              className={`min-h-[190px] p-4 border-2 rounded-xl overflow-y-auto transition-all ${
+                !day ? 'bg-gray-50' : 'bg-white hover:bg-cyan-50 hover:border-cyan-300'
+              } ${isToday ? 'border-cyan-500 shadow-lg bg-cyan-50' : 'border-gray-200'}`}
             >
               {day && (
                 <>
                   <div
-                    className={`text-sm font-medium mb-2 ${
+                    className={`text-lg font-bold mb-3 ${
                       isToday ? 'text-cyan-600' : 'text-gray-700'
                     }`}
                   >
                     {day.getDate()}
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {dayClasses.map((cls) => (
                       <button
                         key={cls.id}
                         onClick={() => handleClassClick(cls)}
-                        className={`w-full text-left p-1.5 rounded text-xs text-white hover:opacity-90 transition-opacity relative ${
+                        className={`w-full text-left p-2 rounded-lg text-xs text-white hover:opacity-85 transition-opacity relative shadow-md ${
                           cls.tipoReagendacionClase === 'origen'
-                            ? 'ring-2 ring-yellow-400 shadow-md border-2 border-yellow-300'
+                            ? 'ring-2 ring-yellow-400 border-2 border-yellow-300'
                             : cls.tipoReagendacionClase === 'destino'
-                            ? 'ring-2 ring-sky-300 shadow-md border-2 border-sky-200'
+                            ? 'ring-2 ring-sky-300 border-2 border-sky-200'
                             : ''
                         }`}
                         style={{ backgroundColor: cls.color }}
                       >
-                        <div className="font-medium truncate pr-7">{cls.title}</div>
-                        <div className="text-[10px] opacity-90">{cls.startTime}</div>
+                        <div className="font-semibold truncate pr-7 text-sm">{cls.title}</div>
+                        <div className="text-[11px] opacity-95">{cls.startTime}</div>
 
                         {cls.tipoReagendacionClase === 'origen' && (
-                          <div className="absolute top-1 right-1 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                          <div className="absolute top-1.5 right-1.5 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
                             RP
                           </div>
                         )}
 
                         {cls.tipoReagendacionClase === 'destino' && (
-                          <div className="absolute top-1 right-1 bg-sky-300 text-sky-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                          <div className="absolute top-1.5 right-1.5 bg-sky-300 text-sky-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
                             RP
                           </div>
                         )}
@@ -814,68 +818,86 @@ export function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold text-gray-900">Goku Lab</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
 
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setShowNuevoGrupo(true)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
-              >
-                Nuevo grupo
-              </Button>
+      <header className="sticky top-0 z-50 overflow-hidden bg-white px-10 py-4 shadow-lg border-b-4 border-[#009FE3]">
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,#e9f8ff_0%,#d2f0ff_35%,#aee1fb_70%,#65bfe9_100%)]"></div>
 
-              <Button
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                Sincronizar datos
-              </Button>
+        <div className="relative w-full max-w-none mx-auto">
+          <div className="flex items-center justify-between gap-12 px-16">
+            <div className="flex items-center gap-8 ml-20">
+              <img
+                src="/logo-goku-lab.png"
+                alt="Goku Lab"
+                className="h-45 w-45 object-contain drop-shadow-lg"
+              />
+
+              <div>
+                <h1 className="text-6xl font-black tracking-tight text-[#0078D7] leading-none">
+                  Goku Lab
+                </h1>
+
+                <p className="font-black text-2xl leading-tight mt-3">
+                  <span className="text-[#FFC400]">Juega, </span>
+                  <span className="text-[#EF2D2D]">Aprende </span>
+                  <span className="text-[#0078D7]">y </span>
+                  <span className="text-[#2FB34A]">Emprende</span>
+                </p>
+
+                <p className="text-2xl font-black text-[#003B73] mt-2">
+                  Sistema de Gestión Académica
+                </p>
+              </div>
             </div>
-          </div>
 
-          <p className="text-gray-600">Sistema de Gestión Académica</p>
+            <Button
+              onClick={() => setShowNuevoGrupo(true)}
+              className="mr-20 bg-[#0047B8] hover:bg-[#003A96] text-white rounded-xl text-xl font-black py-7 px-12 shadow-xl hover:shadow-2xl transition-all transform hover:scale-105"
+            >
+              Crear Nuevo Grupo
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-6">
-        <Card className="p-4 mb-6 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
+
+
+
+      <main className="w-full max-w-none mx-auto px-10 py-8">
+        <Card className="w-full p-8 mb-6 rounded-3xl shadow-xl border-2 border-cyan-100 bg-gradient-to-b from-white to-cyan-50">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-6">
               <Button
                 variant="outline"
                 size="icon"
                 onClick={handlePrevMonth}
-                className="rounded-lg"
+                className="rounded-lg border-2 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-5 w-5 text-cyan-600" />
               </Button>
 
-              <h2 className="text-xl font-semibold text-gray-900">
-                {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
+              <h2 className="text-4xl font-bold text-gray-900 min-w-fit">
+                {MONTHS[currentDate.getMonth()]} <span className="text-cyan-600">{currentDate.getFullYear()}</span>
               </h2>
 
               <Button
                 variant="outline"
                 size="icon"
                 onClick={handleNextMonth}
-                className="rounded-lg"
+                className="rounded-lg border-2 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-5 w-5 text-cyan-600" />
               </Button>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button
                 variant={view === 'month' ? 'default' : 'outline'}
                 onClick={() => setView('month')}
-                className={`rounded-lg ${
-                  view === 'month' ? 'bg-cyan-500 hover:bg-cyan-600' : ''
+                className={`rounded-lg font-semibold transition-all ${
+                  view === 'month' 
+                    ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg' 
+                    : 'border-2 border-cyan-200 hover:bg-cyan-50 text-gray-700'
                 }`}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
@@ -885,8 +907,10 @@ export function Dashboard() {
               <Button
                 variant={view === 'day' ? 'default' : 'outline'}
                 onClick={() => setView('day')}
-                className={`rounded-lg ${
-                  view === 'day' ? 'bg-cyan-500 hover:bg-cyan-600' : ''
+                className={`rounded-lg font-semibold transition-all ${
+                  view === 'day' 
+                    ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg' 
+                    : 'border-2 border-cyan-200 hover:bg-cyan-50 text-gray-700'
                 }`}
               >
                 Día
@@ -897,47 +921,57 @@ export function Dashboard() {
           {view === 'month' ? renderMonthView() : renderDayView()}
         </Card>
 
-        <Card className="p-4 rounded-xl shadow-sm">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Leyenda</h3>
+        <Card className="p-8 rounded-3xl shadow-xl border-2 border-cyan-100 bg-white">
+          <div className="mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">📋 Leyenda de Colores</h3>
+            <p className="text-sm text-gray-600">Identifica fácilmente cada tipo de curso por su color asignado</p>
+          </div>
 
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-cyan-500"></div>
-              <span className="text-sm text-gray-600">Programación</span>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-cyan-50 transition-colors">
+              <div className="w-6 h-6 rounded-lg bg-cyan-500 shadow-md flex-shrink-0"></div>
+              <span className="text-sm font-medium text-gray-800">Programación</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-purple-500"></div>
-              <span className="text-sm text-gray-600">Alfabetización</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-purple-50 transition-colors">
+              <div className="w-6 h-6 rounded-lg bg-purple-500 shadow-md flex-shrink-0"></div>
+              <span className="text-sm font-medium text-gray-800">Alfabetización</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-pink-500"></div>
-              <span className="text-sm text-gray-600">Diseño</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pink-50 transition-colors">
+              <div className="w-6 h-6 rounded-lg bg-pink-500 shadow-md flex-shrink-0"></div>
+              <span className="text-sm font-medium text-gray-800">Diseño</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500"></div>
-              <span className="text-sm text-gray-600">Python</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-green-50 transition-colors">
+              <div className="w-6 h-6 rounded-lg bg-green-500 shadow-md flex-shrink-0"></div>
+              <span className="text-sm font-medium text-gray-800">Python</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-amber-500"></div>
-              <span className="text-sm text-gray-600">Robótica</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-amber-50 transition-colors">
+              <div className="w-6 h-6 rounded-lg bg-amber-500 shadow-md flex-shrink-0"></div>
+              <span className="text-sm font-medium text-gray-800">Robótica</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-yellow-400 text-yellow-900 text-[10px] font-bold flex items-center justify-center">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-50 border border-yellow-200 hover:border-yellow-300 transition-colors">
+              <div className="w-6 h-6 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">
                 RP
               </div>
-              <span className="text-sm text-gray-600">Reagendada (origen)</span>
+              <span className="text-sm font-medium text-yellow-900">Reagendada (origen)</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-sky-300 text-sky-900 text-[10px] font-bold flex items-center justify-center">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-50 border border-sky-200 hover:border-sky-300 transition-colors">
+              <div className="w-6 h-6 rounded-full bg-sky-300 text-sky-900 text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">
                 RP
               </div>
-              <span className="text-sm text-gray-600">Reagendada (destino)</span>
+              <span className="text-sm font-medium text-sky-900">Reagendada (destino)</span>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200 hover:border-green-300 transition-colors">
+              <div className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">
+                ✓
+              </div>
+              <span className="text-sm font-medium text-emerald-900">Grupo activo</span>
             </div>
           </div>
         </Card>
