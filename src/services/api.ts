@@ -47,3 +47,13 @@ export async function registrarAbono(data: {
     }
     return res.json();
 }
+
+export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
+    const response = await fetch(`http://localhost:4000/api/pagos/actualizar-dia/${pagoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nuevoDia }),
+    });
+    if (!response.ok) throw new Error("No se pudo actualizar la fecha");
+    return response.json();
+};

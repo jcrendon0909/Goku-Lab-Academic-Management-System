@@ -1,57 +1,133 @@
 import express from "express";
-import mongoose from "mongoose"; 
 import Pago from "../models/Pago.js";
-import Abono from "../models/Abono.js";
 
 const router = express.Router();
 
 router.get("/lista-completa", async (req, res) => {
     try {
-        const pagosRaw = await Pago.find().lean();
-        const abonosRaw = await Abono.find().lean();
-
         const hoy = new Date();
         const mesActual = hoy.getMonth();
         const anioActual = hoy.getFullYear();
 
-        const respuestaProcesada = pagosRaw.map((pago) => {
-            const pagoKey = String(pago.pagoId || pago.PagoId || "").trim().toUpperCase();
+        const respuestaProcesada = await Pago.aggregate([
+            {
+                // Unimos la colección de Pagos con Abonos
+                $lookup: {
+                    from: "abonos",
+                    let: { idDelPago: "$pagoId" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ["$pagoId", "$$idDelPago"] }
+                            }
+                        },
+                        { $sort: { fechaAbono: 1 } } // <--- Garatiza que el orden sea del más viejo al más reciente
+                    ],
+                    as: "historialAbonos"
+                }
+            },
+            {
+                // datos de cada alumno
+                $project: {
+                    _id: 0,
+                    id: { $toUpper: { $trim: { input: "$pagoId" } } },
+                    nombreAlumno: 1,
+                    nombreCurso: 1,
+                    montoTotal: { $toDouble: "$montoPago" },
+                    diaPagoFijo: 1,
+                    montoPagado: {
+                        $sum: {
+                            $map: {
+                                input: "$historialAbonos",
+                                as: "a",
+                                in: { $toDouble: "$$a.montoAbono" }
+                            }
+                        }
+                    },
+                    metodoAbono: {
+                        $cond: {
+                            if: { $gt: [{ $size: "$historialAbonos" }, 0] },
+                            then: { $last: "$historialAbonos.metodoAbono" },
+                            else: "No registrado"
+                        }
+                    },
+                    fechaPagoReal: {
+                        $cond: {
+                            if: { $gt: [{ $size: "$historialAbonos" }, 0] },
+                            then: { $last: "$historialAbonos.fechaAbono" },
+                            else: null
+                        }
+                    }
+                }
+            },
+            {
+                // Calculamos Saldo y Estatus basándonos en la suma histórica
+                $addFields: {
+                    saldo: { $subtract: ["$montoTotal", "$montoPagado"] }
+                }
+            },
+            {
+                // Definimos el Estatus
+                $addFields: {
+                    status: {
+                        $cond: {
+                            if: { $gte: ["$montoPagado", "$montoTotal"] },
+                            then: "Pagado",
+                            else: {
+                                $cond: {
+                                    if: { $gt: ["$montoPagado", 0] },
+                                    then: "Parcial",
+                                    else: "Pendiente"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $sort: {
+                    fechaPagoReal: -1
+                }
+            }
+        ]);
 
-            const abonosDelMes = abonosRaw.filter((abono) => {
-                const abonoKey = String(abono.pagoId || "").trim().toUpperCase();
-                if (!abono.fechaAbono) return false;
-                const fecha = new Date(abono.fechaAbono);
-                return abonoKey === pagoKey &&
-                    fecha.getMonth() === mesActual &&
-                    fecha.getFullYear() === anioActual;
-            });
+        // Ajuste final para las fechas límite (se hace en JS porque depende de la fecha de hoy)
+        const resultadoFinal = respuestaProcesada.map(p => ({
+            ...p,
+            saldo: p.saldo < 0 ? 0 : p.saldo,
+            fechaLimite: new Date(anioActual, mesActual, Number(p.diaPagoFijo) || 1).toISOString()
+        }));
 
-            const montoTotal = Number(pago.montoPago) || 0;
-            const totalAbonado = abonosDelMes.reduce((s, a) => s + (Number(a.montoAbono) || 0), 0);
+        res.json(resultadoFinal);
 
-            let saldo = montoTotal - totalAbonado;
-            let status = totalAbonado >= montoTotal ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
-            if (status === "Pagado") saldo = 0;
-
-            const dia = Number(pago.diaPagoFijo) || 1;
-            const fechaLimite = new Date(anioActual, mesActual, dia);
-
-            return {
-                id: pagoKey,
-                nombreAlumno: pago.nombreAlumno,
-                nombreCurso: pago.nombreCurso,
-                montoTotal,
-                montoPagado: totalAbonado,
-                saldo: saldo < 0 ? 0 : saldo,
-                status,
-                fechaLimite: fechaLimite.toISOString()
-            };
-        });
-
-        res.json(respuestaProcesada);
     } catch (error) {
-        console.error("Error en servidor:", error);
-        res.status(500).json({ error: "Error al procesar pagos" });
+        console.error("Error en agregación:", error);
+        res.status(500).json({ error: "Error al procesar pagos optimizados" });
+    }
+});
+
+// Ruta para cambiar el día de pago fijo del alumno
+router.patch("/actualizar-dia/:id", async (req, res) => {
+    try {
+        const { nuevoDia } = req.body;
+        const { id } = req.params;
+
+        if (!nuevoDia || nuevoDia < 1 || nuevoDia > 31) {
+            return res.status(400).json({ error: "Día inválido (debe ser 1-31)" });
+        }
+
+        // Actualizamos en la colección 'pagos'
+        const resultado = await Pago.findOneAndUpdate(
+            { pagoId: id },
+            { diaPagoFijo: Number(nuevoDia) },
+            { new: true }
+        );
+
+        if (!resultado) return res.status(404).json({ error: "Alumno no encontrado" });
+
+        res.json({ message: "Día de pago actualizado correctamente", data: resultado });
+    } catch (error) {
+        res.status(500).json({ error: "Error al actualizar la fecha" });
     }
 });
 
