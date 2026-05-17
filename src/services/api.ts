@@ -99,6 +99,9 @@ export async function crearInscripcion(data: {
   grupoId: string;
   modalidad?: string;
   fechaInscripcion?: string;
+  montoMensualidad?: number;
+  fechaPago?: string;
+  comentarios?: string;
 }) {
   const res = await fetch(`${API_URL}/inscripciones`, {
     method: "POST",
@@ -156,6 +159,11 @@ export async function crearGrupoConAlumno(data: {
     observaciones?: string;
     estatus?: string;
     modalidad?: string;
+  };
+  datosPago?: {
+    montoMensualidad: number;
+    fechaPago: string;
+    comentarios?: string;
   };
 }) {
   const res = await fetch(`${API_URL}/grupos/crear-con-alumno`, {

@@ -6,6 +6,10 @@ const formatearFecha = (fechaIso: string) => {
     return new Date(fechaIso).toLocaleDateString('es-ES', opciones);
 };
 
+const formatearMonto = (monto: number) => {
+    return Number(monto || 0).toLocaleString('es-MX');
+};
+
 const estaVencido = (fechaIso: string, status: string) => {
     if (!fechaIso) return false;
     const hoy = new Date();
@@ -21,14 +25,14 @@ interface PaymentRowProps {
 
 export function PaymentRow({ payment, onRegisterPayment, onChangePaymentDate }) {
     const isPaid = payment.status === "Pagado";
-    // Verificamos si este pago en particular est· vencido
+    // Verificamos si este pago en particular est√° vencido
     const vencido = estaVencido(payment.fechaLimite, payment.status);
 
     return (
         <div className="rounded-xl border bg-white p-6 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-8 flex-1">
 
-                {/* FECHA 1: Cambia el tÌtulo din·micamente */}
+                {/* FECHA 1: Cambia el t√≠tulo din√°micamente */}
                 <div className="flex flex-col min-w-[120px]">
                     <span className="text-[10px] font-bold text-cyan-600 uppercase">
                         {isPaid ? "Debio pagar" : "Fecha de pago"}
@@ -38,7 +42,7 @@ export function PaymentRow({ payment, onRegisterPayment, onChangePaymentDate }) 
                     </span>
                 </div>
 
-                {/* FECHA 2: Cu·ndo pagÛ realmente */}
+                {/* FECHA 2: Cu√°ndo pag√≥ realmente */}
                 {isPaid && (
                     <div className="flex flex-col min-w-[120px]">
                         <span className="text-[10px] font-bold text-emerald-600 uppercase">Pago</span>
@@ -63,18 +67,18 @@ export function PaymentRow({ payment, onRegisterPayment, onChangePaymentDate }) 
                 {/* Montos */}
                 <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-gray-400 uppercase">Total</span>
-                    <span className="text-sm font-bold">${payment.montoTotal}</span>
+                    <span className="text-sm font-bold">${formatearMonto(payment.montoTotal)}</span>
                 </div>
                 {!isPaid && (
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-emerald-500 uppercase">Abonado</span>
-                        <span className="text-sm font-bold text-emerald-600">${payment.montoPagado}</span>
+                        <span className="text-sm font-bold text-emerald-600">${formatearMonto(payment.montoPagado)}</span>
                     </div>
                 )}
                 {!isPaid && (
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-red-400 uppercase">Adeudo</span>
-                        <span className="text-sm font-bold text-red-500">${payment.saldo}</span>
+                        <span className="text-sm font-bold text-red-500">${formatearMonto(payment.saldo)}</span>
                     </div>
                 )}
                 {/* Estatus */}
@@ -82,7 +86,7 @@ export function PaymentRow({ payment, onRegisterPayment, onChangePaymentDate }) 
                     {payment.status}
                 </div>
 
-                {/* MÈtodo pago */}
+                {/* M√©todo pago */}
                 {isPaid && (
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-cyan-600 uppercase">Metodo</span>

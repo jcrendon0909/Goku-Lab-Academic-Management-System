@@ -43,10 +43,13 @@ interface StudentItem {
   idAlumno: string;
   nombreAlumno: string;
   modalidad?: string;
+  comentarios?: string;
   inscripcionCreadaEn?: string | null;
   reagendacion?: {
     tipo: 'origen' | 'destino';
     texto: string;
+    comentario?: string;
+    reagendacionId?: string;
   } | null;
 }
 
@@ -66,6 +69,7 @@ interface CalendarClass {
   tipoReagendacionClase?: 'origen' | 'destino' | null;
   esReagendacion?: boolean;
   reagendacionId?: string;
+  reagendacionIds?: string[];
   fechaHoraOriginal?: string;
   fechaHoraNueva?: string;
   fechaEspecifica?: string;
@@ -257,14 +261,21 @@ export function Dashboard() {
   const handleInscribirAlumno = (classData: CalendarClass) => {
     setInscripcionClass(classData);
     setShowInscripcion(true);
+    setIsDialogOpen(false);
   };
 
   const handleEliminarReagendacion = async (classData: CalendarClass) => {
     try {
-      const idAEliminar =
-        classData.reagendacionId || classData.idGrupo || classData.id;
+      const idsAEliminar = Array.from(
+        new Set(
+          [
+            ...(classData.reagendacionIds || []),
+            classData.reagendacionId,
+          ].filter(Boolean) as string[]
+        )
+      );
 
-      if (!idAEliminar) {
+      if (idsAEliminar.length === 0) {
         alert('No se encontró la reagendación a eliminar');
         return;
       }
@@ -275,7 +286,7 @@ export function Dashboard() {
 
       if (!confirmado) return;
 
-      await eliminarReagendacion(idAEliminar);
+      await Promise.all(idsAEliminar.map((id) => eliminarReagendacion(id)));
       toast.success('Reagendación eliminada correctamente');
       setIsDialogOpen(false);
       setSelectedClass(null);
@@ -302,8 +313,8 @@ export function Dashboard() {
 
       if (!confirmado) return;
 
-      await bajaAlumnoDeGrupo(idAlumno, grupoId);
-      toast.success('Alumno dado de baja correctamente');
+      const respuesta = await bajaAlumnoDeGrupo(idAlumno, grupoId);
+      toast.success(respuesta?.mensaje || 'Alumno dado de baja correctamente');
       setIsDialogOpen(false);
       setSelectedClass(null);
       recargarCalendario();
@@ -441,6 +452,8 @@ export function Dashboard() {
                     ...alumno,
                     reagendacion: {
                       tipo: 'origen',
+                      reagendacionId: reag.reagendacionId || '',
+                      comentario: reag.comentario || '',
                       texto: fechaNueva
                         ? `Nuevo horario: ${fechaNueva.toLocaleDateString('es-MX', {
                             weekday: 'short',
@@ -542,6 +555,8 @@ export function Dashboard() {
                     modalidad: alumno.modalidad || 'Presencial',
                     reagendacion: {
                       tipo: 'destino',
+                      reagendacionId: alumno.reagendacion?.reagendacionId || '',
+                      comentario: alumno.reagendacion?.comentario || '',
                       texto: fechaOriginal
                         ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                             weekday: 'short',
@@ -561,6 +576,18 @@ export function Dashboard() {
 
               existente.tipoReagendacionClase = 'destino';
               existente.status = 'rescheduled-destination';
+              const idsDestino = (r.reagendacionIds || r.alumnos || [])
+                .map((item: any) =>
+                  typeof item === 'string'
+                    ? item
+                    : item?.reagendacion?.reagendacionId
+                )
+                .filter(Boolean);
+              existente.reagendacionIds = Array.from(
+                new Set([...(existente.reagendacionIds || []), ...idsDestino])
+              );
+              existente.reagendacionId =
+                existente.reagendacionId || existente.reagendacionIds[0] || '';
             }
 
             return;
@@ -577,6 +604,8 @@ export function Dashboard() {
               modalidad: alumno.modalidad || 'Presencial',
               reagendacion: {
                 tipo: 'destino' as const,
+                reagendacionId: alumno.reagendacion?.reagendacionId || '',
+                comentario: alumno.reagendacion?.comentario || '',
                 texto: fechaOriginal
                   ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                       weekday: 'short',
@@ -609,7 +638,8 @@ export function Dashboard() {
             esReagendacion: true,
             idGrupo: r.idGrupo || '',
             idProfesor: r.idProfesor || '',
-            reagendacionId: r._id || r.ReagendacionId || '',
+            reagendacionId: r.reagendacionId || r.reagendacionIds?.[0] || '',
+            reagendacionIds: r.reagendacionIds || [],
             tipoReagendacionClase: 'destino',
           });
         });
@@ -860,31 +890,31 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
 
-      <header className="sticky top-0 z-50 overflow-hidden bg-white px-10 py-4 shadow-lg border-b-4 border-[#009FE3]">
+      <header className="sticky top-0 z-50 overflow-hidden bg-white px-6 py-2 shadow-sm border-b-2 border-[#009FE3]">
         <div className="absolute inset-0 bg-[linear-gradient(120deg,#e9f8ff_0%,#d2f0ff_35%,#aee1fb_70%,#65bfe9_100%)]"></div>
 
         <div className="relative w-full max-w-none mx-auto">
-          <div className="flex items-center justify-between gap-12 px-16">
-            <div className="flex items-center gap-8 ml-20">
+          <div className="flex items-center justify-between gap-8 px-8">
+            <div className="flex items-center gap-5 ml-8">
               <img
                 src="/logo-goku-lab.png"
                 alt="Goku Lab"
-                className="h-45 w-45 object-contain drop-shadow-lg"
+                className="h-24 w-24 object-contain drop-shadow-md"
               />
 
               <div>
-                <h1 className="text-6xl font-black tracking-tight text-[#0078D7] leading-none">
+                <h1 className="text-4xl font-black tracking-tight text-[#0078D7] leading-none">
                   Goku Lab
                 </h1>
 
-                <p className="font-black text-2xl leading-tight mt-3">
+                <p className="font-black text-lg leading-tight mt-1">
                   <span className="text-[#FFC400]">Juega, </span>
                   <span className="text-[#EF2D2D]">Aprende </span>
                   <span className="text-[#0078D7]">y </span>
                   <span className="text-[#2FB34A]">Emprende</span>
                 </p>
 
-                <p className="text-2xl font-black text-[#003B73] mt-2">
+                <p className="text-base font-black text-[#003B73] mt-1">
                   Sistema de Gestión Académica
                 </p>
               </div>
@@ -892,7 +922,7 @@ export function Dashboard() {
 
             <Button
               onClick={() => setShowNuevoGrupo(true)}
-              className="mr-20 bg-[#0047B8] hover:bg-[#003A96] text-white rounded-xl text-xl font-black py-7 px-12 shadow-xl hover:shadow-2xl transition-all transform hover:scale-105"
+              className="mr-8 bg-[#0047B8] hover:bg-[#003A96] text-white rounded-lg text-base font-bold py-3 px-6 shadow-md transition-colors"
             >
               Crear Nuevo Grupo
             </Button>
@@ -1035,6 +1065,11 @@ export function Dashboard() {
         <ReagendacionForm
           data={reagendacionData}
           onClose={() => setShowReagendacion(false)}
+          onSuccess={() => {
+            setShowReagendacion(false);
+            setIsDialogOpen(false);
+            recargarCalendario();
+          }}
         />
       )}
 

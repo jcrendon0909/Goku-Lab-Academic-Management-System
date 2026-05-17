@@ -24,6 +24,7 @@ const reagendacionSchema = new mongoose.Schema(
     modalidad: { type: String, default: "Presencial" },
 
     motivo: { type: String, default: "Reagendado desde sistema" },
+    comentario: { type: String, default: "" },
     FechaMovimiento: { type: String, default: () => new Date().toISOString() },
     estatus: { type: String, default: "reagendado" },
   },

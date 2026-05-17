@@ -50,7 +50,7 @@ export function ClassDetailsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl rounded-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[96vw] max-w-7xl rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -81,14 +81,14 @@ export function ClassDetailsDialog({
                 <>
                   <button
                     onClick={() => onInscribirAlumno(classData)}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                    className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 rounded-lg w-full transition-colors"
                   >
                     Inscribir alumno
                   </button>
 
                   <button
                     onClick={() => onEliminarGrupo(classData)}
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                    className="border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 rounded-lg w-full transition-colors"
                   >
                     Eliminar grupo
                   </button>
@@ -211,10 +211,26 @@ export function ClassDetailsDialog({
                           {student.idAlumno || ''}
                         </p>
 
+                        {student.comentarios && (
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                            <span className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1 max-w-full">
+                              Comentarios: {student.comentarios}
+                            </span>
+                          </div>
+                        )}
+
                         {student.reagendacion?.texto && (
                           <p className="text-sm text-gray-500 mt-1">
                             {student.reagendacion.texto}
                           </p>
+                        )}
+
+                        {student.reagendacion?.comentario && (
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                            <span className="rounded-lg bg-yellow-50 border border-yellow-200 px-2 py-1 max-w-full">
+                              Comentario de reagendacion: {student.reagendacion.comentario}
+                            </span>
+                          </div>
                         )}
                       </div>
 

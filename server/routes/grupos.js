@@ -4,6 +4,10 @@ import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
 import { generarId } from "../utils/generarId.js";
+import {
+  crearOActualizarPagoDeInscripcion,
+  normalizarDatosPago,
+} from "../utils/pagos.js";
 
 const router = express.Router();
 
@@ -137,7 +141,7 @@ router.get("/", async (req, res) => {
 
 router.post("/crear-con-alumno", async (req, res) => {
   try {
-    const { grupo, alumnoExistente, alumnoNuevo } = req.body;
+    const { grupo, alumnoExistente, alumnoNuevo, datosPago } = req.body;
 
     if (!grupo) {
       return res.status(400).json({ error: "Faltan datos del grupo" });
@@ -181,6 +185,13 @@ router.post("/crear-con-alumno", async (req, res) => {
       return res.status(400).json({
         error: "Debes enviar un alumno existente o un alumno nuevo",
       });
+    }
+
+    let datosPagoNormalizados = null;
+    try {
+      datosPagoNormalizados = normalizarDatosPago(datosPago || {});
+    } catch (errorPago) {
+      return res.status(400).json({ error: errorPago.message });
     }
 
     const grupoExistente = await Grupo.findOne({
@@ -306,15 +317,28 @@ router.post("/crear-con-alumno", async (req, res) => {
       nombreAlumno: alumnoFinal.nombreAlumno,
       grupoId: grupoGuardado.IdGrupo,
       modalidad: alumnoFinal.modalidad,
+      montoMensualidad: datosPagoNormalizados?.montoMensualidad ?? null,
+      fechaPago: datosPagoNormalizados?.fechaPago ?? null,
+      diaPagoFijo: datosPagoNormalizados?.diaPagoFijo ?? null,
+      comentarios: datosPagoNormalizados?.comentarios ?? "",
     });
 
     const inscripcionGuardada = await nuevaInscripcion.save();
+
+    const pago = await crearOActualizarPagoDeInscripcion({
+      idAlumno: alumnoFinal.idAlumno,
+      nombreAlumno: alumnoFinal.nombreAlumno,
+      grupoId: grupoGuardado.IdGrupo,
+      nombreCurso: grupoGuardado.nombreCurso,
+      datosPago: datosPagoNormalizados,
+    });
 
     res.status(201).json({
       ok: true,
       grupo: grupoGuardado,
       alumno: alumnoFinal,
       inscripcion: inscripcionGuardada,
+      pago,
     });
   } catch (error) {
     console.error("ERROR POST /crear-con-alumno:", error);

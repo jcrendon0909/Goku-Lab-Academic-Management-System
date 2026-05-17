@@ -2,6 +2,12 @@ import express from "express";
 import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
 import Grupo from "../models/Grupo.js";
+import Pago from "../models/Pago.js";
+import {
+  crearOActualizarPagoDeInscripcion,
+  normalizarDatosPago,
+  validarPagoAlCorrienteParaBaja,
+} from "../utils/pagos.js";
 
 const router = express.Router();
 
@@ -17,7 +23,19 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { idAlumno, nombreAlumno, grupoId, modalidad, fechaInscripcion } = req.body;
+    const {
+      idAlumno,
+      nombreAlumno,
+      grupoId,
+      modalidad,
+      fechaInscripcion,
+      montoMensualidad,
+      montoPago,
+      fechaPago,
+      diaPagoFijo,
+      comentarios,
+      comentariosPago,
+    } = req.body;
 
     // Validar inputs
     if (!idAlumno || !String(idAlumno).trim()) {
@@ -45,6 +63,20 @@ router.post("/", async (req, res) => {
         : new Date(fechaInscripcion);
 
       if (!isNaN(d.getTime())) fechaInscripcionFinal = d;
+    }
+
+    let datosPagoNormalizados = null;
+    try {
+      datosPagoNormalizados = normalizarDatosPago({
+        montoMensualidad,
+        montoPago,
+        fechaPago,
+        diaPagoFijo,
+        comentarios,
+        comentariosPago,
+      });
+    } catch (errorPago) {
+      return res.status(400).json({ error: errorPago.message });
     }
 
     // Verificar si el alumno ya está inscrito en este grupo
@@ -111,12 +143,27 @@ router.post("/", async (req, res) => {
       nombreAlumno: String(nombreAlumno).trim(),
       grupoId: grupoIdTrimmed,
       modalidad: modalidad || "Presencial",
+      montoMensualidad: datosPagoNormalizados?.montoMensualidad ?? null,
+      fechaPago: datosPagoNormalizados?.fechaPago ?? null,
+      diaPagoFijo: datosPagoNormalizados?.diaPagoFijo ?? null,
+      comentarios: datosPagoNormalizados?.comentarios ?? "",
       fechaInscripcion: fechaInscripcionFinal,
     });
 
     const guardada = await nuevaInscripcion.save();
 
-    res.status(201).json(guardada);
+    const pago = await crearOActualizarPagoDeInscripcion({
+      idAlumno: guardada.idAlumno,
+      nombreAlumno: guardada.nombreAlumno,
+      grupoId: guardada.grupoId,
+      nombreCurso: grupoNuevo?.nombreCurso || "",
+      datosPago: datosPagoNormalizados,
+    });
+
+    res.status(201).json({
+      ...guardada.toObject(),
+      pago,
+    });
   } catch (error) {
     console.error("ERROR POST INSCRIPCION:", error);
     res.status(500).json({
@@ -186,16 +233,55 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
       });
     }
 
-    // Si no es un grupo reagendado, proceder con la baja de inscripción
-    let inscripcionEliminada = await Inscripcion.findOneAndDelete({
+    const inscripcion = await Inscripcion.findOne({
       idAlumno: String(idAlumno).trim(),
       grupoId: String(grupoId).trim(),
     });
 
-    if (!inscripcionEliminada) {
+    if (!inscripcion) {
       return res.status(404).json({
         error: "No se encontró la inscripción del alumno en ese grupo",
       });
+    }
+
+    const validacionPago = await validarPagoAlCorrienteParaBaja({
+      idAlumno,
+      grupoId,
+      fechaInicioCobro:
+        inscripcion.fechaPago ||
+        inscripcion.fechaInscripcion ||
+        inscripcion.createdAt,
+    });
+
+    if (!validacionPago.ok) {
+      return res.status(409).json({
+        error: `No se puede dar de baja todavía. Primero debe quedar pagado ${validacionPago.periodo.nombreMes}.`,
+        detalle: {
+          mesRequerido: validacionPago.periodo.nombreMes,
+          montoRequerido: validacionPago.montoRequerido,
+          pagadoEnPeriodo: validacionPago.totalPagadoPeriodo,
+          saldoPendiente: validacionPago.saldoPeriodo,
+          fechaLimite: validacionPago.periodo.vencimiento,
+        },
+      });
+    }
+
+    // Si no es un grupo reagendado, proceder con la baja de inscripción
+    const inscripcionEliminada = await Inscripcion.findOneAndDelete({
+      idAlumno: String(idAlumno).trim(),
+      grupoId: String(grupoId).trim(),
+    });
+
+    let pagoDesactivado = null;
+    if (validacionPago.pago?._id) {
+      pagoDesactivado = await Pago.findByIdAndUpdate(
+        validacionPago.pago._id,
+        {
+          activo: false,
+          fechaBaja: new Date(),
+        },
+        { new: true }
+      );
     }
 
     // Eliminar reagendaciones asociadas al grupo de origen
@@ -209,8 +295,18 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
 
     res.status(200).json({
       ok: true,
-      mensaje: "Alumno dado de baja correctamente del grupo",
+      mensaje: pagoDesactivado
+        ? "Alumno dado de baja; sus pagos anteriores permanecen en el historial"
+        : "Alumno dado de baja correctamente del grupo",
       inscripcionEliminada: inscripcionEliminada || null,
+      pagoDesactivado: pagoDesactivado || null,
+      pagoValidado: validacionPago.pago
+        ? {
+            mesRequerido: validacionPago.periodo.nombreMes,
+            montoRequerido: validacionPago.montoRequerido,
+            pagadoEnPeriodo: validacionPago.totalPagadoPeriodo,
+          }
+        : null,
       reagendacionesEliminadas: resultadoReagendaciones.deletedCount,
     });
   } catch (error) {

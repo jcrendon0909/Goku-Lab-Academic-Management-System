@@ -27,6 +27,9 @@ export default function InscripcionForm({
   const [observaciones, setObservaciones] = useState("");
   const [modalidad, setModalidad] = useState("Presencial");
   const [fechaInscripcion, setFechaInscripcion] = useState<string>("");
+  const [montoMensualidad, setMontoMensualidad] = useState("");
+  const [fechaPago, setFechaPago] = useState<string>("");
+  const [comentariosPago, setComentariosPago] = useState("");
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
@@ -59,9 +62,11 @@ export default function InscripcionForm({
     // Default: día de la clase seleccionada en el calendario.
     if (classData?.date) {
       setFechaInscripcion(toDateInputValue(classData.date));
+      setFechaPago((actual) => actual || toDateInputValue(new Date()));
       return;
     }
     setFechaInscripcion(toDateInputValue(new Date()));
+    setFechaPago((actual) => actual || toDateInputValue(new Date()));
   }, [classData]);
 
   useEffect(() => {
@@ -107,6 +112,18 @@ export default function InscripcionForm({
         alert(
           "❌ No se encontró el identificador del grupo. Por favor recarga la página e intenta de nuevo."
         );
+        return;
+      }
+
+      const montoPagoNumero = Number(montoMensualidad);
+
+      if (!montoMensualidad || !Number.isFinite(montoPagoNumero) || montoPagoNumero <= 0) {
+        alert("Captura un monto de mensualidad valido");
+        return;
+      }
+
+      if (!fechaPago) {
+        alert("Captura la fecha de pago");
         return;
       }
 
@@ -156,6 +173,9 @@ export default function InscripcionForm({
           grupoId: grupoId.trim(),
           modalidad: modalidad,
           fechaInscripcion: fechaInscripcion || undefined,
+          montoMensualidad: montoPagoNumero,
+          fechaPago,
+          comentarios: comentariosPago,
         });
       } catch (errorInscripcion: any) {
         console.error("Error al crear inscripción:", errorInscripcion);
@@ -182,13 +202,63 @@ export default function InscripcionForm({
 
   const puedeConfirmar =
     Boolean(grupoId && grupoId.trim()) &&
+    Boolean(fechaPago) &&
+    Number(montoMensualidad) > 0 &&
     (modo === "existente"
       ? Boolean(alumnoSeleccionado)
       : Boolean(nombreAlumno.trim()));
 
+  const datosPagoForm = (
+    <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4 mt-5 space-y-3">
+      <h3 className="font-semibold text-gray-900">Datos de pago</h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Monto de mensualidad
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={montoMensualidad}
+            onChange={(e) => setMontoMensualidad(e.target.value)}
+            placeholder="0.00"
+            className="w-full border p-2 rounded"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Fecha de pago
+          </label>
+          <input
+            type="date"
+            value={fechaPago}
+            onChange={(e) => setFechaPago(e.target.value)}
+            className="w-full border p-2 rounded"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Comentarios
+          <span className="text-xs font-normal text-gray-500"> para calendario</span>
+        </label>
+        <textarea
+          value={comentariosPago}
+          onChange={(e) => setComentariosPago(e.target.value)}
+          className="w-full border p-2 rounded bg-white"
+          rows={3}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-      <div className="bg-white w-[700px] rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white w-[95vw] max-w-5xl rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-2">Inscribir alumno</h2>
 
         <p className="text-sm text-gray-500 mb-4">
@@ -385,6 +455,8 @@ export default function InscripcionForm({
             </div>
           </div>
         )}
+
+        {datosPagoForm}
 
         <div className="flex justify-end gap-2 mt-6">
           <button
