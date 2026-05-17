@@ -1,6 +1,5 @@
 import * as React from "react";
 
-// 1. Ponemos las funciones aquí arriba (fuera del componente)
 const formatearFecha = (fechaIso: string) => {
     if (!fechaIso) return "Sin fecha";
     const opciones: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
@@ -14,7 +13,13 @@ const estaVencido = (fechaIso: string, status: string) => {
     return limite < hoy && status !== "Pagado";
 };
 
-export function PaymentRow({ payment, onRegisterPayment }) {
+interface PaymentRowProps {
+    payment: any;
+    onRegisterPayment: () => void;
+    onChangePaymentDate: () => void;
+}
+
+export function PaymentRow({ payment, onRegisterPayment, onChangePaymentDate }) {
     const isPaid = payment.status === "Pagado";
     // Verificamos si este pago en particular está vencido
     const vencido = estaVencido(payment.fechaLimite, payment.status);
@@ -23,13 +28,25 @@ export function PaymentRow({ payment, onRegisterPayment }) {
         <div className="rounded-xl border bg-white p-6 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-8 flex-1">
 
-                {/* Fecha */}
+                {/* FECHA 1: Cambia el título dinámicamente */}
                 <div className="flex flex-col min-w-[120px]">
-                    <span className="text-[10px] font-bold text-cyan-600 uppercase">Fecha de pago</span>
+                    <span className="text-[10px] font-bold text-cyan-600 uppercase">
+                        {isPaid ? "Debio pagar" : "Fecha de pago"}
+                    </span>
                     <span className={`text-sm font-bold ${vencido ? 'text-red-500' : 'text-gray-900'}`}>
                         {formatearFecha(payment.fechaLimite)}
                     </span>
                 </div>
+
+                {/* FECHA 2: Cuándo pagó realmente */}
+                {isPaid && (
+                    <div className="flex flex-col min-w-[120px]">
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase">Pago</span>
+                        <span className="text-sm font-bold text-gray-900">
+                            {formatearFecha(payment.fechaPagoReal)}
+                        </span>
+                    </div>
+                )}
 
                 {/* Alumno */}
                 <div className="flex flex-col min-w-[150px]">
@@ -48,28 +65,49 @@ export function PaymentRow({ payment, onRegisterPayment }) {
                     <span className="text-[10px] font-bold text-gray-400 uppercase">Total</span>
                     <span className="text-sm font-bold">${payment.montoTotal}</span>
                 </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase">Abonado</span>
-                    <span className="text-sm font-bold text-emerald-600">${payment.montoPagado}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-red-400 uppercase">Saldo</span>
-                    <span className="text-sm font-bold text-red-500">${payment.saldo}</span>
-                </div>
-
+                {!isPaid && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase">Abonado</span>
+                        <span className="text-sm font-bold text-emerald-600">${payment.montoPagado}</span>
+                    </div>
+                )}
+                {!isPaid && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-red-400 uppercase">Adeudo</span>
+                        <span className="text-sm font-bold text-red-500">${payment.saldo}</span>
+                    </div>
+                )}
                 {/* Estatus */}
                 <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${isPaid ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-600 border-amber-100"}`}>
                     {payment.status}
                 </div>
+
+                {/* Método pago */}
+                {isPaid && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-cyan-600 uppercase">Metodo</span>
+                        <span className="text-sm font-bold text-gray-600">{payment.metodoAbono}</span>
+                    </div>
+                )}
             </div>
 
-            <button
-                onClick={onRegisterPayment}
-                disabled={isPaid}
-                className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-yellow-950 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:hover:bg-yellow-400"
-            >
-                {isPaid ? "Pagado" : "Registrar Abono"}
-            </button>
+            {!isPaid && (
+                <button
+                    onClick={onChangePaymentDate}
+                    className="px-4 py-2 bg-cyan-100 hover:bg-cyan-500 text-yellow-950 text-xs font-bold rounded-lg transition-all whitespace-nowrap"
+                >
+                    Cambiar dia de pago
+                </button>
+            )
+            }
+            {!isPaid && (
+                <button
+                    onClick={onRegisterPayment}
+                    className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-yellow-950 text-xs font-bold rounded-lg transition-all whitespace-nowrap"
+                >
+                    Registrar Abono
+                </button>
+            )}
         </div>
     );
 }
