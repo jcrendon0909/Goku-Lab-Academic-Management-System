@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -6,42 +5,54 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
-import { Calendar, Clock, User, Users } from 'lucide-react';
-import { Class } from '../data/mockData';
+import { Calendar, Clock, User, Users, RotateCcw, X, Trash2 } from 'lucide-react';
 
 interface ClassDetailsDialogProps {
   classData: any;
   isOpen: boolean;
   onClose: () => void;
   onReagendar: (student: any) => void;
+  onInscribirAlumno: (classData: any) => void;
+  onEliminarGrupo: (classData: any) => void;
+  onEliminarReagendacion: (classData: any) => void;
+  onBajaAlumno: (student: any, classData: any) => void;
+  onEliminarReagendacionAlumno: (student: any, classData: any) => void;
 }
 
-export function ClassDetailsDialog({ classData, isOpen, onClose, onReagendar}: ClassDetailsDialogProps) {
-  const navigate = useNavigate();
-
-
-
-  const handleReschedule = (studentId: string, studentName: string) => {
-    navigate(`/reschedule?classId=${classData.id}&studentId=${studentId}&studentName=${encodeURIComponent(studentName)}`);
-  };
-
+export function ClassDetailsDialog({
+  classData,
+  isOpen,
+  onClose,
+  onReagendar,
+  onInscribirAlumno,
+  onEliminarGrupo,
+  onEliminarReagendacion,
+  onBajaAlumno,
+  onEliminarReagendacionAlumno,
+}: ClassDetailsDialogProps) {
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('es-ES', {
+    return new Date(date).toLocaleDateString('es-ES', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
+  const teacherAvailable =
+    classData?.teacher?.available !== undefined
+      ? classData.teacher.available
+      : false;
+
+  const esReagendada = Boolean(classData?.tipoReagendacionClase);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl rounded-xl">
+      <DialogContent className="max-w-5xl rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <DialogTitle className="text-2xl font-bold text-gray-900">
                 {classData.title}
@@ -50,16 +61,53 @@ export function ClassDetailsDialog({ classData, isOpen, onClose, onReagendar}: C
                 Detalles completos de la clase programada
               </DialogDescription>
             </div>
-            {classData.status === 'rescheduled' && (
-              <Badge className="bg-amber-400 text-amber-900 rounded-lg">
-                Reprogramado
-              </Badge>
-            )}
+
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-2">
+                {classData.tipoReagendacionClase === 'origen' && (
+                  <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
+                    RP
+                  </Badge>
+                )}
+
+                {classData.tipoReagendacionClase === 'destino' && (
+                  <Badge className="bg-sky-300 text-sky-900 rounded-lg">
+                    RP
+                  </Badge>
+                )}
+              </div>
+
+              {!esReagendada && (
+                <>
+                  <button
+                    onClick={() => onInscribirAlumno(classData)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                  >
+                    Inscribir alumno
+                  </button>
+
+                  <button
+                    onClick={() => onEliminarGrupo(classData)}
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                  >
+                    Eliminar grupo
+                  </button>
+                </>
+              )}
+
+              {classData.tipoReagendacionClase === 'destino' && (
+                <button
+                  onClick={() => onEliminarReagendacion(classData)}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm w-full"
+                >
+                  Eliminar reagendación
+                </button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
-          {/* Class Info */}
           <Card className="p-4 bg-gray-50 rounded-lg border-none">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-3">
@@ -71,6 +119,7 @@ export function ClassDetailsDialog({ classData, isOpen, onClose, onReagendar}: C
                   </div>
                 </div>
               </div>
+
               <div className="flex items-center gap-3">
                 <Clock className="h-5 w-5 text-cyan-500" />
                 <div>
@@ -83,88 +132,122 @@ export function ClassDetailsDialog({ classData, isOpen, onClose, onReagendar}: C
             </div>
           </Card>
 
-          {/* Teacher Info */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <User className="h-5 w-5 text-gray-700" />
               <h3 className="font-semibold text-gray-900">Profesor Asignado</h3>
             </div>
+
             <Card className="p-4 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-gray-900">{classData.teacher.name}</div>
-                  <div className="text-sm text-gray-500">{classData.teacher.email}</div>
+                  <div className="font-medium text-gray-900">
+                    {classData.teacher?.name || 'Sin profesor asignado'}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {classData.teacher?.email || ''}
+                  </div>
                 </div>
+
                 <Badge
                   variant="outline"
                   className={`rounded-lg ${
-                    classData.teacher.available
+                    teacherAvailable
                       ? 'bg-green-50 text-green-700 border-green-200'
                       : 'bg-red-50 text-red-700 border-red-200'
                   }`}
                 >
-                  {classData.teacher.available ? 'Disponible' : 'No disponible'}
+                  {teacherAvailable ? 'Disponible' : 'No disponible'}
                 </Badge>
               </div>
             </Card>
           </div>
 
-          {/* Students List */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Users className="h-5 w-5 text-gray-700" />
               <h3 className="font-semibold text-gray-900">Alumnos Matriculados</h3>
               <Badge variant="outline" className="rounded-lg">
-                {classData.students.length}
+                {classData.students?.length || 0}
               </Badge>
             </div>
-            <div className="space-y-2">
-
 
             {classData.students && classData.students.length > 0 ? (
               <div className="space-y-3">
                 {classData.students.map((student: any, index: number) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between border rounded-xl p-4"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {student.nombreAlumno || 'Sin nombre'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {student.idAlumno || ''}
-                      </p>
+                  <Card key={index} className="p-4 rounded-xl">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-gray-900">
+                            {student.nombreAlumno || 'Sin nombre'}
+                          </p>
+
+                          <Badge 
+                            variant="outline" 
+                            className={`rounded-lg ${
+                              student.modalidad === 'Virtual' 
+                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {student.modalidad || 'Presencial'}
+                          </Badge>
+
+                          {student.reagendacion?.tipo === 'origen' && (
+                            <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
+                              Reagendada (origen)
+                            </Badge>
+                          )}
+
+                          {student.reagendacion?.tipo === 'destino' && (
+                            <Badge className="bg-blue-400 text-blue-900 rounded-lg">
+                              Reagendada (destino)
+                            </Badge>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-gray-500">
+                          {student.idAlumno || ''}
+                        </p>
+
+                        {student.reagendacion?.texto && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            {student.reagendacion.texto}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        {/* Reprogramar: solo si el alumno NO tiene reagendación */}
+                        {!student.reagendacion && (
+                          <button
+                            onClick={() => onReagendar(student)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded-lg transition-colors"
+                            title="Reprogramar alumno"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span className="hidden sm:inline">Reprogramar</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => onBajaAlumno(student, classData)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+                          title="Dar de baja al alumno"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Dar de baja</span>
+                        </button>
+                      </div>
                     </div>
-
-                    <button
-                      onClick={() => onReagendar(student)}
-                      className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg"
-                    >
-                      Reprogramar
-                    </button>                    
-
-
-
-                  </div>
+                  </Card>
                 ))}
               </div>
             ) : (
               <p className="text-sm text-gray-500">No hay alumnos inscritos.</p>
             )}
-
-              
-            </div>
           </div>
-
-          {classData.status === 'rescheduled' && classData.rescheduledBy && (
-            <Card className="p-4 bg-amber-50 border-amber-200 rounded-lg">
-              <div className="text-sm">
-                <span className="font-medium text-amber-900">Reprogramado por: </span>
-                <span className="text-amber-800">{classData.rescheduledBy}</span>
-              </div>
-            </Card>
-          )}
         </div>
       </DialogContent>
     </Dialog>

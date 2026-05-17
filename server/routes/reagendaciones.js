@@ -1,45 +1,166 @@
 import express from "express";
 import Reagendacion from "../models/Reagendacion.js";
+import { generarId } from "../utils/generarId.js";
 
 const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
     const reagendaciones = await Reagendacion.find().lean();
-    res.json(reagendaciones);
+    console.log("GET /api/reagendaciones:", reagendaciones);
+    res.status(200).json(reagendaciones);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener reagendaciones" });
+    console.error("ERROR GET REAGENDACIONES:", error);
+    res.status(500).json({
+      error: "Error al obtener reagendaciones",
+      detalle: error.message,
+    });
   }
 });
 
 router.post("/", async (req, res) => {
   try {
-    console.log("BODY REAGENDACION:", req.body);
+    console.log("BODY REAGENDACION RECIBIDO:", req.body);
+
+    const {
+      idAlumno,
+      nombreAlumno,
+      IdgrupoOrigen,
+      idGrupoOrigen,
+      idGrupoNuevo,
+      nombreCurso,
+      profesorOriginal,
+      profesorNuevo,
+      idProfesorOriginal,
+      idProfesorNuevo,
+      fechaHoraOriginal,
+      fechaHoraNueva,
+      duracion,
+      modalidad,
+      motivo,
+      FechaMovimiento,
+      estatus,
+    } = req.body;
+
+    const grupoOrigenFinal = IdgrupoOrigen || idGrupoOrigen || "";
+    const grupoNuevoFinal = idGrupoNuevo || "";
+
+    if (!idAlumno) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+
+    if (!nombreAlumno) {
+      return res.status(400).json({ error: "Falta nombreAlumno" });
+    }
+
+    if (!grupoOrigenFinal) {
+      return res.status(400).json({ error: "Falta IdgrupoOrigen" });
+    }
+
+    if (!grupoNuevoFinal) {
+      return res.status(400).json({ error: "Falta idGrupoNuevo" });
+    }
+
+    if (!fechaHoraOriginal) {
+      return res.status(400).json({ error: "Falta fechaHoraOriginal" });
+    }
+
+    if (!fechaHoraNueva) {
+      return res.status(400).json({ error: "Falta fechaHoraNueva" });
+    }
+
+    const nuevoReagendacionId = await generarId("reagendacion");
 
     const nuevaReagendacion = new Reagendacion({
-      _id: req.body._id,
-      ReagendacionId: req.body.ReagendacionId,
-      idAlumno: req.body.idAlumno,
-      nombreAlumno: req.body.nombreAlumno,
-      IdgrupoOrigen: req.body.IdgrupoOrigen || req.body.idGrupoOrigen || "",
-      idGrupoNuevo: req.body.idGrupoNuevo || "",
-      nombreCurso: req.body.nombreCurso,
-      profesorOriginal: req.body.profesorOriginal || "",
-      profesorNuevo: req.body.profesorNuevo || "",
-      fechaHoraOriginal: req.body.fechaHoraOriginal,
-      fechaHoraNueva: req.body.fechaHoraNueva,
-      motivo: req.body.motivo || "Reagendado desde sistema",
-      FechaMovimiento: req.body.FechaMovimiento || new Date().toISOString(),
-      estatus: req.body.estatus || "reagendado"
+      ReagendacionId: nuevoReagendacionId,
+      idAlumno,
+      nombreAlumno,
+      IdgrupoOrigen: grupoOrigenFinal,
+      idGrupoNuevo: grupoNuevoFinal,
+      nombreCurso: nombreCurso || "",
+      profesorOriginal: profesorOriginal || "",
+      profesorNuevo: profesorNuevo || "",
+      idProfesorOriginal: idProfesorOriginal || "",
+      idProfesorNuevo: idProfesorNuevo || "",
+      fechaHoraOriginal: fechaHoraOriginal || "",
+      fechaHoraNueva: fechaHoraNueva || "",
+      duracion: duracion || "2 horas",
+      modalidad: modalidad || "Presencial",
+      motivo: motivo || "Reagendado desde sistema",
+      FechaMovimiento: FechaMovimiento || new Date().toISOString(),
+      estatus: estatus || "reagendado",
     });
 
+    console.log("DOCUMENTO A GUARDAR:", nuevaReagendacion);
+
     const guardada = await nuevaReagendacion.save();
+
+    console.log("REAGENDACION GUARDADA:", guardada);
+
     res.status(201).json(guardada);
   } catch (error) {
     console.error("ERROR AL GUARDAR REAGENDACION:", error);
     res.status(500).json({
       error: "Error al guardar reagendación",
-      detalle: error.message
+      detalle: error.message,
+    });
+  }
+});
+
+// Eliminar reagendación de un alumno específico (mantiene la inscripción)
+router.delete("/alumno/:idAlumno/:idGrupoNuevo", async (req, res) => {
+  try {
+    const { idAlumno, idGrupoNuevo } = req.params;
+
+    const eliminada = await Reagendacion.findOneAndDelete({
+      idAlumno,
+      idGrupoNuevo,
+    });
+
+    if (!eliminada) {
+      return res.status(404).json({
+        error: "No se encontró la reagendación del alumno",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Reagendación eliminada correctamente",
+      reagendacion: eliminada,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE REAGENDACION ALUMNO:", error);
+    res.status(500).json({
+      error: "Error al eliminar reagendación",
+      detalle: error.message,
+    });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const eliminada =
+      (await Reagendacion.findByIdAndDelete(id)) ||
+      (await Reagendacion.findOneAndDelete({ ReagendacionId: id }));
+
+    if (!eliminada) {
+      return res.status(404).json({
+        error: "No se encontró la reagendación",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Reagendación eliminada correctamente",
+      reagendacion: eliminada,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE REAGENDACION:", error);
+    res.status(500).json({
+      error: "Error al eliminar reagendación",
+      detalle: error.message,
     });
   }
 });

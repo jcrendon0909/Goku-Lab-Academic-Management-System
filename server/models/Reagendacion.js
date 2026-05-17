@@ -2,27 +2,35 @@ import mongoose from "mongoose";
 
 const reagendacionSchema = new mongoose.Schema(
   {
-    _id:{ type: String, required: true },
-    ReagendacionId: { type: String, required: true },
+    ReagendacionId: { type: String, required: true, unique: true },
     idAlumno: { type: String, required: true },
     nombreAlumno: { type: String, required: true },
+
     IdgrupoOrigen: { type: String, required: true },
-    idGrupoNuevo: { type: String, required: false },
-    nombreCurso: { type: String, required: true },
-    profesorOriginal: { type: String, required: false },
-    profesorNuevo: { type: String, required: false },
-    fechaHoraOriginal: { type: String, required: true },
-    fechaHoraNueva: { type: String, required: true },
-    motivo: { type: String, required: true },
-    FechaMovimiento: { type: String, required: true },
-    estatus: { type: String, required: true }
+    idGrupoNuevo: { type: String, required: true },
+
+    nombreCurso: { type: String, default: "" },
+
+    profesorOriginal: { type: String, default: "" },
+    profesorNuevo: { type: String, default: "" },
+
+    idProfesorOriginal: { type: String, default: "" },
+    idProfesorNuevo: { type: String, default: "" },
+
+    fechaHoraOriginal: { type: String, default: "" },
+    fechaHoraNueva: { type: String, default: "" },
+
+    duracion: { type: String, default: "2 horas" },
+    modalidad: { type: String, default: "Presencial" },
+
+    motivo: { type: String, default: "Reagendado desde sistema" },
+    FechaMovimiento: { type: String, default: () => new Date().toISOString() },
+    estatus: { type: String, default: "reagendado" },
   },
   {
+    timestamps: true,
     collection: "reagendaciones",
-    versionKey: false
   }
 );
 
-const Reagendacion = mongoose.model("Reagendacion", reagendacionSchema);
-
-export default Reagendacion;
+export default mongoose.model("Reagendacion", reagendacionSchema);
