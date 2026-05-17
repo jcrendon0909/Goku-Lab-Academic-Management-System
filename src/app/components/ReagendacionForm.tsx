@@ -8,6 +8,7 @@ import {
 interface ReagendacionFormProps {
   data: any;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 function normalizar(valor: string) {
@@ -32,12 +33,14 @@ function obtenerNombreDia(fechaISO: string) {
 export default function ReagendacionForm({
   data,
   onClose,
+  onSuccess,
 }: ReagendacionFormProps) {
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [duracion, setDuracion] = useState("2 horas");
   const [modalidad, setModalidad] = useState(data?.alumno?.modalidad || "Presencial");
   const [idProfesorNuevo, setIdProfesorNuevo] = useState("");
+  const [comentario, setComentario] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [grupoSugerido, setGrupoSugerido] = useState<any>(null);
   const [buscandoGrupo, setBuscandoGrupo] = useState(false);
@@ -93,7 +96,7 @@ export default function ReagendacionForm({
 
         setProfesoresDisponibles(profesoresActivos);
       } catch (error) {
-        console.error("❌ Error al cargar profesores:", error);
+        console.error("Error al cargar profesores:", error);
         setProfesoresDisponibles([]);
       }
     };
@@ -132,7 +135,7 @@ export default function ReagendacionForm({
 
         setGrupoSugerido(coincidencia || null);
       } catch (error) {
-        console.error("❌ Error al buscar grupo compatible:", error);
+        console.error("Error al buscar grupo compatible:", error);
         setGrupoSugerido(null);
       } finally {
         setBuscandoGrupo(false);
@@ -146,26 +149,26 @@ export default function ReagendacionForm({
     try {
       setGuardando(true);
 
-      console.log("========== DEBUG REAGENDACIÓN ==========");
-      console.log("📌 data completa:", data);
-      console.log("📌 data.alumno:", data?.alumno);
-      console.log("📌 data.clase:", data?.clase);
-      console.log("📌 grupo sugerido:", grupoSugerido);
+      console.log("========== DEBUG REAGENDACION ==========");
+      console.log("data completa:", data);
+      console.log("data.alumno:", data?.alumno);
+      console.log("data.clase:", data?.clase);
+      console.log("grupo sugerido:", grupoSugerido);
 
       if (!data?.alumno?.idAlumno) {
-        console.error("❌ Falta data.alumno.idAlumno");
+        console.error("Falta data.alumno.idAlumno");
         alert("No se encontró el id del alumno");
         return;
       }
 
       if (!idGrupoOrigenDetectado) {
-        console.error("❌ No se encontró el grupo de origen");
+        console.error("No se encontró el grupo de origen");
         alert("No se encontró el grupo de origen. Revisa la consola.");
         return;
       }
 
       if (!fecha || !hora) {
-        console.error("❌ Faltan fecha u hora");
+        console.error("Faltan fecha u hora");
         alert("Debes seleccionar fecha y hora");
         return;
       }
@@ -194,6 +197,7 @@ export default function ReagendacionForm({
         fechaHoraNueva: `${fecha} ${hora}`,
         duracion: duracion,
         modalidad: modalidad,
+        comentario: comentario.trim(),
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
           : "Reagendado a clase virtual",
@@ -201,10 +205,10 @@ export default function ReagendacionForm({
         estatus: "reagendado",
       };
 
-      console.log("📤 PAYLOAD FINAL:", payload);
+      console.log("PAYLOAD FINAL:", payload);
 
       const respuesta = await crearReagendacion(payload);
-      console.log("✅ RESPUESTA SERVIDOR:", respuesta);
+      console.log("RESPUESTA SERVIDOR:", respuesta);
 
       alert(
         grupoSugerido
@@ -212,9 +216,13 @@ export default function ReagendacionForm({
           : "Reagendación guardada como nueva clase reagendada"
       );
 
-      onClose();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        onClose();
+      }
     } catch (error) {
-      console.error("❌ ERROR EN handleSubmit:", error);
+      console.error("ERROR EN handleSubmit:", error);
       alert("Error al guardar la reagendación");
     } finally {
       setGuardando(false);
@@ -223,7 +231,7 @@ export default function ReagendacionForm({
   };
 
   const handleEnviarMensaje = async () => {
-    const mensaje = `Hola equipo 👋
+    const mensaje = `Hola equipo
 
 Se solicita reagendación:
 
@@ -236,6 +244,7 @@ Nueva fecha: ${fecha || "[pendiente]"}
 Nueva hora: ${hora || "[pendiente]"}
 Duración: ${duracion}
 Profesor sugerido: ${profesorFinal || "[pendiente]"}
+Comentario: ${comentario.trim() || "[sin comentario]"}
 
 ${
   grupoSugerido
@@ -246,14 +255,14 @@ ${
 ¿Quién puede cubrir esta clase?`;
 
     try {
-      console.log("📲 Mensaje de WhatsApp generado:", mensaje);
+      console.log("Mensaje de WhatsApp generado:", mensaje);
       await navigator.clipboard.writeText(mensaje);
       window.open(
         `https://wa.me/?text=${encodeURIComponent(mensaje)}`,
         "_blank"
       );
     } catch (error) {
-      console.error("❌ Error al generar mensaje:", error);
+      console.error("Error al generar mensaje:", error);
       alert("No se pudo generar el mensaje");
     }
   };
@@ -268,7 +277,7 @@ ${
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 gap-6 mb-6">
           <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl">
             <h3 className="font-bold text-lg text-blue-900 mb-4">Clase Original</h3>
             <div className="space-y-3 text-sm">
@@ -301,26 +310,13 @@ ${
             </div>
           </div>
 
-          <div className="bg-cyan-50 border border-cyan-200 p-6 rounded-xl">
-            <h3 className="font-bold text-lg text-cyan-900 mb-4">Detalles Técnicos</h3>
-            <div className="space-y-3 text-sm">
-              <div>
-                <span className="text-cyan-600 font-semibold">ID Profesor Origen:</span>
-                <p className="text-gray-800 font-mono">{idProfesorOriginal || "No disponible"}</p>
-              </div>
-              <div>
-                <span className="text-cyan-600 font-semibold">Estado:</span>
-                <p className="text-gray-800"><span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold">Pendiente Reagendación</span></p>
-              </div>
-            </div>
-          </div>
         </div>
 
         <button
           onClick={handleEnviarMensaje}
-          className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 rounded-lg mb-6 font-semibold shadow-md transition-all"
+          className="w-full border border-emerald-200 bg-emerald-50 py-3 rounded-lg mb-6 font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
         >
-          📲 Enviar Mensaje a Profesores (WhatsApp)
+          WhatsApp Profesores
         </button>
 
         <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 p-6 rounded-xl mb-6">
@@ -394,16 +390,29 @@ ${
               </select>
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Comentario de reagendacion
+            </label>
+            <textarea
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              rows={3}
+              className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500 bg-white"
+              placeholder="Motivo, acuerdos o notas importantes de esta reagendacion"
+            />
+          </div>
         </div>
 
         <div className="mb-6">
           {buscandoGrupo ? (
             <div className="bg-blue-50 border border-blue-300 text-blue-700 p-4 rounded-lg text-sm font-semibold">
-              🔍 Buscando grupo compatible...
+              Buscando grupo compatible...
             </div>
           ) : grupoSugerido ? (
             <div className="bg-green-50 border border-green-300 text-green-900 p-4 rounded-lg text-sm">
-              <div className="font-bold mb-3 text-lg">✅ Grupo Existente Encontrado</div>
+              <div className="font-bold mb-3 text-lg">Grupo existente encontrado</div>
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="font-semibold">ID Grupo:</span> <span className="font-mono">{grupoSugerido.idGrupo}</span></div>
                 <div><span className="font-semibold">Curso:</span> {grupoSugerido.nombreCurso}</div>
@@ -414,17 +423,17 @@ ${
             </div>
           ) : fecha && hora ? (
             <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-lg text-sm font-semibold">
-              ⚠️ No se encontró un grupo compatible. Se creará una clase reagendada nueva.
+              No se encontró un grupo compatible. Se creará una clase reagendada nueva.
             </div>
           ) : (
             <div className="bg-gray-100 border border-gray-300 text-gray-600 p-4 rounded-lg text-sm">
-              ℹ️ Selecciona fecha, hora y profesor para buscar automáticamente un grupo compatible.
+              Selecciona fecha, hora y profesor para buscar automáticamente un grupo compatible.
             </div>
           )}
         </div>
 
         <div className="bg-amber-100 border-2 border-amber-400 text-amber-900 p-4 rounded-lg mb-6 text-sm font-semibold">
-          ⏱️ Esta clase quedará marcada como <span className="font-bold">"Reprogramado"</span> en el sistema.
+          Esta clase quedará marcada como <span className="font-bold">"Reprogramado"</span> en el sistema.
         </div>
 
         <div className="flex justify-end gap-3">
@@ -438,9 +447,9 @@ ${
           <button
             onClick={handleSubmit}
             disabled={guardando}
-            className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg font-semibold shadow-md transition-all"
+            className="px-6 py-3 border border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 rounded-lg font-semibold transition-colors"
           >
-            {guardando ? "Guardando Reagendación..." : "✓ Confirmar Reprogramación"}
+            {guardando ? "Guardando reagendación..." : "Confirmar reagendación"}
           </button>
         </div>
       </div>

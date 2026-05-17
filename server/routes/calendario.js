@@ -160,6 +160,7 @@ router.get("/", async (req, res) => {
           idAlumno: a.idAlumno || a.id_alumno || "",
           nombreAlumno: a.nombreAlumno || a.nombre || a.Alumno || "",
           modalidad: a.modalidad || "Presencial",
+          comentarios: a.comentarios || "",
           inscripcionCreadaEn: a.fechaInscripcion || a.createdAt || a.updatedAt || null,
           reagendacion: null,
         }));
@@ -183,6 +184,8 @@ router.get("/", async (req, res) => {
             nombreAlumno: r.nombreAlumno || "",
             reagendacion: {
               tipo: "origen",
+              reagendacionId: String(r._id || r.ReagendacionId || ""),
+              comentario: r.comentario || r.comentarios || "",
               fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
               fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
               horaClaseNueva:
@@ -289,9 +292,22 @@ router.get("/", async (req, res) => {
           nombreProfesor: nombreProfesorNuevo,
           capacidadMaxima: (grupoNuevo && grupoNuevo.CapacidadMaxima) || 8,
           alumnos: [],
+          reagendacionIds: [],
+          reagendacionId: "",
           estatus: "Reagendado",
           esVirtual: !grupoNuevo,
         };
+      }
+
+      const reagendacionId = String(r._id || r.ReagendacionId || "");
+      if (
+        reagendacionId &&
+        !reagendacionesAgrupadas[key].reagendacionIds.includes(reagendacionId)
+      ) {
+        reagendacionesAgrupadas[key].reagendacionIds.push(reagendacionId);
+        if (!reagendacionesAgrupadas[key].reagendacionId) {
+          reagendacionesAgrupadas[key].reagendacionId = reagendacionId;
+        }
       }
 
       const grupoOrigen = gruposMap.get(
@@ -313,6 +329,8 @@ router.get("/", async (req, res) => {
         modalidad: r.modalidad || "Presencial",
         reagendacion: {
           tipo: "destino",
+          reagendacionId,
+          comentario: r.comentario || r.comentarios || "",
           fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
           fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
           idProfesorOriginal: idProfesorOriginal,

@@ -38,6 +38,8 @@ router.post("/", async (req, res) => {
       duracion,
       modalidad,
       motivo,
+      comentario,
+      comentarios,
       FechaMovimiento,
       estatus,
     } = req.body;
@@ -69,10 +71,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Falta fechaHoraNueva" });
     }
 
-    const nuevoReagendacionId = await generarId("reagendacion");
-
-    const nuevaReagendacion = new Reagendacion({
-      ReagendacionId: nuevoReagendacionId,
+    const datosReagendacion = {
       idAlumno,
       nombreAlumno,
       IdgrupoOrigen: grupoOrigenFinal,
@@ -87,8 +86,31 @@ router.post("/", async (req, res) => {
       duracion: duracion || "2 horas",
       modalidad: modalidad || "Presencial",
       motivo: motivo || "Reagendado desde sistema",
+      comentario: String(comentario || comentarios || "").trim(),
       FechaMovimiento: FechaMovimiento || new Date().toISOString(),
       estatus: estatus || "reagendado",
+    };
+
+    const actualizada = await Reagendacion.findOneAndUpdate(
+      {
+        idAlumno,
+        IdgrupoOrigen: grupoOrigenFinal,
+        fechaHoraOriginal: fechaHoraOriginal || "",
+      },
+      { $set: datosReagendacion },
+      { new: true }
+    );
+
+    if (actualizada) {
+      console.log("REAGENDACION ACTUALIZADA:", actualizada);
+      return res.status(200).json(actualizada);
+    }
+
+    const nuevoReagendacionId = await generarId("reagendacion");
+
+    const nuevaReagendacion = new Reagendacion({
+      ReagendacionId: nuevoReagendacionId,
+      ...datosReagendacion,
     });
 
     console.log("DOCUMENTO A GUARDAR:", nuevaReagendacion);
@@ -146,6 +168,16 @@ router.delete("/:id", async (req, res) => {
       (await Reagendacion.findOneAndDelete({ ReagendacionId: id }));
 
     if (!eliminada) {
+      const resultadoGrupo = await Reagendacion.deleteMany({ idGrupoNuevo: id });
+
+      if (resultadoGrupo.deletedCount > 0) {
+        return res.status(200).json({
+          ok: true,
+          mensaje: "Reagendación eliminada correctamente",
+          reagendacionesEliminadas: resultadoGrupo.deletedCount,
+        });
+      }
+
       return res.status(404).json({
         error: "No se encontró la reagendación",
       });

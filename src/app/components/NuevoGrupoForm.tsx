@@ -64,6 +64,15 @@ export default function NuevoGrupoForm({
   const [modalidadAlumno, setModalidadAlumno] = useState<"Presencial" | "Virtual">(
     "Presencial"
   );
+  const [montoMensualidad, setMontoMensualidad] = useState("");
+  const [fechaPago, setFechaPago] = useState(() => {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, "0");
+    const d = String(hoy.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  });
+  const [comentariosPago, setComentariosPago] = useState("");
 
   const [nombreAlumnoNuevo, setNombreAlumnoNuevo] = useState("");
   const [telefonoAlumnoNuevo, setTelefonoAlumnoNuevo] = useState("");
@@ -254,6 +263,8 @@ export default function NuevoGrupoForm({
     Boolean(diaClase) &&
     Boolean(horaClase) &&
     Number(capacidadMaxima) > 0 &&
+    Number(montoMensualidad) > 0 &&
+    Boolean(fechaPago) &&
     !conflictoHorario &&
     (modoAlumno === "existente"
       ? Boolean(alumnoSeleccionado)
@@ -303,6 +314,20 @@ export default function NuevoGrupoForm({
         return;
       }
 
+      const montoPagoNumero = Number(montoMensualidad);
+
+      if (!montoMensualidad || !Number.isFinite(montoPagoNumero) || montoPagoNumero <= 0) {
+        toast.error("Captura un monto de mensualidad valido");
+        setGuardando(false);
+        return;
+      }
+
+      if (!fechaPago) {
+        toast.error("Captura la fecha de pago");
+        setGuardando(false);
+        return;
+      }
+
       const payload: any = {
         grupo: {
           idCurso: cursoSeleccionado.idCurso || "",
@@ -315,6 +340,11 @@ export default function NuevoGrupoForm({
           capacidadMaxima: Number(capacidadMaxima),
           Estatus: "Activo",
           fechaCreacion,
+        },
+        datosPago: {
+          montoMensualidad: montoPagoNumero,
+          fechaPago,
+          comentarios: comentariosPago,
         },
       };
 
@@ -391,7 +421,7 @@ export default function NuevoGrupoForm({
   if (cargandoCatalogos) {
     return (
       <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-        <div className="bg-white rounded-xl p-6 shadow-lg w-[700px]">
+        <div className="bg-white rounded-xl p-6 shadow-lg w-[95vw] max-w-5xl">
           Cargando formulario...
         </div>
       </div>
@@ -400,7 +430,7 @@ export default function NuevoGrupoForm({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-      <div className="bg-white w-[760px] rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white w-[95vw] max-w-6xl rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-2">Crear grupo nuevo e inscribir alumno</h2>
 
         <p className="text-sm text-gray-500 mb-6">
@@ -411,7 +441,7 @@ export default function NuevoGrupoForm({
         <div className="bg-gray-100 rounded-lg p-4 mb-5">
           <h3 className="font-semibold mb-3">Datos del grupo</h3>
 
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Curso
@@ -702,6 +732,52 @@ export default function NuevoGrupoForm({
               </div>
             </div>
           )}
+        </div>
+
+        <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4 mb-5">
+          <h3 className="font-semibold mb-3 text-gray-900">Datos de pago</h3>
+
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Monto de mensualidad
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={montoMensualidad}
+                onChange={(e) => setMontoMensualidad(e.target.value)}
+                placeholder="0.00"
+                className="w-full border p-2 rounded bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha de pago
+              </label>
+              <input
+                type="date"
+                value={fechaPago}
+                onChange={(e) => setFechaPago(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Comentarios
+              <span className="text-xs font-normal text-gray-500"> para calendario</span>
+            </label>
+            <textarea
+              value={comentariosPago}
+              onChange={(e) => setComentariosPago(e.target.value)}
+              rows={3}
+              className="w-full border p-2 rounded bg-white"
+            />
+          </div>
         </div>
 
         {/* Sección de validación de conflictos */}

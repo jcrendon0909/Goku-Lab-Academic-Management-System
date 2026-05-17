@@ -67,8 +67,8 @@ export function PagosPage() {
 
     // Filtrado de lista
     const pagosFiltrados = pagos.filter(p => {
-        if (vista === 'control') return p.status !== "Pagado";
-        return p.status === "Pagado";
+        if (vista === 'control') return p.activo !== false && p.status !== "Pagado";
+        return p.status === "Pagado" || (p.activo === false && Number(p.montoPagado || 0) > 0);
     });
 
     if (cargando) return <div className="p-10 text-center">Cargando informacion...</div>;
@@ -81,6 +81,7 @@ export function PagosPage() {
     // 1. Dinero ha recolectar este mes
     const totalPorRecolectar = pagos
         .filter(p => {
+            if (p.activo === false) return false;
             if (p.status === "Pagado") return false;
             const fecha = new Date(p.fechaLimite);
             return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;

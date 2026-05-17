@@ -99,6 +99,9 @@ export async function crearInscripcion(data: {
   grupoId: string;
   modalidad?: string;
   fechaInscripcion?: string;
+  montoMensualidad?: number;
+  fechaPago?: string;
+  comentarios?: string;
 }) {
   const res = await fetch(`${API_URL}/inscripciones`, {
     method: "POST",
@@ -157,6 +160,11 @@ export async function crearGrupoConAlumno(data: {
     estatus?: string;
     modalidad?: string;
   };
+  datosPago?: {
+    montoMensualidad: number;
+    fechaPago: string;
+    comentarios?: string;
+  };
 }) {
   const res = await fetch(`${API_URL}/grupos/crear-con-alumno`, {
     method: "POST",
@@ -200,6 +208,7 @@ export async function registrarAbono(data: {
     const error = await res.json();
     throw new Error(error.error || "Error al registrar el abono");
   }
+
   return res.json();
 }
 
@@ -217,10 +226,16 @@ export async function eliminarReagendacion(id: string) {
   return responseData;
 }
 
-export async function eliminarReagendacionAlumno(idAlumno: string, idGrupoNuevo: string) {
-  const res = await fetch(`${API_URL}/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
-    method: "DELETE",
-  });
+export async function eliminarReagendacionAlumno(
+  idAlumno: string,
+  idGrupoNuevo: string
+) {
+  const res = await fetch(
+    `${API_URL}/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`,
+    {
+      method: "DELETE",
+    }
+  );
 
   const responseData = await res.json();
 
@@ -258,3 +273,21 @@ export async function eliminarGrupo(grupoId: string) {
 
   return responseData;
 }
+
+export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
+  const response = await fetch(`${API_URL}/pagos/actualizar-dia/${pagoId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ nuevoDia }),
+  });
+
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.error || "Error al actualizar día de pago");
+  }
+
+  return responseData;
+};
