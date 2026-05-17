@@ -1,4 +1,10 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import { Navbar } from '../components/Navbar';
+
+const userStorage = localStorage.getItem('user');
+const userLogueado = userStorage ? JSON.parse(userStorage) : null;
+const esAdmin = userLogueado?.rol === 'admin';
+
+import React, { useEffect, useState } from 'react';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
@@ -97,7 +103,8 @@ export function PagosPage() {
         .reduce((sum, p) => sum + p.montoTotal, 0);
 
     return (
-        <div className="p-8 bg-gray-50 min-h-screen w-full">
+        <div className="bg-gray-50 min-h-screen w-full">
+            <Navbar />
             <div className="max-w-6xl mx-auto space-y-6">
 
                 {/* Cabecera y Switch de Navegación Unificados */}

@@ -15,6 +15,8 @@ import profesoresRoutes from "./routes/profesores.js";
 import alumnosRoutes from "./routes/alumnos.js";
 import cursosRoutes from "./routes/cursos.js";
 
+import authRoutes from "./routes/auth.js";
+
 dotenv.config({ path: "./server/.env" });
 
 const app = express();
@@ -28,6 +30,7 @@ app.get("/", (req, res) => {
   res.json({ ok: true, message: "API funcionando 🚀" });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/grupos", gruposRoutes);
 app.use("/api/inscripciones", inscripcionesRoutes);
 app.use("/api/reagendaciones", reagendacionesRoutes);
