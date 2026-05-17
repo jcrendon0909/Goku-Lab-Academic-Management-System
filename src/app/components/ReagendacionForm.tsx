@@ -36,6 +36,7 @@ export default function ReagendacionForm({
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [duracion, setDuracion] = useState("2 horas");
+  const [modalidad, setModalidad] = useState(data?.alumno?.modalidad || "Presencial");
   const [idProfesorNuevo, setIdProfesorNuevo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [grupoSugerido, setGrupoSugerido] = useState<any>(null);
@@ -192,6 +193,7 @@ export default function ReagendacionForm({
         fechaHoraOriginal: `${data.clase.date || ""} ${data.clase.startTime || ""}`,
         fechaHoraNueva: `${fecha} ${hora}`,
         duracion: duracion,
+        modalidad: modalidad,
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
           : "Reagendado a clase virtual",
@@ -286,6 +288,16 @@ ${
                 <span className="text-blue-600 font-semibold">Grupo:</span>
                 <p className="text-gray-800 font-mono">{idGrupoOrigenDetectado}</p>
               </div>
+              <div>
+                <span className="text-blue-600 font-semibold">Modalidad Actual:</span>
+                <p className={`font-semibold ${
+                  data?.alumno?.modalidad === 'Virtual' 
+                    ? 'text-purple-700' 
+                    : 'text-emerald-700'
+                }`}>
+                  {data?.alumno?.modalidad || 'Presencial'}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -353,20 +365,34 @@ ${
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Profesor Nuevo</label>
-            <select
-              value={idProfesorNuevo}
-              onChange={(e) => setIdProfesorNuevo(e.target.value)}
-              className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
-            >
-              <option value="">Selecciona profesor disponible</option>
-              {profesoresDisponibles.map((profesor) => (
-                <option key={profesor.idProfesor} value={profesor.idProfesor}>
-                  {profesor.nombre}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Modalidad</label>
+              <select
+                value={modalidad}
+                onChange={(e) => setModalidad(e.target.value)}
+                className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+              >
+                <option value="Presencial">Presencial</option>
+                <option value="Virtual">Virtual</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Profesor Nuevo</label>
+              <select
+                value={idProfesorNuevo}
+                onChange={(e) => setIdProfesorNuevo(e.target.value)}
+                className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500"
+              >
+                <option value="">Selecciona profesor disponible</option>
+                {profesoresDisponibles.map((profesor) => (
+                  <option key={profesor.idProfesor} value={profesor.idProfesor}>
+                    {profesor.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

@@ -25,6 +25,8 @@ export default function InscripcionForm({
   const [telefono, setTelefono] = useState("");
   const [tutor, setTutor] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const [modalidad, setModalidad] = useState("Presencial");
+  const [fechaInscripcion, setFechaInscripcion] = useState<string>("");
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
@@ -41,6 +43,25 @@ export default function InscripcionForm({
       classData?.id ||
       ""
     );
+  }, [classData]);
+
+  // Valor para el input tipo="date" (YYYY-MM-DD)
+  const toDateInputValue = (value: any) => {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  useEffect(() => {
+    // Default: día de la clase seleccionada en el calendario.
+    if (classData?.date) {
+      setFechaInscripcion(toDateInputValue(classData.date));
+      return;
+    }
+    setFechaInscripcion(toDateInputValue(new Date()));
   }, [classData]);
 
   useEffect(() => {
@@ -133,6 +154,8 @@ export default function InscripcionForm({
           idAlumno: alumnoFinal.idAlumno,
           nombreAlumno: alumnoFinal.nombreAlumno || alumnoFinal.nombre,
           grupoId: grupoId.trim(),
+          modalidad: modalidad,
+          fechaInscripcion: fechaInscripcion || undefined,
         });
       } catch (errorInscripcion: any) {
         console.error("Error al crear inscripción:", errorInscripcion);
@@ -219,6 +242,32 @@ export default function InscripcionForm({
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Modalidad de la clase
+              </label>
+              <select
+                value={modalidad}
+                onChange={(e) => setModalidad(e.target.value)}
+                className="w-full border p-2 rounded"
+              >
+                <option value="Presencial">Presencial</option>
+                <option value="Virtual">Virtual</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha de inicio (desde cuándo aparece)
+              </label>
+              <input
+                type="date"
+                value={fechaInscripcion}
+                onChange={(e) => setFechaInscripcion(e.target.value)}
+                className="w-full border p-2 rounded"
+              />
+            </div>
+
             {alumnoSeleccionado && (
               <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 p-3 rounded text-sm">
                 <b>Alumno seleccionado:</b> {alumnoYaElegidoTexto}
@@ -269,6 +318,32 @@ export default function InscripcionForm({
                 type="text"
                 value={nombreAlumno}
                 onChange={(e) => setNombreAlumno(e.target.value)}
+                className="w-full border p-2 rounded"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Modalidad de la clase
+              </label>
+              <select
+                value={modalidad}
+                onChange={(e) => setModalidad(e.target.value)}
+                className="w-full border p-2 rounded"
+              >
+                <option value="Presencial">Presencial</option>
+                <option value="Virtual">Virtual</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha de inicio (desde cuándo aparece)
+              </label>
+              <input
+                type="date"
+                value={fechaInscripcion}
+                onChange={(e) => setFechaInscripcion(e.target.value)}
                 className="w-full border p-2 rounded"
               />
             </div>

@@ -159,6 +159,8 @@ router.get("/", async (req, res) => {
         .map((a) => ({
           idAlumno: a.idAlumno || a.id_alumno || "",
           nombreAlumno: a.nombreAlumno || a.nombre || a.Alumno || "",
+          modalidad: a.modalidad || "Presencial",
+          inscripcionCreadaEn: a.fechaInscripcion || a.createdAt || a.updatedAt || null,
           reagendacion: null,
         }));
 
@@ -220,9 +222,9 @@ router.get("/", async (req, res) => {
         nombreCurso: grupo.nombreCurso,
         diaClase: grupo.diaClase || "",
         horaClase: grupo.horaClase || grupo["horaClase "] || "",
+        fechaCreacion: grupo.fechaCreacion || null,
         idProfesor: idProfesorGrupo,
         nombreProfesor: nombreProfesorCompleto,
-        modalidad: grupo.modalidad,
         capacidadMaxima: grupo.CapacidadMaxima,
         alumnosInscritos: alumnos.length,
         alumnos,
@@ -285,7 +287,6 @@ router.get("/", async (req, res) => {
           horaClase: horaClaseNueva,
           idProfesor: idProfesorNuevo,
           nombreProfesor: nombreProfesorNuevo,
-          modalidad: (grupoNuevo && grupoNuevo.modalidad) || "Presencial",
           capacidadMaxima: (grupoNuevo && grupoNuevo.CapacidadMaxima) || 8,
           alumnos: [],
           estatus: "Reagendado",
@@ -309,6 +310,7 @@ router.get("/", async (req, res) => {
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
+        modalidad: r.modalidad || "Presencial",
         reagendacion: {
           tipo: "destino",
           fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),

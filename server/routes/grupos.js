@@ -151,8 +151,8 @@ router.post("/crear-con-alumno", async (req, res) => {
       duracionClase = "2 horas",
       idProfesor,
       nombreProfesor,
-      modalidad,
       capacidadMaxima,
+      fechaCreacion,
       Estatus,
       estatus,
     } = grupo;
@@ -171,10 +171,6 @@ router.post("/crear-con-alumno", async (req, res) => {
 
     if (!nombreProfesor || !String(nombreProfesor).trim()) {
       return res.status(400).json({ error: "Falta nombreProfesor" });
-    }
-
-    if (!modalidad || !String(modalidad).trim()) {
-      return res.status(400).json({ error: "Falta modalidad" });
     }
 
     if (!capacidadMaxima || Number(capacidadMaxima) <= 0) {
@@ -237,6 +233,7 @@ router.post("/crear-con-alumno", async (req, res) => {
         idAlumno: idAlumnoBuscado,
         nombreAlumno:
           alumnoExistente.nombreAlumno || alumnoExistente.nombre || "",
+        modalidad: alumnoExistente.modalidad || "Presencial",
       };
     }
 
@@ -265,6 +262,7 @@ router.post("/crear-con-alumno", async (req, res) => {
       alumnoFinal = {
         idAlumno: alumnoGuardado.idAlumno,
         nombreAlumno: alumnoGuardado.nombreAlumno || alumnoGuardado.nombre || "",
+        modalidad: alumnoNuevo.modalidad || "Presencial",
       };
     }
 
@@ -285,10 +283,9 @@ router.post("/crear-con-alumno", async (req, res) => {
       duracionClase: duracionClase || "2 horas",
       idProfesor: idProfesor || "",
       nombreProfesor: String(nombreProfesor).trim(),
-      modalidad: String(modalidad).trim(),
       CapacidadMaxima: Number(capacidadMaxima),
       Estatus: Estatus || estatus || "Activo",
-      fechaCreacion: new Date(),
+      fechaCreacion: fechaCreacion ? new Date(fechaCreacion) : new Date(),
     });
 
     const grupoGuardado = await nuevoGrupo.save();
@@ -308,6 +305,7 @@ router.post("/crear-con-alumno", async (req, res) => {
       idAlumno: alumnoFinal.idAlumno,
       nombreAlumno: alumnoFinal.nombreAlumno,
       grupoId: grupoGuardado.IdGrupo,
+      modalidad: alumnoFinal.modalidad,
     });
 
     const inscripcionGuardada = await nuevaInscripcion.save();
@@ -337,8 +335,8 @@ router.post("/", async (req, res) => {
       duracionClase = "2 horas",
       idProfesor,
       nombreProfesor,
-      modalidad,
       capacidadMaxima,
+      fechaCreacion,
       Estatus,
       estatus,
     } = req.body;
@@ -366,10 +364,9 @@ router.post("/", async (req, res) => {
       duracionClase: duracionClase || "2 horas",
       idProfesor: idProfesor || "",
       nombreProfesor: String(nombreProfesor).trim(),
-      modalidad: String(modalidad).trim(),
       CapacidadMaxima: Number(capacidadMaxima),
       Estatus: Estatus || estatus || "Activo",
-      fechaCreacion: new Date(),
+      fechaCreacion: fechaCreacion ? new Date(fechaCreacion) : new Date(),
     });
 
     const guardado = await nuevoGrupo.save();

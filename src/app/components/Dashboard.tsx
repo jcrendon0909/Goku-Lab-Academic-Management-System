@@ -4,6 +4,9 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  Clock,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -39,6 +42,8 @@ const MONTHS = [
 interface StudentItem {
   idAlumno: string;
   nombreAlumno: string;
+  modalidad?: string;
+  inscripcionCreadaEn?: string | null;
   reagendacion?: {
     tipo: 'origen' | 'destino';
     texto: string;
@@ -385,16 +390,16 @@ export function Dashboard() {
 
             const eventos: CalendarClass[] = fechas
               .filter((fecha) => {
-                // Si el grupo tiene fechaCreacion, solo mostrar desde esa semana en adelante
+                // Si el grupo tiene fechaCreacion, solo mostrar desde ese día en adelante
                 if (item.fechaCreacion) {
                   const fechaCreacion = new Date(item.fechaCreacion);
-                  // Obtener el inicio de la semana de creación
-                  const diaCreacion = fechaCreacion.getDay();
-                  const inicioSemanCreacion = new Date(fechaCreacion);
-                  inicioSemanCreacion.setDate(fechaCreacion.getDate() - diaCreacion);
-                  
                   const fechaEvento = new Date(fecha);
-                  return fechaEvento >= inicioSemanCreacion;
+                  
+                  // Comparar solo fechas (sin hora)
+                  const soloFechaCreacion = new Date(fechaCreacion.getFullYear(), fechaCreacion.getMonth(), fechaCreacion.getDate());
+                  const soloFechaEvento = new Date(fechaEvento.getFullYear(), fechaEvento.getMonth(), fechaEvento.getDate());
+                  
+                  return soloFechaEvento >= soloFechaCreacion;
                 }
                 return true;
               })
@@ -402,7 +407,17 @@ export function Dashboard() {
               const fechaEvento = soloFecha(new Date(fecha));
               const horaInicio = item.horaClase || '';
 
-              const studentsFiltrados = (item.alumnos || []).map((alumno: any) => {
+              const studentsFiltrados = (item.alumnos || [])
+                .filter((alumno: any) => {
+                  const creada = alumno?.inscripcionCreadaEn
+                    ? new Date(alumno.inscripcionCreadaEn)
+                    : null;
+
+                  if (!creada || isNaN(creada.getTime())) return true;
+
+                  return fechaEvento.getTime() >= soloFecha(creada).getTime();
+                })
+                .map((alumno: any) => {
                 if (!alumno.reagendacion) {
                   return { ...alumno, reagendacion: null };
                 }
@@ -524,6 +539,7 @@ export function Dashboard() {
                   existente.students.push({
                     idAlumno: alumno.idAlumno,
                     nombreAlumno: alumno.nombreAlumno,
+                    modalidad: alumno.modalidad || 'Presencial',
                     reagendacion: {
                       tipo: 'destino',
                       texto: fechaOriginal
@@ -558,6 +574,7 @@ export function Dashboard() {
             return {
               idAlumno: alumno.idAlumno,
               nombreAlumno: alumno.nombreAlumno,
+              modalidad: alumno.modalidad || 'Presencial',
               reagendacion: {
                 tipo: 'destino' as const,
                 texto: fechaOriginal
@@ -678,9 +695,9 @@ export function Dashboard() {
     const days = getDaysInMonth(currentDate);
 
     return (
-      <div className="grid grid-cols-7 gap-5 w-full">
+      <div className="grid grid-cols-7 gap-4 w-full">
         {DAYS.map((day) => (
-          <div key={day} className="p-4 text-center text-sm font-bold text-cyan-600">
+          <div key={day} className="p-4 text-center text-sm font-bold text-cyan-700 bg-cyan-50 rounded-lg">
             {day}
           </div>
         ))}
@@ -696,15 +713,21 @@ export function Dashboard() {
           return (
             <div
               key={index}
-              className={`min-h-[190px] p-4 border-2 rounded-xl overflow-y-auto transition-all ${
-                !day ? 'bg-gray-50' : 'bg-white hover:bg-cyan-50 hover:border-cyan-300'
-              } ${isToday ? 'border-cyan-500 shadow-lg bg-cyan-50' : 'border-gray-200'}`}
+              className={`min-h-[220px] p-4 border-2 rounded-xl overflow-y-auto transition-all shadow-sm hover:shadow-md ${
+                !day 
+                  ? 'bg-gray-100 border-gray-200' 
+                  : isToday 
+                  ? 'bg-gradient-to-br from-cyan-100 to-blue-50 border-cyan-400 shadow-md ring-2 ring-cyan-300' 
+                  : 'bg-white border-gray-200 hover:border-cyan-300 hover:bg-cyan-50'
+              }`}
             >
               {day && (
                 <>
                   <div
-                    className={`text-lg font-bold mb-3 ${
-                      isToday ? 'text-cyan-600' : 'text-gray-700'
+                    className={`text-lg font-bold mb-3 px-2 py-1 rounded-lg inline-block ${
+                      isToday 
+                        ? 'bg-cyan-500 text-white' 
+                        : 'text-gray-700 bg-gray-100'
                     }`}
                   >
                     {day.getDate()}
@@ -715,7 +738,7 @@ export function Dashboard() {
                       <button
                         key={cls.id}
                         onClick={() => handleClassClick(cls)}
-                        className={`w-full text-left p-2 rounded-lg text-xs text-white hover:opacity-85 transition-opacity relative shadow-md ${
+                        className={`w-full text-left p-2 rounded-lg text-xs text-white hover:opacity-85 transition-all relative shadow-md hover:shadow-lg transform hover:scale-105 ${
                           cls.tipoReagendacionClase === 'origen'
                             ? 'ring-2 ring-yellow-400 border-2 border-yellow-300'
                             : cls.tipoReagendacionClase === 'destino'
@@ -723,9 +746,10 @@ export function Dashboard() {
                             : ''
                         }`}
                         style={{ backgroundColor: cls.color }}
+                        title={`${cls.title} - ${cls.startTime}`}
                       >
-                        <div className="font-semibold truncate pr-7 text-sm">{cls.title}</div>
-                        <div className="text-[11px] opacity-95">{cls.startTime}</div>
+                        <div className="font-semibold truncate pr-7 text-sm leading-tight">{cls.title}</div>
+                        <div className="text-[11px] opacity-95 font-medium">{cls.startTime}</div>
 
                         {cls.tipoReagendacionClase === 'origen' && (
                           <div className="absolute top-1.5 right-1.5 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
@@ -753,9 +777,16 @@ export function Dashboard() {
   const renderDayView = () => {
     const dayClasses = getClassesForDate(currentDate);
     const hours = Array.from({ length: 12 }, (_, i) => i + 8);
+    const dayName = DAYS[currentDate.getDay()];
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-1">
+        <div className="bg-gradient-to-r from-cyan-100 to-blue-100 p-4 rounded-lg mb-4 border border-cyan-200">
+          <p className="text-sm text-cyan-700 font-semibold">
+            {dayName}, {currentDate.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+
         {hours.map((hour) => {
           const hourString = `${hour.toString().padStart(2, '0')}:00`;
 
@@ -765,42 +796,51 @@ export function Dashboard() {
           });
 
           return (
-            <div key={hour} className="flex border-b border-gray-100 py-2 min-h-[60px]">
-              <div className="w-20 text-sm text-gray-500 font-medium">{hourString}</div>
+            <div key={hour} className="flex border-l-4 border-cyan-300 bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-24 px-4 py-4 bg-gradient-to-b from-cyan-50 to-blue-50 text-sm text-gray-700 font-bold border-r border-gray-200 flex items-center justify-center flex-shrink-0">
+                {hourString}
+              </div>
 
-              <div className="flex-1 space-y-2">
-                {hourClasses.map((cls) => (
-                  <button
-                    key={cls.id}
-                    onClick={() => handleClassClick(cls)}
-                    className={`w-full text-left p-3 rounded-lg text-white hover:opacity-90 transition-opacity relative min-h-[88px] ${
-                      cls.tipoReagendacionClase === 'origen'
-                        ? 'ring-2 ring-yellow-400 shadow-md'
-                        : cls.tipoReagendacionClase === 'destino'
-                        ? 'ring-2 ring-sky-300 shadow-md'
-                        : ''
-                    }`}
-                    style={{ backgroundColor: cls.color }}
-                  >
-                    <div className="font-medium pr-8">{cls.title}</div>
-                    <div className="text-sm opacity-90">
-                      {cls.startTime} - {cls.endTime}
-                    </div>
-                    <div className="text-xs opacity-90">{cls.teacher.name}</div>
-
-                    {cls.tipoReagendacionClase === 'origen' && (
-                      <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                        RP
+              <div className="flex-1 p-4 space-y-3">
+                {hourClasses.length > 0 ? (
+                  hourClasses.map((cls) => (
+                    <button
+                      key={cls.id}
+                      onClick={() => handleClassClick(cls)}
+                      className={`w-full text-left p-4 rounded-lg text-white hover:shadow-lg transition-all relative min-h-[100px] transform hover:scale-102 ${
+                        cls.tipoReagendacionClase === 'origen'
+                          ? 'ring-2 ring-yellow-400 shadow-md'
+                          : cls.tipoReagendacionClase === 'destino'
+                          ? 'ring-2 ring-sky-300 shadow-md'
+                          : 'shadow-md'
+                      }`}
+                      style={{ backgroundColor: cls.color }}
+                    >
+                      <div className="font-bold text-lg pr-8">{cls.title}</div>
+                      <div className="text-sm opacity-90 font-semibold">
+                        {cls.startTime} - {cls.endTime}
                       </div>
-                    )}
-
-                    {cls.tipoReagendacionClase === 'destino' && (
-                      <div className="absolute top-2 right-2 bg-sky-300 text-sky-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                        RP
+                      <div className="text-xs opacity-85 mt-1">👨‍🏫 {cls.teacher.name}</div>
+                      <div className="text-xs opacity-80 mt-2">
+                        👥 {cls.students.length} {cls.students.length === 1 ? 'alumno' : 'alumnos'}
                       </div>
-                    )}
-                  </button>
-                ))}
+
+                      {cls.tipoReagendacionClase === 'origen' && (
+                        <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                          RP Origen
+                        </div>
+                      )}
+
+                      {cls.tipoReagendacionClase === 'destino' && (
+                        <div className="absolute top-3 right-3 bg-sky-300 text-sky-900 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                          RP Destino
+                        </div>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-gray-400 text-sm italic py-2">Sin clases en este horario</div>
+                )}
               </div>
             </div>
           );

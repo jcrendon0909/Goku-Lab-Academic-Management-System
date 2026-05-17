@@ -183,6 +183,17 @@ export function ClassDetailsDialog({
                             {student.nombreAlumno || 'Sin nombre'}
                           </p>
 
+                          <Badge 
+                            variant="outline" 
+                            className={`rounded-lg ${
+                              student.modalidad === 'Virtual' 
+                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {student.modalidad || 'Presencial'}
+                          </Badge>
+
                           {student.reagendacion?.tipo === 'origen' && (
                             <Badge className="bg-yellow-400 text-yellow-900 rounded-lg">
                               Reagendada (origen)

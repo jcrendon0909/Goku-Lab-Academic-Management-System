@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { idAlumno, nombreAlumno, grupoId } = req.body;
+    const { idAlumno, nombreAlumno, grupoId, modalidad, fechaInscripcion } = req.body;
 
     // Validar inputs
     if (!idAlumno || !String(idAlumno).trim()) {
@@ -33,6 +33,19 @@ router.post("/", async (req, res) => {
     }
 
     const grupoIdTrimmed = String(grupoId).trim();
+
+    // Convierte la fecha efectiva a Date válido (si viene mal o vacío, se deja que use el default del schema).
+    // Si viene en formato YYYY-MM-DD, lo interpretamos como "fecha local" (sin desplazamiento por zona horaria).
+    let fechaInscripcionFinal = undefined;
+    if (fechaInscripcion) {
+      const str = String(fechaInscripcion);
+      const matchFecha = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const d = matchFecha
+        ? new Date(Number(matchFecha[1]), Number(matchFecha[2]) - 1, Number(matchFecha[3]))
+        : new Date(fechaInscripcion);
+
+      if (!isNaN(d.getTime())) fechaInscripcionFinal = d;
+    }
 
     // Verificar si el alumno ya está inscrito en este grupo
     const inscripcionExistente = await Inscripcion.findOne({
@@ -97,6 +110,8 @@ router.post("/", async (req, res) => {
       idAlumno: String(idAlumno).trim(),
       nombreAlumno: String(nombreAlumno).trim(),
       grupoId: grupoIdTrimmed,
+      modalidad: modalidad || "Presencial",
+      fechaInscripcion: fechaInscripcionFinal,
     });
 
     const guardada = await nuevaInscripcion.save();

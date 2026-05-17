@@ -97,6 +97,8 @@ export async function crearInscripcion(data: {
   idAlumno: string;
   nombreAlumno: string;
   grupoId: string;
+  modalidad?: string;
+  fechaInscripcion?: string;
 }) {
   const res = await fetch(`${API_URL}/inscripciones`, {
     method: "POST",
@@ -137,14 +139,15 @@ export async function crearGrupoConAlumno(data: {
     horaClase: string;
     idProfesor?: string;
     nombreProfesor: string;
-    modalidad: string;
     capacidadMaxima: number;
+    fechaCreacion?: string;
     Estatus?: string;
   };
   alumnoExistente?: {
     idAlumno: string;
     nombreAlumno?: string;
     nombre?: string;
+    modalidad?: string;
   };
   alumnoNuevo?: {
     nombreAlumno: string;
@@ -152,6 +155,7 @@ export async function crearGrupoConAlumno(data: {
     tutor?: string;
     observaciones?: string;
     estatus?: string;
+    modalidad?: string;
   };
 }) {
   const res = await fetch(`${API_URL}/grupos/crear-con-alumno`, {

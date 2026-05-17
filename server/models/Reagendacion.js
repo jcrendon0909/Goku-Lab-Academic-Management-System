@@ -21,6 +21,7 @@ const reagendacionSchema = new mongoose.Schema(
     fechaHoraNueva: { type: String, default: "" },
 
     duracion: { type: String, default: "2 horas" },
+    modalidad: { type: String, default: "Presencial" },
 
     motivo: { type: String, default: "Reagendado desde sistema" },
     FechaMovimiento: { type: String, default: () => new Date().toISOString() },
