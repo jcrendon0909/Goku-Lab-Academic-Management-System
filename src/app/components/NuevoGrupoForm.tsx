@@ -4,10 +4,8 @@ import {
   getAlumnos,
   getCursos,
   getProfesores,
-  getGrupos,
 } from "../../services/api";
 import { toast } from "sonner";
-import { AlertCircle, CheckCircle, Clock } from "lucide-react";
 
 interface NuevoGrupoFormProps {
   onClose: () => void;
@@ -34,7 +32,6 @@ export default function NuevoGrupoForm({
 }: NuevoGrupoFormProps) {
   const [cursos, setCursos] = useState<any[]>([]);
   const [profesores, setProfesores] = useState<any[]>([]);
-  const [grupos, setGrupos] = useState<any[]>([]);
   const [alumnosEncontrados, setAlumnosEncontrados] = useState<any[]>([]);
 
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
@@ -61,6 +58,7 @@ export default function NuevoGrupoForm({
     const d = String(hoy.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   });
+  const [comentarioGrupo, setComentarioGrupo] = useState("");
   const [modalidadAlumno, setModalidadAlumno] = useState<"Presencial" | "Virtual">(
     "Presencial"
   );
@@ -79,105 +77,14 @@ export default function NuevoGrupoForm({
   const [tutorAlumnoNuevo, setTutorAlumnoNuevo] = useState("");
   const [observacionesAlumnoNuevo, setObservacionesAlumnoNuevo] = useState("");
 
-  const [conflictoHorario, setConflictoHorario] = useState<any>(null);
-  const [clasesDelProfesor, setClasesDelProfesor] = useState<any[]>([]);
-
-  // Funciones auxiliares para validación
-  const horaAMinutos = (hora: string): number => {
-    const [h, m] = String(hora).split(":").map(Number);
-    return h * 60 + (m || 0);
-  };
-
-  const duracionAMinutos = (duracion: string): number => {
-    const dur = String(duracion || "2 horas").toLowerCase().trim();
-    
-    if (dur.includes(":")) {
-      const [h, m] = dur.split(":").map(Number);
-      return h * 60 + (m || 0);
-    }
-    
-    if (dur.includes("1") && dur.includes("3")) return 90;
-    if (dur.includes("2") && dur.includes("3")) return 150;
-    if (dur.includes("3") && dur.includes("3")) return 210;
-    if (dur.includes("3")) return 180;
-    if (dur.includes("2")) return 120;
-    if (dur.includes("1")) return 60;
-    
-    return 120;
-  };
-
-  const minutoAHora = (minutos: number): string => {
-    const h = Math.floor(minutos / 60);
-    const m = minutos % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  };
-
-  const validarConflictosHorario = (
-    profesorId: string,
-    dia: string,
-    horaI: string,
-    duracion: string
-  ) => {
-    if (!profesorId || !dia || !horaI) {
-      setConflictoHorario(null);
-      setClasesDelProfesor([]);
-      return;
-    }
-
-    const horaInicio = horaAMinutos(horaI);
-    const duracionMin = duracionAMinutos(duracion);
-    const horaFin = horaInicio + duracionMin;
-
-    // Filtrar grupos del profesor en ese día
-    const clasesEnDia = grupos.filter((grupo: any) => {
-      const idProfesorNorm = normalizar(String(grupo.idProfesor || grupo.IdProfesor || "").trim());
-      const profesorIdNorm = normalizar(profesorId);
-      const diaNorm = normalizar(grupo.diaClase || "");
-      
-      return (
-        idProfesorNorm === profesorIdNorm &&
-        diaNorm === normalizar(dia) &&
-        normalizar(grupo.Estatus || grupo.estatus || "Activo") === "ACTIVO"
-      );
-    });
-
-    setClasesDelProfesor(clasesEnDia);
-
-    // Verificar empalmes
-    let conflicto = null;
-    for (const clase of clasesEnDia) {
-      const horaExistenteInicio = horaAMinutos(clase.horaClase);
-      const duracionExistente = duracionAMinutos(clase.duracionClase || "2 horas");
-      const horaExistenteFin = horaExistenteInicio + duracionExistente;
-
-      // Hay empalme si: inicio < fin_existente Y fin > inicio_existente
-      if (horaInicio < horaExistenteFin && horaFin > horaExistenteInicio) {
-        conflicto = {
-          nombreCurso: clase.nombreCurso,
-          horaInicio: minutoAHora(horaExistenteInicio),
-          horaFin: minutoAHora(horaExistenteFin),
-          diaClase: clase.diaClase,
-        };
-        break;
-      }
-    }
-
-    setConflictoHorario(conflicto);
-  };
-
-  useEffect(() => {
-    validarConflictosHorario(idProfesor, diaClase, horaClase, duracionClase);
-  }, [idProfesor, diaClase, horaClase, duracionClase, grupos]);
-
   useEffect(() => {
     const cargarCatalogos = async () => {
       try {
         setCargandoCatalogos(true);
 
-        const [cursosResp, profesoresResp, gruposResp] = await Promise.all([
+        const [cursosResp, profesoresResp] = await Promise.all([
           getCursos(),
           getProfesores(),
-          getGrupos(),
         ]);
 
         const cursosActivos = (cursosResp || [])
@@ -210,12 +117,10 @@ export default function NuevoGrupoForm({
 
         setCursos(cursosActivos);
         setProfesores(profesoresActivos);
-        setGrupos(gruposResp || []);
       } catch (error) {
-        console.error("Error al cargar cursos/profesores/grupos:", error);
+        console.error("Error al cargar cursos/profesores:", error);
         setCursos([]);
         setProfesores([]);
-        setGrupos([]);
       } finally {
         setCargandoCatalogos(false);
       }
@@ -265,7 +170,6 @@ export default function NuevoGrupoForm({
     Number(capacidadMaxima) > 0 &&
     Number(montoMensualidad) > 0 &&
     Boolean(fechaPago) &&
-    !conflictoHorario &&
     (modoAlumno === "existente"
       ? Boolean(alumnoSeleccionado)
       : Boolean(nombreAlumnoNuevo.trim()));
@@ -273,16 +177,6 @@ export default function NuevoGrupoForm({
   const handleGuardar = async () => {
     try {
       setGuardando(true);
-
-      // Validación: que no haya conflicto de horario
-      if (conflictoHorario) {
-        toast.error("No se puede crear el grupo debido a un conflicto de horario", {
-          description: `El profesor ya tiene una clase a esa hora`,
-          duration: 5000,
-        });
-        setGuardando(false);
-        return;
-      }
 
       if (!cursoSeleccionado?.nombreCurso) {
         toast.error("Selecciona un curso");
@@ -337,6 +231,7 @@ export default function NuevoGrupoForm({
           duracionClase,
           idProfesor: profesorSeleccionado.idProfesor || "",
           nombreProfesor: profesorSeleccionado.nombre,
+          comentario: comentarioGrupo,
           capacidadMaxima: Number(capacidadMaxima),
           Estatus: "Activo",
           fechaCreacion,
@@ -393,16 +288,9 @@ export default function NuevoGrupoForm({
     } catch (error: any) {
       console.error("Error al crear grupo con alumno:", error);
       
-      // Manejo de errores específicos del servidor
       let mensajeError = error.message || "Error al crear el grupo";
-      
-      // Si el error contiene información de conflicto del servidor
-      if (error.message && error.message.includes("empalme")) {
-        toast.error("⚠️ Conflicto de horario detectado", {
-          description: error.message,
-          duration: 6000,
-        });
-      } else if (error.message && error.message.includes("Ya existe")) {
+
+      if (error.message && error.message.includes("Ya existe")) {
         toast.error("El grupo ya existe", {
           description: error.message,
           duration: 5000,
@@ -561,6 +449,19 @@ export default function NuevoGrupoForm({
                 className="w-full border p-2 rounded"
               />
             </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nota del grupo
+            </label>
+            <textarea
+              value={comentarioGrupo}
+              onChange={(e) => setComentarioGrupo(e.target.value)}
+              rows={3}
+              placeholder="Ej. profesor de apoyo, indicaciones especiales o recordatorios de la clase"
+              className="w-full border p-2 rounded bg-white"
+            />
           </div>
         </div>
 
@@ -780,92 +681,6 @@ export default function NuevoGrupoForm({
           </div>
         </div>
 
-        {/* Sección de validación de conflictos */}
-        {idProfesor && diaClase && horaClase && (
-          <div className="mb-4 space-y-3">
-            {conflictoHorario && (
-              <div className="bg-red-50 border-2 border-red-400 text-red-900 p-4 rounded-lg shadow-sm">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5 text-red-600" />
-                  <div className="flex-1">
-                    <h4 className="font-bold text-lg mb-2">⚠️ Conflicto de horario detectado</h4>
-                    <p className="text-sm mb-3">
-                      El profesor <b>{profesorSeleccionado?.nombre}</b> ya tiene una clase asignada en este horario y no puede darse otra clase que se empalme:
-                    </p>
-                    <div className="bg-red-100 border border-red-300 p-3 rounded text-sm mb-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-xs text-gray-600 font-semibold">CURSO EXISTENTE</p>
-                          <p className="font-bold">{conflictoHorario.nombreCurso}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 font-semibold">DÍA</p>
-                          <p className="font-bold">{conflictoHorario.diaClase}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-xs text-gray-600 font-semibold">HORARIO OCUPADO</p>
-                          <p className="font-bold text-lg">{conflictoHorario.horaInicio} - {conflictoHorario.horaFin}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-sm font-semibold bg-red-100 p-2 rounded">
-                      ❌ No se puede crear este grupo. Por favor, selecciona otro horario para el profesor o elige a otro profesor.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!conflictoHorario && clasesDelProfesor.length > 0 && (
-              <div className="bg-amber-50 border-2 border-amber-300 text-amber-900 p-4 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Clock className="w-6 h-6 flex-shrink-0 mt-0.5 text-amber-600" />
-                  <div className="flex-1">
-                    <h4 className="font-bold mb-2">📅 Otras clases del profesor en {diaClase}</h4>
-                    <p className="text-sm mb-3">El profesor tiene las siguientes clases este día (sin conflictos):</p>
-                    <div className="space-y-2">
-                      {clasesDelProfesor.map((clase: any, idx: number) => {
-                        const horaIni = horaAMinutos(clase.horaClase);
-                        const durMin = duracionAMinutos(clase.duracionClase || "2 horas");
-                        const horaFi = horaIni + durMin;
-                        return (
-                          <div key={idx} className="bg-white border border-amber-200 p-2 rounded text-sm">
-                            <p><b>{clase.nombreCurso}</b></p>
-                            <p className="text-amber-700">🕐 {minutoAHora(horaIni)} - {minutoAHora(horaFi)}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!conflictoHorario && clasesDelProfesor.length === 0 && (
-              <div className="bg-emerald-50 border-2 border-emerald-400 text-emerald-900 p-4 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-6 h-6 flex-shrink-0 mt-0.5 text-emerald-600" />
-                  <div>
-                    <h4 className="font-bold mb-1">✅ Horario disponible</h4>
-                    <p className="text-sm">
-                      El profesor <b>{profesorSeleccionado?.nombre}</b> no tiene clases el <b>{diaClase}</b> a las <b>{horaClase}</b>. El horario está disponible.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="bg-blue-50 border border-blue-300 text-blue-900 p-3 rounded mb-4 text-sm">
-          <p className="font-semibold mb-1">🔍 Validación automática</p>
-          <ul className="text-xs space-y-1 list-disc list-inside">
-            <li>El sistema valida si ya existe otro grupo con el mismo curso, profesor, día y hora.</li>
-            <li>También verifica que el profesor no tenga clases que se empalmen en ese horario.</li>
-            <li>Si hay conflictos, el grupo <b>no podrá ser creado</b>.</li>
-          </ul>
-        </div>
-
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -880,22 +695,17 @@ export default function NuevoGrupoForm({
             onClick={handleGuardar}
             disabled={guardando || !puedeGuardarGrupo}
             className={`px-4 py-2 rounded-lg text-white font-medium transition-all ${
-              conflictoHorario
-                ? "bg-red-500 cursor-not-allowed opacity-60"
-                : guardando || !puedeGuardarGrupo
+              guardando || !puedeGuardarGrupo
                 ? "bg-emerald-300 cursor-not-allowed"
                 : "bg-emerald-500 hover:bg-emerald-600 active:scale-95"
             }`}
             title={
-              conflictoHorario
-                ? "No se puede crear: existe un conflicto de horario"
-                : !puedeGuardarGrupo
+              !puedeGuardarGrupo
                 ? "Completa todos los campos requeridos"
                 : "Crear grupo e inscribir al alumno"
             }
           >
-            {conflictoHorario && "⚠️ Conflicto detectado"}
-            {!conflictoHorario && (guardando ? "⏳ Guardando..." : "✓ Crear grupo e inscribir")}
+            {guardando ? "Guardando..." : "Crear grupo e inscribir"}
           </button>
         </div>
       </div>

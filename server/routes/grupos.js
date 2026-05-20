@@ -11,124 +11,6 @@ import {
 
 const router = express.Router();
 
-const normalizar = (valor) => String(valor || "").trim().toUpperCase();
-
-const horaAMinutos = (hora) => {
-  if (!hora) return null;
-
-  const texto = String(hora).trim().toUpperCase();
-  const match = texto.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/);
-
-  if (!match) return null;
-
-  let h = Number(match[1]);
-  const m = Number(match[2]);
-  const periodo = match[3];
-
-  if (periodo === "PM" && h < 12) h += 12;
-  if (periodo === "AM" && h === 12) h = 0;
-
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-
-  return h * 60 + m;
-};
-
-const duracionAMinutos = (duracion) => {
-  const dur = String(duracion || "2 horas").toLowerCase().trim();
-
-  if (dur.includes(":")) {
-    const [h, m] = dur.split(":").map(Number);
-    return h * 60 + (m || 0);
-  }
-
-  if (dur.includes("1") && dur.includes("30")) return 90;
-  if (dur.includes("2") && dur.includes("30")) return 150;
-  if (dur.includes("3") && dur.includes("30")) return 210;
-  if (dur.includes("3")) return 180;
-  if (dur.includes("2")) return 120;
-  if (dur.includes("1")) return 60;
-
-  return 120;
-};
-
-const minutoAHora = (minutos) => {
-  if (minutos === null || Number.isNaN(minutos)) {
-    return "Horario no disponible";
-  }
-
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-};
-
-async function validarEmpalmeProfesor({
-  idProfesor,
-  nombreProfesor,
-  diaClase,
-  horaClase,
-  duracionClase,
-}) {
-  if (!idProfesor || !diaClase || !horaClase) return null;
-
-  const inicioNuevo = horaAMinutos(horaClase);
-
-  if (inicioNuevo === null) return null;
-
-  const finNuevo = inicioNuevo + duracionAMinutos(duracionClase);
-
-  const gruposDelDia = await Grupo.find({
-    diaClase: { $regex: `^${String(diaClase).trim()}$`, $options: "i" },
-    Estatus: "Activo",
-  }).lean();
-
-  const clasesDelProfesor = gruposDelDia.filter((clase) => {
-    const idProfesorClase = normalizar(
-      clase.idProfesor || clase.IdProfesor || clase.profesorId || ""
-    );
-
-    return idProfesorClase === normalizar(idProfesor);
-  });
-
-  for (const clase of clasesDelProfesor) {
-    const inicioExistente = horaAMinutos(
-      clase.horaClase ||
-        clase["horaClase "] ||
-        clase.HoraClase ||
-        clase.hora ||
-        clase.Hora ||
-        ""
-    );
-    if (inicioExistente === null) continue;
-
-    const finExistente =
-      inicioExistente + duracionAMinutos(clase.duracionClase || "2 horas");
-
-    const hayEmpalme =
-      inicioNuevo < finExistente && finNuevo > inicioExistente;
-
-    if (hayEmpalme) {
-      return {
-        error: `El profesor ${nombreProfesor} ya tiene una clase asignada de ${minutoAHora(
-          inicioExistente
-        )} a ${minutoAHora(
-          finExistente
-        )}. No se puede crear otra clase que se empalme.`,
-        conflicto: {
-          cursoExistente: clase.nombreCurso || "Curso sin nombre",
-          diaClase: clase.diaClase,
-          horaExistenteInicio: minutoAHora(inicioExistente),
-          horaExistenteFin: minutoAHora(finExistente),
-          horaNuevaInicio: minutoAHora(inicioNuevo),
-          horaNuevaFin: minutoAHora(finNuevo),
-        },
-      };
-    }
-  }
-
-  return null;
-}
-
 router.get("/", async (req, res) => {
   try {
     const grupos = await Grupo.find().lean();
@@ -155,6 +37,8 @@ router.post("/crear-con-alumno", async (req, res) => {
       duracionClase = "2 horas",
       idProfesor,
       nombreProfesor,
+      comentario,
+      comentarioGrupo,
       capacidadMaxima,
       fechaCreacion,
       Estatus,
@@ -214,18 +98,6 @@ router.post("/crear-con-alumno", async (req, res) => {
         error: "Ya existe un grupo con ese curso, profesor, día y hora",
         grupoExistente,
       });
-    }
-
-    const conflicto = await validarEmpalmeProfesor({
-      idProfesor,
-      nombreProfesor,
-      diaClase,
-      horaClase,
-      duracionClase,
-    });
-
-    if (conflicto) {
-      return res.status(409).json(conflicto);
     }
 
     let alumnoFinal = null;
@@ -294,6 +166,7 @@ router.post("/crear-con-alumno", async (req, res) => {
       duracionClase: duracionClase || "2 horas",
       idProfesor: idProfesor || "",
       nombreProfesor: String(nombreProfesor).trim(),
+      comentario: String(comentario ?? comentarioGrupo ?? "").trim(),
       CapacidadMaxima: Number(capacidadMaxima),
       Estatus: Estatus || estatus || "Activo",
       fechaCreacion: fechaCreacion ? new Date(fechaCreacion) : new Date(),
@@ -359,23 +232,13 @@ router.post("/", async (req, res) => {
       duracionClase = "2 horas",
       idProfesor,
       nombreProfesor,
+      comentario,
+      comentarioGrupo,
       capacidadMaxima,
       fechaCreacion,
       Estatus,
       estatus,
     } = req.body;
-
-    const conflicto = await validarEmpalmeProfesor({
-      idProfesor,
-      nombreProfesor,
-      diaClase,
-      horaClase,
-      duracionClase,
-    });
-
-    if (conflicto) {
-      return res.status(409).json(conflicto);
-    }
 
     const nuevoIdGrupo = await generarId("grupo");
 
@@ -388,6 +251,7 @@ router.post("/", async (req, res) => {
       duracionClase: duracionClase || "2 horas",
       idProfesor: idProfesor || "",
       nombreProfesor: String(nombreProfesor).trim(),
+      comentario: String(comentario ?? comentarioGrupo ?? "").trim(),
       CapacidadMaxima: Number(capacidadMaxima),
       Estatus: Estatus || estatus || "Activo",
       fechaCreacion: fechaCreacion ? new Date(fechaCreacion) : new Date(),
@@ -400,6 +264,40 @@ router.post("/", async (req, res) => {
     console.error("ERROR POST GRUPOS:", error);
     res.status(500).json({
       error: "Error al crear grupo",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:grupoId/comentario", async (req, res) => {
+  try {
+    const { grupoId } = req.params;
+    const comentario = String(
+      req.body?.comentario ?? req.body?.comentarioGrupo ?? ""
+    ).trim();
+
+    const grupo = await Grupo.findOneAndUpdate(
+      {
+        $or: [{ IdGrupo: grupoId }, { idGrupo: grupoId }, { GrupoId: grupoId }],
+      },
+      { $set: { comentario } },
+      { new: true }
+    ).lean();
+
+    if (!grupo) {
+      return res.status(404).json({
+        error: "No se encontrÃ³ el grupo",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      grupo,
+    });
+  } catch (error) {
+    console.error("ERROR PATCH COMENTARIO GRUPO:", error);
+    res.status(500).json({
+      error: "Error al actualizar comentario del grupo",
       detalle: error.message,
     });
   }

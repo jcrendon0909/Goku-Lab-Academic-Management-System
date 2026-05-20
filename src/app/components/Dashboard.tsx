@@ -3,15 +3,15 @@ import {
     ChevronLeft,
     ChevronRight,
     Calendar as CalendarIcon,
-    RefreshCw,
-    AlertCircle,
-    CheckCircle,
-    Clock,
+    Plus,
+    UserRound,
+    Users,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import {
+    actualizarComentarioGrupo,
     bajaAlumnoDeGrupo,
     eliminarGrupo,
     eliminarReagendacion,
@@ -66,6 +66,7 @@ interface CalendarClass {
   fechaEspecifica?: string;
   idGrupo?: string;
   idProfesor?: string;
+  comentarioGrupo?: string;
 }
 
 function normalizar(valor: string) {
@@ -301,6 +302,41 @@ export function Dashboard() {
         }
     };
 
+    const handleGuardarComentarioGrupo = async (
+        classData: CalendarClass,
+        comentario: string
+    ) => {
+        try {
+            const grupoId = classData?.idGrupo;
+            if (!grupoId) {
+                toast.error('No se encontró el grupo para guardar la nota');
+                return;
+            }
+
+            const respuesta = await actualizarComentarioGrupo(grupoId, comentario);
+            const comentarioGuardado = respuesta?.grupo?.comentario ?? comentario;
+
+            setClasses((prev) =>
+                prev.map((cls) =>
+                    normalizar(cls.idGrupo || '') === normalizar(grupoId)
+                        ? { ...cls, comentarioGrupo: comentarioGuardado }
+                        : cls
+                )
+            );
+
+            setSelectedClass((prev) =>
+                prev && normalizar(prev.idGrupo || '') === normalizar(grupoId)
+                    ? { ...prev, comentarioGrupo: comentarioGuardado }
+                    : prev
+            );
+
+            toast.success('Nota del grupo guardada');
+        } catch (error: any) {
+            console.error('Error al guardar nota del grupo:', error);
+            toast.error(error.message || 'Error al guardar nota del grupo');
+        }
+    };
+
     useEffect(() => {
         const fetchCalendario = async () => {
             try {
@@ -388,6 +424,7 @@ export function Dashboard() {
                                 esReagendacion: false,
                                 idGrupo: item.idGrupo || '',
                                 idProfesor: item.idProfesor || '',
+                                comentarioGrupo: item.comentarioGrupo || item.comentario || '',
                                 tipoReagendacionClase: tieneOrigen ? 'origen' : null,
                             };
                         });
@@ -422,14 +459,15 @@ export function Dashboard() {
 
                         if (existente) {
                             (r.alumnos || []).forEach((alumno: any) => {
-                                const fechaOriginal = alumno.reagendacion?.fechaHoraOriginal ? parseFechaFlexible(alumno.reagendacion.fechaHoraOriginal) : null;
-                                const yaExiste = existente.students.some((s) => normalizar(s.idAlumno) === normalizar(alumno.idAlumno) && s.reagendacion?.tipo === 'destino');
+                                const fechaOriginal = alumno.reagendacion?.fechaHoraOriginal
+                                    ? parseFechaFlexible(alumno.reagendacion.fechaHoraOriginal)
+                                    : null;
 
-                const yaExiste = existente.students.some(
-                  (s) =>
-                    normalizar(s.idAlumno) === normalizar(alumno.idAlumno) &&
-                    s.reagendacion?.tipo === 'destino'
-                );
+                                const yaExiste = existente.students.some(
+                                    (s) =>
+                                        normalizar(s.idAlumno) === normalizar(alumno.idAlumno) &&
+                                        s.reagendacion?.tipo === 'destino'
+                                );
 
                 if (!yaExiste) {
                   existente.students.push({
@@ -521,6 +559,7 @@ export function Dashboard() {
             esReagendacion: true,
             idGrupo: r.idGrupo || '',
             idProfesor: r.idProfesor || '',
+            comentarioGrupo: r.comentarioGrupo || r.comentario || '',
             reagendacionId: r.reagendacionId || r.reagendacionIds?.[0] || '',
             reagendacionIds: r.reagendacionIds || [],
             tipoReagendacionClase: 'destino',
@@ -663,8 +702,14 @@ export function Dashboard() {
                                         >
                                             <div className="font-bold text-lg pr-8">{cls.title}</div>
                                             <div className="text-sm opacity-90 font-semibold">{cls.startTime} - {cls.endTime}</div>
-                                            <div className="text-xs opacity-85 mt-1">👨‍🏫 {cls.teacher.name}</div>
-                                            <div className="text-xs opacity-80 mt-2">👥 {cls.students.length} {cls.students.length === 1 ? 'alumno' : 'alumnos'}</div>
+                                            <div className="mt-2 flex items-center gap-1.5 text-xs opacity-85">
+                                                <UserRound className="h-3.5 w-3.5" />
+                                                {cls.teacher.name}
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-1.5 text-xs opacity-80">
+                                                <Users className="h-3.5 w-3.5" />
+                                                {cls.students.length} {cls.students.length === 1 ? 'alumno' : 'alumnos'}
+                                            </div>
                                             {cls.tipoReagendacionClase === 'origen' && <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-3 py-1 rounded-full shadow-sm">RP Origen</div>}
                                             {cls.tipoReagendacionClase === 'destino' && <div className="absolute top-3 right-3 bg-sky-300 text-sky-900 text-xs font-bold px-3 py-1 rounded-full shadow-sm">RP Destino</div>}
                                         </button>
@@ -688,45 +733,44 @@ export function Dashboard() {
 
             <Navbar />
 
-            <header className="relative overflow-hidden bg-white px-10 py-4 shadow-lg border-b-4 border-[#009FE3]">
-                <div className="absolute inset-0 bg-[linear-gradient(120deg,#e9f8ff_0%,#d2f0ff_35%,#aee1fb_70%,#65bfe9_100%)]"></div>
+            <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
+                <div className="absolute right-10 top-0 h-24 w-24 rounded-full border-[18px] border-white/40" />
 
-                <div className="relative w-full max-w-none mx-auto">
-                    <div className="flex items-center justify-between gap-12 px-16">
-                        <div className="flex items-center gap-8 ml-20">
-                            <img
-                                src="/logo-goku-lab.png"
-                                alt="Goku Lab"
-                                className="h-45 w-45 object-contain drop-shadow-lg"
-                            />
+                <div className="relative mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
+                    <div className="flex min-w-0 items-center gap-4">
+                        <img
+                            src="/logo-goku-lab.png"
+                            alt="Goku Lab"
+                            className="h-20 w-20 flex-shrink-0 object-contain drop-shadow-md"
+                        />
 
-              <div>
-                <h1 className="text-4xl font-black tracking-tight text-[#0078D7] leading-none">
-                  Goku Lab
-                </h1>
+                        <div className="min-w-0">
+                            <h1 className="text-3xl font-black leading-none text-[#0078D7]">
+                                Goku Lab
+                            </h1>
 
-                <p className="font-black text-lg leading-tight mt-1">
-                  <span className="text-[#FFC400]">Juega, </span>
-                  <span className="text-[#EF2D2D]">Aprende </span>
-                  <span className="text-[#0078D7]">y </span>
-                  <span className="text-[#2FB34A]">Emprende</span>
-                </p>
+                            <p className="mt-1 text-base font-black leading-tight">
+                                <span className="text-[#FFC400]">Juega, </span>
+                                <span className="text-[#EF2D2D]">Aprende </span>
+                                <span className="text-[#0078D7]">y </span>
+                                <span className="text-[#2FB34A]">Emprende</span>
+                            </p>
 
-                <p className="text-base font-black text-[#003B73] mt-1">
-                  Sistema de Gestión Académica
-                </p>
-              </div>
-            </div>
+                            <p className="mt-1 text-sm font-black text-[#003B73]">
+                                Sistema de Gestión Académica
+                            </p>
+                        </div>
+                    </div>
 
-            <Button
-              onClick={() => setShowNuevoGrupo(true)}
-              className="mr-8 bg-[#0047B8] hover:bg-[#003A96] text-white rounded-lg text-base font-bold py-3 px-6 shadow-md transition-colors"
-            >
-              Crear Nuevo Grupo
-            </Button>
-          </div>
-        </div>
-      </header>
+                    <Button
+                        onClick={() => setShowNuevoGrupo(true)}
+                        className="h-11 rounded-lg bg-[#0047B8] px-5 text-sm font-black text-white shadow-md shadow-blue-900/15 transition-colors hover:bg-[#003A96]"
+                    >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Crear nuevo grupo
+                    </Button>
+                </div>
+            </header>
 
             <main className="w-full max-w-none mx-auto px-10 py-8">
                 <Card className="w-full p-8 mb-6 rounded-3xl shadow-xl border-2 border-cyan-100 bg-gradient-to-b from-white to-cyan-50">
@@ -781,47 +825,6 @@ export function Dashboard() {
                     {view === 'month' ? renderMonthView() : renderDayView()}
                 </Card>
 
-                <Card className="p-8 rounded-3xl shadow-xl border-2 border-cyan-100 bg-white">
-                    <div className="mb-6">
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">📋 Leyenda de Colores</h3>
-                        <p className="text-sm text-gray-600">Identifica fácilmente cada tipo de curso por su color asignado</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-cyan-50 transition-colors">
-                            <div className="w-6 h-6 rounded-lg bg-cyan-500 shadow-md flex-shrink-0"></div>
-                            <span className="text-sm font-medium text-gray-800">Programación</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-purple-50 transition-colors">
-                            <div className="w-6 h-6 rounded-lg bg-purple-500 shadow-md flex-shrink-0"></div>
-                            <span className="text-sm font-medium text-gray-800">Alfabetización</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-pink-50 transition-colors">
-                            <div className="w-6 h-6 rounded-lg bg-pink-500 shadow-md flex-shrink-0"></div>
-                            <span className="text-sm font-medium text-gray-800">Diseño</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-green-50 transition-colors">
-                            <div className="w-6 h-6 rounded-lg bg-green-500 shadow-md flex-shrink-0"></div>
-                            <span className="text-sm font-medium text-gray-800">Python</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-amber-50 transition-colors">
-                            <div className="w-6 h-6 rounded-lg bg-amber-500 shadow-md flex-shrink-0"></div>
-                            <span className="text-sm font-medium text-gray-800">Robótica</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-50 border border-yellow-200 hover:border-yellow-300 transition-colors">
-                            <div className="w-6 h-6 rounded-full bg-yellow-400 text-yellow-900 text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">RP</div>
-                            <span className="text-sm font-medium text-yellow-900">Reagendada (origen)</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-50 border border-sky-200 hover:border-sky-300 transition-colors">
-                            <div className="w-6 h-6 rounded-full bg-sky-300 text-sky-900 text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">RP</div>
-                            <span className="text-sm font-medium text-sky-900">Reagendada (destino)</span>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200 hover:border-green-300 transition-colors">
-                            <div className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center shadow-md flex-shrink-0">✓</div>
-                            <span className="text-sm font-medium text-emerald-900">Grupo activo</span>
-                        </div>
-                    </div>
-                </Card>
             </main>
 
             {selectedClass && (
@@ -832,6 +835,7 @@ export function Dashboard() {
                     onReagendar={handleReagendar}
                     onInscribirAlumno={handleInscribirAlumno}
                     onEliminarGrupo={handleEliminarGrupo}
+                    onGuardarComentarioGrupo={handleGuardarComentarioGrupo}
                     onEliminarReagendacion={handleEliminarReagendacion}
                     onBajaAlumno={handleBajaAlumno}
                     onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}

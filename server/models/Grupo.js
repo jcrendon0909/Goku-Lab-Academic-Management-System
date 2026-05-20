@@ -10,6 +10,7 @@ const grupoSchema = new mongoose.Schema(
     duracionClase: { type: String, default: "2 horas" },
     idProfesor: { type: String, default: "" },
     nombreProfesor: { type: String, required: true },
+    comentario: { type: String, default: "" },
     CapacidadMaxima: { type: Number, required: true },
     Estatus: { type: String, required: true },
     fechaCreacion: { type: Date, default: () => new Date() },

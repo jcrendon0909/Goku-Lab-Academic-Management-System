@@ -106,33 +106,62 @@ export function PagosPage() {
     return (
         <div className="bg-gray-50 min-h-screen w-full">
             <Navbar />
-            <div className="max-w-6xl mx-auto space-y-6">
 
-                {/* Cabecera y Switch de Navegación Unificados */}
-                <div className="flex justify-between items-center border-b pb-6">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-800">
-                            {vista === 'control' ? "Control de Pagos" : "Registro de Completados"}
-                        </h1>
-                        <p className="text-gray-500 text-sm">Gestión académica de Goku Lab</p>
+            <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
+                <div className="absolute right-10 top-0 h-24 w-24 rounded-full border-[18px] border-white/40" />
+
+                <div className="relative mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
+                    <div className="flex min-w-0 items-center gap-4">
+                        <img
+                            src="/logo-goku-lab.png"
+                            alt="Goku Lab"
+                            className="h-20 w-20 flex-shrink-0 object-contain drop-shadow-md"
+                        />
+
+                        <div className="min-w-0">
+                            <h1 className="text-3xl font-black leading-none text-[#0078D7]">
+                                Goku Lab
+                            </h1>
+
+                            <p className="mt-1 text-base font-black leading-tight">
+                                <span className="text-[#FFC400]">Juega, </span>
+                                <span className="text-[#EF2D2D]">Aprende </span>
+                                <span className="text-[#0078D7]">y </span>
+                                <span className="text-[#2FB34A]">Emprende</span>
+                            </p>
+
+                            <p className="mt-1 text-sm font-black text-[#003B73]">
+                                Sistema de Gestión Académica
+                            </p>
+                        </div>
                     </div>
 
-                    {/* Switch de Navegación */}
-                    <div className="flex bg-gray-100 p-1 rounded-xl border">
+                    <div className="flex rounded-xl border border-cyan-100 bg-white/80 p-1 shadow-sm">
                         <button
                             onClick={() => setVista('control')}
-                            className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${vista === 'control' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
+                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${
+                                vista === 'control'
+                                    ? 'bg-[#0047B8] text-white shadow-md shadow-blue-900/15'
+                                    : 'text-gray-500 hover:bg-cyan-50 hover:text-cyan-700'
+                            }`}
                         >
                             PENDIENTES
                         </button>
                         <button
                             onClick={() => setVista('registro')}
-                            className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${vista === 'registro' ? 'bg-white shadow text-green-600' : 'text-gray-500'}`}
+                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${
+                                vista === 'registro'
+                                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-900/15'
+                                    : 'text-gray-500 hover:bg-emerald-50 hover:text-emerald-700'
+                            }`}
                         >
                             PAGADOS
                         </button>
                     </div>
                 </div>
+            </header>
+
+            <div className="max-w-6xl mx-auto space-y-6 py-8">
 
                 {/* TARJETAS DE TOTALES DEL MES (Ahora alineadas perfectamente) */}
                 <div>

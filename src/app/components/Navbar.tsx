@@ -1,64 +1,74 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { CalendarDays, CreditCard, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function Navbar() {
     const navigate = useNavigate();
-    const location = useLocation(); 
+    const location = useLocation();
 
     const userStorage = localStorage.getItem('user');
     const user = userStorage ? JSON.parse(userStorage) : null;
 
     const handleLogout = () => {
-        localStorage.clear(); 
-        toast.success("Sesión cerrada correctamente");
+        localStorage.clear();
+        toast.success('SesiÃ³n cerrada correctamente');
         navigate('/');
     };
 
     const isActive = (path: string) => location.pathname === path;
 
+    const navButtonClass = (path: string) =>
+        `inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition-colors ${
+            isActive(path)
+                ? 'bg-cyan-50 text-cyan-700 shadow-sm ring-1 ring-cyan-100'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+        }`;
+
     return (
-        <nav className="bg-white border-b border-gray-100 w-full sticky top-0 z-50 shadow-sm">
-            <div className="max-w-6xl mx-auto px-8 h-16 flex items-center justify-between">
-                
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/dashboard')}>
-                    <span className="text-2xl">??</span>
-                    <span className="font-black text-gray-800 tracking-wider text-sm uppercase">Goku Lab</span>
-                </div>
+        <nav className="sticky top-0 z-50 w-full border-b border-cyan-100 bg-white/95 shadow-sm backdrop-blur">
+            <div className="mx-auto grid h-16 w-full max-w-none grid-cols-[1fr_auto_1fr] items-center gap-6 px-8 lg:px-12">
+                <div />
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                     <button
+                        type="button"
                         onClick={() => navigate('/dashboard')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive('/dashboard') ? 'bg-cyan-50 text-cyan-600' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+                        className={navButtonClass('/dashboard')}
                     >
-                        CALENDARIO DE CLASES
+                        <CalendarDays className="h-4 w-4" />
+                        Calendario de clases
                     </button>
-                    
+
                     <button
+                        type="button"
                         onClick={() => navigate('/pagos')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive('/pagos') ? 'bg-cyan-50 text-cyan-600' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+                        className={navButtonClass('/pagos')}
                     >
-                        CONTROL DE PAGOS
+                        <CreditCard className="h-4 w-4" />
+                        Control de pagos
                     </button>
-
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex flex-col text-right hidden sm:flex">
-                        <span className="text-xs font-bold text-gray-800">{user?.nombreCompleto || 'Usuario'}</span>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{user?.rol}</span>
+                <div className="flex min-w-0 items-center justify-end gap-3">
+                    <div className="hidden min-w-0 flex-col text-right sm:flex">
+                        <span className="max-w-56 truncate text-xs font-black text-gray-900">
+                            {user?.nombreCompleto || 'Usuario'}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-600">
+                            {user?.rol || 'Admin'}
+                        </span>
                     </div>
-                    
+
                     <button
+                        type="button"
                         onClick={handleLogout}
-                        className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-colors title='Cerrar Sesión'"
+                        title="Cerrar sesiÃ³n"
+                        className="rounded-lg border border-gray-200 bg-white p-2 text-gray-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-                        </svg>
+                        <LogOut className="h-5 w-5" />
                     </button>
                 </div>
-
             </div>
         </nav>
     );

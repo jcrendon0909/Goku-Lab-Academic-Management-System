@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +8,7 @@ import {
 } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
-import { Calendar, Clock, User, Users, RotateCcw, X, Trash2 } from 'lucide-react';
+import { Calendar, Clock, User, Users, RotateCcw, Trash2, StickyNote } from 'lucide-react';
 
 interface ClassDetailsDialogProps {
   classData: any;
@@ -16,6 +17,7 @@ interface ClassDetailsDialogProps {
   onReagendar: (student: any) => void;
   onInscribirAlumno: (classData: any) => void;
   onEliminarGrupo: (classData: any) => void;
+  onGuardarComentarioGrupo: (classData: any, comentario: string) => Promise<void> | void;
   onEliminarReagendacion: (classData: any) => void;
   onBajaAlumno: (student: any, classData: any) => void;
   onEliminarReagendacionAlumno: (student: any, classData: any) => void;
@@ -28,6 +30,7 @@ export function ClassDetailsDialog({
   onReagendar,
   onInscribirAlumno,
   onEliminarGrupo,
+  onGuardarComentarioGrupo,
   onEliminarReagendacion,
   onBajaAlumno,
   onEliminarReagendacionAlumno,
@@ -47,6 +50,27 @@ export function ClassDetailsDialog({
       : false;
 
   const esReagendada = Boolean(classData?.tipoReagendacionClase);
+  const [comentarioGrupo, setComentarioGrupo] = useState('');
+  const [guardandoComentario, setGuardandoComentario] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setComentarioGrupo(classData?.comentarioGrupo || '');
+    }
+  }, [classData?.id, classData?.comentarioGrupo, isOpen]);
+
+  const handleGuardarComentarioGrupo = async () => {
+    try {
+      setGuardandoComentario(true);
+      await onGuardarComentarioGrupo(classData, comentarioGrupo);
+    } finally {
+      setGuardandoComentario(false);
+    }
+  };
+
+  const comentarioGrupoActual = classData?.comentarioGrupo || '';
+  const comentarioGrupoSinCambios =
+    comentarioGrupo.trim() === String(comentarioGrupoActual).trim();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -131,6 +155,38 @@ export function ClassDetailsDialog({
               </div>
             </div>
           </Card>
+
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <StickyNote className="h-5 w-5 text-gray-700" />
+              <h3 className="font-semibold text-gray-900">Nota del grupo</h3>
+            </div>
+
+            <Card className="p-4 rounded-lg">
+              <textarea
+                value={comentarioGrupo}
+                onChange={(event) => setComentarioGrupo(event.target.value)}
+                rows={3}
+                placeholder="Agrega una nota para esta clase"
+                className="w-full resize-y rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800 outline-none transition-colors focus:border-cyan-300 focus:bg-white"
+              />
+
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleGuardarComentarioGrupo}
+                  disabled={guardandoComentario || comentarioGrupoSinCambios}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    guardandoComentario || comentarioGrupoSinCambios
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-cyan-50 text-cyan-700 border border-cyan-200 hover:bg-cyan-100'
+                  }`}
+                >
+                  {guardandoComentario ? 'Guardando...' : 'Guardar nota'}
+                </button>
+              </div>
+            </Card>
+          </div>
 
           <div>
             <div className="flex items-center gap-2 mb-3">

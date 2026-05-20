@@ -161,8 +161,11 @@ export async function crearGrupoConAlumno(data: {
     nombreCurso: string;
     diaClase: string;
     horaClase: string;
+    duracionClase?: string;
     idProfesor?: string;
     nombreProfesor: string;
+    comentario?: string;
+    comentarioGrupo?: string;
     capacidadMaxima: number;
     fechaCreacion?: string;
     Estatus?: string;
@@ -201,6 +204,27 @@ export async function crearGrupoConAlumno(data: {
 
     if (!res.ok) {
         throw new Error(responseData.error || "Error al crear grupo con alumno");
+    }
+
+    return responseData;
+}
+
+export async function actualizarComentarioGrupo(
+    grupoId: string,
+    comentario: string
+) {
+    const res = await fetch(`${API_URL}/grupos/${grupoId}/comentario`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ comentario }),
+    });
+
+    const responseData = await res.json();
+
+    if (!res.ok) {
+        throw new Error(responseData.error || "Error al actualizar comentario del grupo");
     }
 
     return responseData;

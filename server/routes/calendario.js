@@ -226,6 +226,7 @@ router.get("/", async (req, res) => {
         diaClase: grupo.diaClase || "",
         horaClase: grupo.horaClase || grupo["horaClase "] || "",
         fechaCreacion: grupo.fechaCreacion || null,
+        comentarioGrupo: grupo.comentario || grupo.comentarioGrupo || "",
         idProfesor: idProfesorGrupo,
         nombreProfesor: nombreProfesorCompleto,
         capacidadMaxima: grupo.CapacidadMaxima,
@@ -288,6 +289,10 @@ router.get("/", async (req, res) => {
             r.nombreCurso || (grupoNuevo && grupoNuevo.nombreCurso) || "",
           diaClase: diaClaseNueva,
           horaClase: horaClaseNueva,
+          comentarioGrupo:
+            (grupoNuevo &&
+              (grupoNuevo.comentario || grupoNuevo.comentarioGrupo)) ||
+            "",
           idProfesor: idProfesorNuevo,
           nombreProfesor: nombreProfesorNuevo,
           capacidadMaxima: (grupoNuevo && grupoNuevo.CapacidadMaxima) || 8,
