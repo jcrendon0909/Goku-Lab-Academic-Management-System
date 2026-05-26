@@ -74,7 +74,7 @@ export function ClassDetailsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[96vw] max-w-7xl rounded-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[98vw] !max-w-[1120px] rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -266,14 +266,6 @@ export function ClassDetailsDialog({
                         <p className="text-sm text-gray-500">
                           {student.idAlumno || ''}
                         </p>
-
-                        {student.comentarios && (
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
-                            <span className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1 max-w-full">
-                              Comentarios: {student.comentarios}
-                            </span>
-                          </div>
-                        )}
 
                         {student.reagendacion?.texto && (
                           <p className="text-sm text-gray-500 mt-1">

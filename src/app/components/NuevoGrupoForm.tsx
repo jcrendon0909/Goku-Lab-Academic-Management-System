@@ -70,7 +70,6 @@ export default function NuevoGrupoForm({
     const d = String(hoy.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   });
-  const [comentariosPago, setComentariosPago] = useState("");
 
   const [nombreAlumnoNuevo, setNombreAlumnoNuevo] = useState("");
   const [telefonoAlumnoNuevo, setTelefonoAlumnoNuevo] = useState("");
@@ -239,7 +238,6 @@ export default function NuevoGrupoForm({
         datosPago: {
           montoMensualidad: montoPagoNumero,
           fechaPago,
-          comentarios: comentariosPago,
         },
       };
 
@@ -667,18 +665,6 @@ export default function NuevoGrupoForm({
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Comentarios
-              <span className="text-xs font-normal text-gray-500"> para calendario</span>
-            </label>
-            <textarea
-              value={comentariosPago}
-              onChange={(e) => setComentariosPago(e.target.value)}
-              rows={3}
-              className="w-full border p-2 rounded bg-white"
-            />
-          </div>
         </div>
 
         <div className="flex justify-end gap-2">

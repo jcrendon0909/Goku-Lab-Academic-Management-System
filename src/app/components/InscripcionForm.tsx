@@ -29,7 +29,6 @@ export default function InscripcionForm({
   const [fechaInscripcion, setFechaInscripcion] = useState<string>("");
   const [montoMensualidad, setMontoMensualidad] = useState("");
   const [fechaPago, setFechaPago] = useState<string>("");
-  const [comentariosPago, setComentariosPago] = useState("");
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
@@ -175,7 +174,6 @@ export default function InscripcionForm({
           fechaInscripcion: fechaInscripcion || undefined,
           montoMensualidad: montoPagoNumero,
           fechaPago,
-          comentarios: comentariosPago,
         });
       } catch (errorInscripcion: any) {
         console.error("Error al crear inscripción:", errorInscripcion);
@@ -241,18 +239,6 @@ export default function InscripcionForm({
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Comentarios
-          <span className="text-xs font-normal text-gray-500"> para calendario</span>
-        </label>
-        <textarea
-          value={comentariosPago}
-          onChange={(e) => setComentariosPago(e.target.value)}
-          className="w-full border p-2 rounded bg-white"
-          rows={3}
-        />
-      </div>
     </div>
   );
 
