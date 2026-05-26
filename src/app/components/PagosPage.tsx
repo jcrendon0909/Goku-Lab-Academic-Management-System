@@ -100,11 +100,13 @@ export function PagosPage() {
 
             if (!fechaEvaluarTexto) return false;
 
-            const fechaEvaluar = new Date(fechaEvaluarTexto + 'T00:00:00').getTime();
-            const inicio = fechaInicio ? new Date(fechaInicio + 'T00:00:00').getTime() : -Infinity;
-            const fin = fechaFin ? new Date(fechaFin + 'T00:00:00').getTime() : Infinity;
+            const fechaLimpiaObj = fechaEvaluarTexto.substring(0, 10);
 
-            return fechaEvaluar >= inicio && fechaEvaluar <= fin;
+            if (fechaInicio && fechaLimpiaObj < fechaInicio) return false;
+
+            if (fechaFin && fechaLimpiaObj > fechaFin) return false;
+
+            return true;
         })
         .sort((a, b) => {
             if (vista === 'control') {
