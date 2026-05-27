@@ -85,6 +85,41 @@ const obtenerDiaDesdeFecha = (valor) => {
   return dias[fecha.getDay()];
 };
 
+// ✅ CAMBIO 9: Calcular hora de fin basada en duración
+const calcularHoraFin = (horaInicio, duracion) => {
+  if (!horaInicio || !duracion) return "";
+  
+  // Parse horaInicio (HH:mm)
+  const [horas, minutos] = String(horaInicio).split(":").map(Number);
+  if (isNaN(horas) || isNaN(minutos)) return "";
+  
+  // Parse duración (ej: "2 horas", "1.5 horas", "90 minutos")
+  const duracionStr = String(duracion).toLowerCase().trim();
+  let totalMinutos = 0;
+  
+  const matchHoras = duracionStr.match(/(\d+(?:\.\d+)?)\s*horas?/);
+  if (matchHoras) {
+    totalMinutos += Number(matchHoras[1]) * 60;
+  }
+  
+  const matchMinutos = duracionStr.match(/(\d+)\s*min/);
+  if (matchMinutos) {
+    totalMinutos += Number(matchMinutos[1]);
+  }
+  
+  if (totalMinutos === 0) totalMinutos = 120; // Default 2 horas
+  
+  let horaFin = horas;
+  let minutoFin = minutos + totalMinutos;
+  
+  while (minutoFin >= 60) {
+    horaFin += 1;
+    minutoFin -= 60;
+  }
+  
+  return `${String(horaFin).padStart(2, "0")}:${String(minutoFin).padStart(2, "0")}`;
+};
+
 router.get("/", async (req, res) => {
   try {
     const gruposRaw = await Grupo.find().lean();
@@ -165,7 +200,18 @@ router.get("/", async (req, res) => {
           const grupoInscripcion = normalizar(
             ins.GrupoId || ins.grupoId || ins.idGrupo || ins.IdGrupo
           );
-          return grupoInscripcion === grupoKey;
+          
+          // ✅ CAMBIO 8: Filtro de fecha preciso
+          // Solo mostrar alumno si fechaInscripcion <= hoy
+          if (grupoInscripcion === grupoKey) {
+            const fechaInscripcion = ins.fechaInscripcion ? new Date(ins.fechaInscripcion) : null;
+            // Si no hay fecha o la fecha es en el pasado, mostrar
+            if (!fechaInscripcion || fechaInscripcion.getTime() <= Date.now()) {
+              return true;
+            }
+          }
+          
+          return false;
         })
         .map((a) => ({
           idAlumno: a.idAlumno || a.id_alumno || "",
@@ -230,12 +276,19 @@ router.get("/", async (req, res) => {
 
       const alumnos = Array.from(alumnosMap.values());
 
+      // ✅ CAMBIO 9: Calcular hora fin basada en duración
+      const horaInicio = grupo.horaClase || grupo["horaClase "] || "";
+      const duracion = grupo.duracionClase || "2 horas";
+      const horaFin = calcularHoraFin(horaInicio, duracion);
+
       return {
         tipo: "base",
         idGrupo: grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId,
         nombreCurso: grupo.nombreCurso,
         diaClase: grupo.diaClase || "",
-        horaClase: grupo.horaClase || grupo["horaClase "] || "",
+        horaClase: horaInicio,
+        horaFin: horaFin, // ✅ NUEVO: Hora de fin calculada
+        duracion: duracion,
         fechaCreacion: grupo.fechaCreacion || null,
         comentarioGrupo: grupo.comentario || grupo.comentarioGrupo || "",
         idProfesor: idProfesorGrupo,
