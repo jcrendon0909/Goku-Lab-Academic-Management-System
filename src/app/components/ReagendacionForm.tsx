@@ -41,6 +41,7 @@ export default function ReagendacionForm({
   const [modalidad, setModalidad] = useState(data?.alumno?.modalidad || "Presencial");
   const [idProfesorNuevo, setIdProfesorNuevo] = useState("");
   const [comentario, setComentario] = useState("");
+  const [tipoReagendacion, setTipoReagendacion] = useState<"temporal" | "permanente">("temporal");
   const [guardando, setGuardando] = useState(false);
   const [grupoSugerido, setGrupoSugerido] = useState<any>(null);
   const [buscandoGrupo, setBuscandoGrupo] = useState(false);
@@ -206,7 +207,7 @@ export default function ReagendacionForm({
         fechaHoraNueva: fechaNuevaISO,
         duracion: duracion,
         modalidad: modalidad,
-        tipoReagendacion: "temporal", // ✅ NUEVO: Default es temporal
+        tipoReagendacion: tipoReagendacion, // ✅ CAMBIO 7: Usuario elige tipo
         comentario: comentario.trim(),
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
@@ -411,6 +412,41 @@ ${
               className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500 bg-white"
               placeholder="Motivo, acuerdos o notas importantes de esta reagendacion"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              ✅ Tipo de Reagendación
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setTipoReagendacion("temporal")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  tipoReagendacion === "temporal"
+                    ? "border-blue-500 bg-blue-50 text-blue-900 shadow-md"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                <div className="font-bold text-lg mb-1">⏰ Temporal</div>
+                <div className="text-xs">Solo esta clase</div>
+                <div className="text-xs mt-2">El alumno sigue en el grupo original para próximas semanas</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoReagendacion("permanente")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  tipoReagendacion === "permanente"
+                    ? "border-green-500 bg-green-50 text-green-900 shadow-md"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                <div className="font-bold text-lg mb-1">♻️ Permanente</div>
+                <div className="text-xs">Cambio definitivo</div>
+                <div className="text-xs mt-2">El alumno se mueve al nuevo grupo/horario definitivamente</div>
+              </button>
+            </div>
           </div>
         </div>
 
