@@ -12,7 +12,12 @@ const inscripcionSchema = new mongoose.Schema(
     comentarios: { type: String, default: "" },
     // Fecha efectiva desde la cual el alumno debe aparecer en el calendario.
     // Si no se envía, se usa la fecha en que se guarda la inscripción.
-    fechaInscripcion: { type: Date, default: () => new Date() }
+    // ✅ SIEMPRE es Date (ISO 8601), nunca string
+    fechaInscripcion: { 
+      type: Date, 
+      required: true,
+      default: () => new Date()
+    }
   },
   {
     collection: "inscripciones",
@@ -20,6 +25,9 @@ const inscripcionSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+// Índice para búsquedas por fechaInscripcion
+inscripcionSchema.index({ grupoId: 1, fechaInscripcion: 1 });
 
 const Inscripcion = mongoose.model("Inscripcion", inscripcionSchema);
 

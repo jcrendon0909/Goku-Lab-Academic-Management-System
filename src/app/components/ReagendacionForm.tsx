@@ -179,6 +179,14 @@ export default function ReagendacionForm({
           .replace(/\s+/g, "_")
           .replace(/[^A-Za-z0-9_\-]/g, "");
 
+      // ✅ CAMBIO 1: Formatear fechas correctamente para backend (ISO 8601)
+      // data.clase.date es un Date object, convertir a ISO
+      const fechaOriginal = data.clase.date ? new Date(data.clase.date) : new Date();
+      const fechaOriginalISO = `${fechaOriginal.getFullYear()}-${String(fechaOriginal.getMonth() + 1).padStart(2, "0")}-${String(fechaOriginal.getDate()).padStart(2, "0")}T${data.clase.startTime || "00:00"}:00Z`;
+      
+      // fecha y hora nuevas
+      const fechaNuevaISO = `${fecha}T${hora}:00Z`;
+
       const payload = {
         idAlumno: data.alumno.idAlumno,
         nombreAlumno:
@@ -186,22 +194,23 @@ export default function ReagendacionForm({
           data.alumno.Alumno ||
           data.alumno.nombre ||
           "",
-        IdgrupoOrigen: idGrupoOrigenDetectado,
+        idGrupoOrigen: idGrupoOrigenDetectado, // ✅ Normalizado (era IdgrupoOrigen)
         idGrupoNuevo: idGrupoNuevoFinal,
         nombreCurso: cursoActual,
         profesorOriginal: profesorOriginal,
         profesorNuevo: profesorFinal,
         idProfesorOriginal: idProfesorOriginal,
         idProfesorNuevo: idProfesorFinal,
-        fechaHoraOriginal: `${data.clase.date || ""} ${data.clase.startTime || ""}`,
-        fechaHoraNueva: `${fecha} ${hora}`,
+        // ✅ CAMBIO CRÍTICO: Enviar fechas en ISO 8601 (no strings con espacios)
+        fechaHoraOriginal: fechaOriginalISO,
+        fechaHoraNueva: fechaNuevaISO,
         duracion: duracion,
         modalidad: modalidad,
+        tipoReagendacion: "temporal", // ✅ NUEVO: Default es temporal
         comentario: comentario.trim(),
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
           : "Reagendado a clase virtual",
-        FechaMovimiento: new Date().toISOString(),
         estatus: "reagendado",
       };
 

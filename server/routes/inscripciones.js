@@ -52,17 +52,28 @@ router.post("/", async (req, res) => {
 
     const grupoIdTrimmed = String(grupoId).trim();
 
-    // Convierte la fecha efectiva a Date válido (si viene mal o vacío, se deja que use el default del schema).
-    // Si viene en formato YYYY-MM-DD, lo interpretamos como "fecha local" (sin desplazamiento por zona horaria).
+    // ✅ CAMBIO 1C: Convertir fechaInscripcion a Date válido
+    // Si viene vacía o inválida, usa default del schema (new Date())
     let fechaInscripcionFinal = undefined;
     if (fechaInscripcion) {
-      const str = String(fechaInscripcion);
+      const str = String(fechaInscripcion).trim();
+      
+      // Parsear múltiples formatos
+      let d = null;
+      
+      // Formato YYYY-MM-DD (input type="date")
       const matchFecha = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      const d = matchFecha
-        ? new Date(Number(matchFecha[1]), Number(matchFecha[2]) - 1, Number(matchFecha[3]))
-        : new Date(fechaInscripcion);
+      if (matchFecha) {
+        d = new Date(Number(matchFecha[1]), Number(matchFecha[2]) - 1, Number(matchFecha[3]));
+      } else {
+        // Dejar que new Date() lo intente parsear automáticamente
+        d = new Date(str);
+      }
 
-      if (!isNaN(d.getTime())) fechaInscripcionFinal = d;
+      // Validar que es una fecha válida
+      if (!isNaN(d.getTime())) {
+        fechaInscripcionFinal = d;
+      }
     }
 
     let datosPagoNormalizados = null;

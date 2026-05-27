@@ -165,10 +165,11 @@ router.get("/", async (req, res) => {
           reagendacion: null,
         }));
 
+      // ✅ CAMBIO 1: Usar normalización consistente de idGrupoOrigen
       const alumnosOrigen = reagendacionesRaw
         .filter((r) => {
           const grupoOrigen = normalizar(
-            r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen
+            r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen // ✅ Ahora busca idGrupoOrigen primero
           );
           return grupoOrigen === grupoKey;
         })
@@ -186,8 +187,9 @@ router.get("/", async (req, res) => {
               tipo: "origen",
               reagendacionId: String(r._id || r.ReagendacionId || ""),
               comentario: r.comentario || r.comentarios || "",
-              fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
-              fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
+              // ✅ CAMBIO: Ahora fechas son Date objects, procesar directamente
+              fechaHoraOriginal: r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal).toISOString() : "",
+              fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : "",
               horaClaseNueva:
                 (grupoNuevo &&
                   (grupoNuevo.horaClase || grupoNuevo["horaClase "])) ||
@@ -243,9 +245,10 @@ router.get("/", async (req, res) => {
         r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo || "";
 
       const grupoNuevo = gruposMap.get(normalizar(idGrupoNuevo));
-      const fechaHoraNueva = limpiarFecha(r.fechaHoraNueva);
-      const fechaNuevaObj = parseFechaFlexible(fechaHoraNueva);
-
+      
+      // ✅ CAMBIO: Ahora r.fechaHoraNueva es un Date object
+      const fechaNuevaObj = r.fechaHoraNueva ? new Date(r.fechaHoraNueva) : null;
+      
       const idProfesorNuevo =
         r.idProfesorNuevo ||
         r.IdProfesorNuevo ||
@@ -264,18 +267,22 @@ router.get("/", async (req, res) => {
       const horaClaseNueva =
         (grupoNuevo &&
           (grupoNuevo.horaClase || grupoNuevo["horaClase "])) ||
-        obtenerHoraDesdeFecha(fechaHoraNueva) ||
+        (fechaNuevaObj && !isNaN(fechaNuevaObj.getTime()) 
+          ? `${String(fechaNuevaObj.getHours()).padStart(2, "0")}:${String(fechaNuevaObj.getMinutes()).padStart(2, "0")}`
+          : "") ||
         "";
 
       const diaClaseNueva =
         (grupoNuevo && grupoNuevo.diaClase) ||
-        obtenerDiaDesdeFecha(fechaHoraNueva) ||
+        (fechaNuevaObj && !isNaN(fechaNuevaObj.getTime())
+          ? ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][fechaNuevaObj.getDay()]
+          : "") ||
         "";
 
       const fechaKey =
         fechaNuevaObj && !isNaN(fechaNuevaObj.getTime())
-          ? `${fechaNuevaObj.getFullYear()}-${fechaNuevaObj.getMonth()}-${fechaNuevaObj.getDate()}`
-          : fechaHoraNueva;
+          ? `${fechaNuevaObj.getFullYear()}-${String(fechaNuevaObj.getMonth() + 1).padStart(2, "0")}-${String(fechaNuevaObj.getDate()).padStart(2, "0")}`
+          : "";
 
       const key = `${normalizar(idGrupoNuevo)}|${fechaKey}|${horaClaseNueva}`;
 
@@ -328,6 +335,7 @@ router.get("/", async (req, res) => {
             grupoOrigen.profesorId)) ||
         "";
 
+      // ✅ CAMBIO: Parsear fechas que ahora son Date objects
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
@@ -336,13 +344,15 @@ router.get("/", async (req, res) => {
           tipo: "destino",
           reagendacionId,
           comentario: r.comentario || r.comentarios || "",
-          fechaHoraOriginal: limpiarFecha(r.fechaHoraOriginal),
-          fechaHoraNueva: limpiarFecha(r.fechaHoraNueva),
+          fechaHoraOriginal: r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal).toISOString() : "",
+          fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : "",
           idProfesorOriginal: idProfesorOriginal,
           horaClaseOriginal:
             (grupoOrigen &&
               (grupoOrigen.horaClase || grupoOrigen["horaClase "])) ||
-            obtenerHoraDesdeFecha(r.fechaHoraOriginal) ||
+            (r.fechaHoraOriginal && new Date(r.fechaHoraOriginal) 
+              ? `${String(new Date(r.fechaHoraOriginal).getHours()).padStart(2, "0")}:${String(new Date(r.fechaHoraOriginal).getMinutes()).padStart(2, "0")}`
+              : "") ||
             "",
         },
       });

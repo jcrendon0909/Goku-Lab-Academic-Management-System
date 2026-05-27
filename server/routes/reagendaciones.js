@@ -38,13 +38,15 @@ router.post("/", async (req, res) => {
       duracion,
       modalidad,
       motivo,
+      tipoReagendacion,
       comentario,
       comentarios,
       FechaMovimiento,
       estatus,
     } = req.body;
 
-    const grupoOrigenFinal = IdgrupoOrigen || idGrupoOrigen || "";
+    // ✅ CAMBIO 1D: Normalizar nombre del campo a idGrupoOrigen
+    const grupoOrigenFinal = idGrupoOrigen || IdgrupoOrigen || "";
     const grupoNuevoFinal = idGrupoNuevo || "";
 
     if (!idAlumno) {
@@ -56,7 +58,7 @@ router.post("/", async (req, res) => {
     }
 
     if (!grupoOrigenFinal) {
-      return res.status(400).json({ error: "Falta IdgrupoOrigen" });
+      return res.status(400).json({ error: "Falta idGrupoOrigen" });
     }
 
     if (!grupoNuevoFinal) {
@@ -71,31 +73,56 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Falta fechaHoraNueva" });
     }
 
+    // ✅ CAMBIO 1D: Parsear fechas como Date objects
+    const parseFecha = (valor) => {
+      if (!valor) return null;
+      const d = new Date(valor);
+      return !isNaN(d.getTime()) ? d : null;
+    };
+
+    const fechaOriginalDate = parseFecha(fechaHoraOriginal);
+    const fechaNuevaDate = parseFecha(fechaHoraNueva);
+
+    if (!fechaOriginalDate) {
+      return res.status(400).json({ 
+        error: "fechaHoraOriginal no es una fecha válida" 
+      });
+    }
+
+    if (!fechaNuevaDate) {
+      return res.status(400).json({ 
+        error: "fechaHoraNueva no es una fecha válida" 
+      });
+    }
+
     const datosReagendacion = {
       idAlumno,
       nombreAlumno,
-      IdgrupoOrigen: grupoOrigenFinal,
+      idGrupoOrigen: grupoOrigenFinal, // ✅ Normalizado
       idGrupoNuevo: grupoNuevoFinal,
       nombreCurso: nombreCurso || "",
       profesorOriginal: profesorOriginal || "",
       profesorNuevo: profesorNuevo || "",
       idProfesorOriginal: idProfesorOriginal || "",
       idProfesorNuevo: idProfesorNuevo || "",
-      fechaHoraOriginal: fechaHoraOriginal || "",
-      fechaHoraNueva: fechaHoraNueva || "",
+      // ✅ CAMBIO CRÍTICO: Fechas como Date, no como strings
+      fechaHoraOriginal: fechaOriginalDate,
+      fechaHoraNueva: fechaNuevaDate,
       duracion: duracion || "2 horas",
       modalidad: modalidad || "Presencial",
       motivo: motivo || "Reagendado desde sistema",
+      tipoReagendacion: tipoReagendacion || "temporal", // ✅ NUEVO
       comentario: String(comentario || comentarios || "").trim(),
-      FechaMovimiento: FechaMovimiento || new Date().toISOString(),
+      FechaMovimiento: new Date(), // ✅ Ahora es Date, no string ISO
       estatus: estatus || "reagendado",
     };
 
+    // ✅ CAMBIO: Buscar por idGrupoOrigen (campo normalizado)
     const actualizada = await Reagendacion.findOneAndUpdate(
       {
         idAlumno,
-        IdgrupoOrigen: grupoOrigenFinal,
-        fechaHoraOriginal: fechaHoraOriginal || "",
+        idGrupoOrigen: grupoOrigenFinal,
+        fechaHoraOriginal: fechaOriginalDate,
       },
       { $set: datosReagendacion },
       { new: true }
