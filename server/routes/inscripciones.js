@@ -90,6 +90,32 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: errorPago.message });
     }
 
+    // ✅ CAMBIO 3a: Validar que el grupo existe ANTES de hacer anything
+    const grupoNuevo = await Grupo.findOne({
+      $or: [
+        { IdGrupo: grupoIdTrimmed },
+        { idGrupo: grupoIdTrimmed },
+      ],
+    }).lean();
+
+    if (!grupoNuevo) {
+      return res.status(404).json({
+        error: `Grupo "${grupoIdTrimmed}" no existe en la base de datos`
+      });
+    }
+
+    // ✅ CAMBIO 3b: Validar que el alumno existe
+    const Alumno = require("../models/Alumno.js").default;
+    const alumnoExiste = await Alumno.findOne({
+      idAlumno: String(idAlumno).trim()
+    }).lean();
+
+    if (!alumnoExiste) {
+      return res.status(404).json({
+        error: `Alumno "${idAlumno}" no existe en la base de datos`
+      });
+    }
+
     // Verificar si el alumno ya está inscrito en este grupo
     const inscripcionExistente = await Inscripcion.findOne({
       idAlumno: String(idAlumno).trim(),
@@ -102,49 +128,39 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Obtener el grupo que se quiere inscribir
-    const grupoNuevo = await Grupo.findOne({
-      $or: [
-        { IdGrupo: grupoIdTrimmed },
-        { idGrupo: grupoIdTrimmed },
-      ],
-    }).lean();
-
     console.log("Búsqueda de grupo:", { grupoId: grupoIdTrimmed, grupoEncontrado: !!grupoNuevo });
 
-    if (grupoNuevo) {
-      // Buscar todas las inscripciones del alumno
-      const inscripcionesAlumno = await Inscripcion.find({
-        idAlumno,
+    // Buscar todas las inscripciones del alumno
+    const inscripcionesAlumno = await Inscripcion.find({
+      idAlumno,
+    }).lean();
+
+    // Verificar si el alumno ya está inscrito en una clase del mismo profesor a la misma hora
+    for (const inscripcion of inscripcionesAlumno) {
+      const grupoExistente = await Grupo.findOne({
+        $or: [
+          { IdGrupo: inscripcion.grupoId },
+          { idGrupo: inscripcion.grupoId },
+        ],
       }).lean();
 
-      // Verificar si el alumno ya está inscrito en una clase del mismo profesor a la misma hora
-      for (const inscripcion of inscripcionesAlumno) {
-        const grupoExistente = await Grupo.findOne({
-          $or: [
-            { IdGrupo: inscripcion.grupoId },
-            { idGrupo: inscripcion.grupoId },
-          ],
-        }).lean();
+      if (grupoExistente) {
+        const mismoProfesor =
+          (grupoNuevo.idProfesor || grupoNuevo.IdProfesor) ===
+          (grupoExistente.idProfesor || grupoExistente.IdProfesor);
 
-        if (grupoExistente) {
-          const mismoProfesor =
-            (grupoNuevo.idProfesor || grupoNuevo.IdProfesor) ===
-            (grupoExistente.idProfesor || grupoExistente.IdProfesor);
+        const mismaHora =
+          String(grupoNuevo.horaClase || "").trim() ===
+          String(grupoExistente.horaClase || "").trim();
 
-          const mismaHora =
-            String(grupoNuevo.horaClase || "").trim() ===
-            String(grupoExistente.horaClase || "").trim();
+        const mismoDia =
+          String(grupoNuevo.diaClase || "").trim().toLowerCase() ===
+          String(grupoExistente.diaClase || "").trim().toLowerCase();
 
-          const mismoDia =
-            String(grupoNuevo.diaClase || "").trim().toLowerCase() ===
-            String(grupoExistente.diaClase || "").trim().toLowerCase();
-
-          if (mismoProfesor && mismaHora && mismoDia) {
-            return res.status(409).json({
-              error: `El alumno ya está inscrito en una clase del profesor ${grupoExistente.nombreProfesor} a la misma hora`,
-            });
-          }
+        if (mismoProfesor && mismaHora && mismoDia) {
+          return res.status(409).json({
+            error: `El alumno ya está inscrito en una clase del profesor ${grupoExistente.nombreProfesor} a la misma hora`,
+          });
         }
       }
     }

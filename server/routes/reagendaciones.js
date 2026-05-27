@@ -1,5 +1,8 @@
 import express from "express";
 import Reagendacion from "../models/Reagendacion.js";
+import Alumno from "../models/Alumno.js";
+import Inscripcion from "../models/Inscripcion.js";
+import Grupo from "../models/Grupo.js";
 import { generarId } from "../utils/generarId.js";
 
 const router = express.Router();
@@ -92,6 +95,29 @@ router.post("/", async (req, res) => {
     if (!fechaNuevaDate) {
       return res.status(400).json({ 
         error: "fechaHoraNueva no es una fecha válida" 
+      });
+    }
+
+    // ✅ CAMBIO 3c: Validar que alumno existe
+    const alumnoExiste = await Alumno.findOne({
+      idAlumno: String(idAlumno).trim()
+    }).lean();
+
+    if (!alumnoExiste) {
+      return res.status(404).json({
+        error: `Alumno "${idAlumno}" no existe`
+      });
+    }
+
+    // ✅ CAMBIO 3d: Validar que alumno está inscrito en grupo origen
+    const inscripcionOrigen = await Inscripcion.findOne({
+      idAlumno: String(idAlumno).trim(),
+      grupoId: grupoOrigenFinal
+    }).lean();
+
+    if (!inscripcionOrigen) {
+      return res.status(404).json({
+        error: `Alumno no está inscrito en el grupo origen "${grupoOrigenFinal}"`
       });
     }
 
