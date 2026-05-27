@@ -8,7 +8,7 @@ const reagendacionSchema = new mongoose.Schema(
 
     // ✅ Normalizado: idGrupoOrigen (antes era IdgrupoOrigen)
     idGrupoOrigen: { type: String, required: true, index: true },
-    idGrupoNuevo: { type: String, required: true, index: true },
+    idGrupoNuevo: { type: String, required: true },
 
     nombreCurso: { type: String, default: "" },
 
