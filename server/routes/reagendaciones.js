@@ -5,6 +5,7 @@ import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import { generarId } from "../utils/generarId.js";
 import { parseFechaFlexible } from "../utils/parseFechas.js";
+import { notificarReagendacionProfesor } from "../utils/notificaciones.js";
 
 const router = express.Router();
 
@@ -152,6 +153,15 @@ router.post("/", async (req, res) => {
 
     if (actualizada) {
       console.log("REAGENDACION ACTUALIZADA:", actualizada);
+      
+      // ✅ CAMBIO 6: Notificar al profesor sobre la actualización
+      if (idProfesorOriginal) {
+        await notificarReagendacionProfesor(actualizada.ReagendacionId, idProfesorOriginal);
+      }
+      if (idProfesorNuevo && idProfesorNuevo !== idProfesorOriginal) {
+        await notificarReagendacionProfesor(actualizada.ReagendacionId, idProfesorNuevo);
+      }
+      
       return res.status(200).json(actualizada);
     }
 
@@ -167,6 +177,14 @@ router.post("/", async (req, res) => {
     const guardada = await nuevaReagendacion.save();
 
     console.log("REAGENDACION GUARDADA:", guardada);
+
+    // ✅ CAMBIO 6: Notificar al profesor sobre la reagendación
+    if (idProfesorOriginal) {
+      await notificarReagendacionProfesor(nuevoReagendacionId, idProfesorOriginal);
+    }
+    if (idProfesorNuevo && idProfesorNuevo !== idProfesorOriginal) {
+      await notificarReagendacionProfesor(nuevoReagendacionId, idProfesorNuevo);
+    }
 
     res.status(201).json(guardada);
   } catch (error) {
