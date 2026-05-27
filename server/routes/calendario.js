@@ -2,6 +2,7 @@ import express from "express";
 import Grupo from "../models/Grupo.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
+import ClaseCancelada from "../models/ClaseCancelada.js";
 import Profesor from "../models/Profesor.js";
 
 const router = express.Router();
@@ -89,11 +90,21 @@ router.get("/", async (req, res) => {
     const gruposRaw = await Grupo.find().lean();
     const inscripcionesRaw = await Inscripcion.find().lean();
     const reagendacionesRaw = await Reagendacion.find().lean();
+    const clasesCanceladasRaw = await ClaseCancelada.find({ estatus: "activa" }).lean();
     const profesoresRaw = await Profesor.find().lean();
 
     const gruposMap = new Map();
     const profesoresMap = new Map();
     const profesoresNombreMap = new Map();
+    
+    // ✅ CAMBIO 5: Crear mapa de clases canceladas para búsqueda rápida
+    // Estructura: "${grupoId}|YYYY-MM-DD" → true
+    const clasesCanceladasMap = new Map();
+    for (const cancelacion of clasesCanceladasRaw) {
+      const fechaStr = cancelacion.fecha.toISOString().split("T")[0];
+      const key = `${normalizar(cancelacion.idGrupo)}|${fechaStr}`;
+      clasesCanceladasMap.set(key, true);
+    }
 
     for (const profesor of profesoresRaw) {
       const idProfesor = profesor.idProfesor || profesor.IdProfesor || "";
@@ -365,6 +376,10 @@ router.get("/", async (req, res) => {
     res.json({
       clasesBase,
       reagendaciones: clasesReagendadas,
+      clasesCanceladas: Array.from(clasesCanceladasMap.entries()).map(([key, _]) => {
+        const [grupoId, fechaStr] = key.split("|");
+        return { grupoId, fecha: fechaStr };
+      }),
     });
   } catch (error) {
     console.error("Error al construir calendario:", error);
