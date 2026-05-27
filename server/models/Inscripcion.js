@@ -6,9 +6,20 @@ const inscripcionSchema = new mongoose.Schema(
     nombreAlumno: { type: String, required: true },
     grupoId: { type: String, required: true, index: true },
     modalidad: { type: String, default: "Presencial" },
-    montoMensualidad: { type: Number, default: null },
-    fechaPago: { type: Date, default: null },
-    diaPagoFijo: { type: Number, default: null },
+    // Datos de pago - REQUERIDOS para nueva inscripción
+    montoMensualidad: { type: Number, required: true },
+    diaPago: { 
+      type: Number, 
+      required: true,
+      min: 1,
+      max: 31,
+      description: "Día del mes en que vence el pago (1-31)"
+    },
+    fechaInicioPago: { 
+      type: Date, 
+      required: true,
+      description: "Primer mes desde el cual comienza a aplicar el pago"
+    },
     comentarios: { type: String, default: "" },
     // Fecha efectiva desde la cual el alumno debe aparecer en el calendario.
     // Si no se envía, se usa la fecha en que se guarda la inscripción.

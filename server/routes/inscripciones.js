@@ -31,14 +31,12 @@ router.post("/", async (req, res) => {
       modalidad,
       fechaInscripcion,
       montoMensualidad,
-      montoPago,
-      fechaPago,
-      diaPagoFijo,
+      diaPago,
+      fechaInicioPago,
       comentarios,
-      comentariosPago,
     } = req.body;
 
-    // Validar inputs
+    // Validar inputs básicos
     if (!idAlumno || !String(idAlumno).trim()) {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
@@ -67,18 +65,21 @@ router.post("/", async (req, res) => {
       }
     }
 
+    // ✅ Normalizar y validar datos de pago (REQUERIDOS)
     let datosPagoNormalizados = null;
     try {
       datosPagoNormalizados = normalizarDatosPago({
         montoMensualidad,
-        montoPago,
-        fechaPago,
-        diaPagoFijo,
+        diaPago,
+        fechaInicioPago,
         comentarios,
-        comentariosPago,
       });
     } catch (errorPago) {
       return res.status(400).json({ error: errorPago.message });
+    }
+
+    if (!datosPagoNormalizados) {
+      return res.status(400).json({ error: "Datos de pago requeridos (monto, día de pago, fecha de inicio)" });
     }
 
     // ✅ CAMBIO 3a: Validar que el grupo existe ANTES de hacer anything
@@ -161,10 +162,10 @@ router.post("/", async (req, res) => {
       nombreAlumno: String(nombreAlumno).trim(),
       grupoId: grupoIdTrimmed,
       modalidad: modalidad || "Presencial",
-      montoMensualidad: datosPagoNormalizados?.montoMensualidad ?? null,
-      fechaPago: datosPagoNormalizados?.fechaPago ?? null,
-      diaPagoFijo: datosPagoNormalizados?.diaPagoFijo ?? null,
-      comentarios: datosPagoNormalizados?.comentarios ?? "",
+      montoMensualidad: datosPagoNormalizados.montoMensualidad,
+      diaPago: datosPagoNormalizados.diaPago,
+      fechaInicioPago: datosPagoNormalizados.fechaInicioPago,
+      comentarios: datosPagoNormalizados.comentarios || "",
       fechaInscripcion: fechaInscripcionFinal,
     });
 

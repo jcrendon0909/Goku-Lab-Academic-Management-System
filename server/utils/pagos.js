@@ -31,42 +31,29 @@ export function hayDatosPago(datosPago = {}) {
 }
 
 export function normalizarDatosPago(datosPago = {}) {
-  if (!hayDatosPago(datosPago)) return null;
-
-  const montoRaw =
-    datosPago.montoMensualidad !== undefined &&
-    datosPago.montoMensualidad !== null &&
-    String(datosPago.montoMensualidad).trim() !== ""
-      ? datosPago.montoMensualidad
-      : datosPago.montoPago;
-
-  const monto = Number(montoRaw);
+  // Nueva estructura: diaPago (1-31) + fechaInicioPago
+  // Este validador es REQUERIDO para inscripción
+  
+  const monto = Number(datosPago.montoMensualidad);
   if (!Number.isFinite(monto) || monto <= 0) {
-    throw new Error("Captura un monto de mensualidad valido");
+    throw new Error("Captura un monto de mensualidad válido (mayor a 0)");
   }
 
-  let fechaPago = parseFechaLocal(datosPago.fechaPago);
-
-  if (!fechaPago && datosPago.diaPagoFijo) {
-    const dia = Number(datosPago.diaPagoFijo);
-    if (Number.isInteger(dia) && dia >= 1 && dia <= 31) {
-      const hoy = new Date();
-      const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-      fechaPago = new Date(hoy.getFullYear(), hoy.getMonth(), Math.min(dia, ultimoDia));
-    }
+  const dia = Number(datosPago.diaPago);
+  if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+    throw new Error("Día de pago debe ser entre 1 y 31");
   }
 
-  if (!fechaPago) {
-    throw new Error("Captura una fecha de pago valida");
+  let fechaInicioPago = parseFechaLocal(datosPago.fechaInicioPago);
+  if (!fechaInicioPago || isNaN(fechaInicioPago.getTime())) {
+    throw new Error("Captura una fecha de inicio de pago válida (formato YYYY-MM-DD)");
   }
-
-  const diaPagoFijo = fechaPago.getDate();
 
   return {
     montoMensualidad: monto,
-    fechaPago,
-    diaPagoFijo,
-    comentarios: String(datosPago.comentarios ?? datosPago.comentariosPago ?? "").trim(),
+    diaPago: dia,
+    fechaInicioPago,
+    comentarios: String(datosPago.comentarios ?? "").trim(),
   };
 }
 
@@ -208,9 +195,9 @@ export async function crearOActualizarPagoDeInscripcion({
         grupoId: String(grupoId).trim(),
         nombreAlumno: String(nombreAlumno || "").trim(),
         nombreCurso: String(nombreCurso || "Curso sin nombre").trim(),
-        diaPagoFijo: datosPago.diaPagoFijo,
+        diaPago: datosPago.diaPago,
         montoPago: datosPago.montoMensualidad,
-        fechaPago: datosPago.fechaPago,
+        fechaInicioPago: datosPago.fechaInicioPago,
         activo: true,
         fechaBaja: null,
       },

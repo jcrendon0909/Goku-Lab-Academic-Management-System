@@ -28,7 +28,8 @@ export default function InscripcionForm({
   const [modalidad, setModalidad] = useState("Presencial");
   const [fechaInscripcion, setFechaInscripcion] = useState<string>("");
   const [montoMensualidad, setMontoMensualidad] = useState("");
-  const [fechaPago, setFechaPago] = useState<string>("");
+  const [diaPago, setDiaPago] = useState<string>("5");
+  const [fechaInicioPago, setFechaInicioPago] = useState<string>("");
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
@@ -61,11 +62,11 @@ export default function InscripcionForm({
     // Default: día de la clase seleccionada en el calendario.
     if (classData?.date) {
       setFechaInscripcion(toDateInputValue(classData.date));
-      setFechaPago((actual) => actual || toDateInputValue(new Date()));
+      setFechaInicioPago((actual) => actual || toDateInputValue(new Date()));
       return;
     }
     setFechaInscripcion(toDateInputValue(new Date()));
-    setFechaPago((actual) => actual || toDateInputValue(new Date()));
+    setFechaInicioPago((actual) => actual || toDateInputValue(new Date()));
   }, [classData]);
 
   useEffect(() => {
@@ -121,8 +122,8 @@ export default function InscripcionForm({
         return;
       }
 
-      if (!fechaPago) {
-        alert("Captura la fecha de pago");
+      if (!fechaInicioPago) {
+        alert("Captura la fecha de inicio de pago");
         return;
       }
 
@@ -173,7 +174,8 @@ export default function InscripcionForm({
           modalidad: modalidad,
           fechaInscripcion: fechaInscripcion || undefined,
           montoMensualidad: montoPagoNumero,
-          fechaPago,
+          diaPago: Number(diaPago),
+          fechaInicioPago,
         });
       } catch (errorInscripcion: any) {
         console.error("Error al crear inscripción:", errorInscripcion);
@@ -200,7 +202,8 @@ export default function InscripcionForm({
 
   const puedeConfirmar =
     Boolean(grupoId && grupoId.trim()) &&
-    Boolean(fechaPago) &&
+    Boolean(fechaInicioPago) &&
+    Boolean(diaPago) &&
     Number(montoMensualidad) > 0 &&
     (modo === "existente"
       ? Boolean(alumnoSeleccionado)
@@ -208,9 +211,9 @@ export default function InscripcionForm({
 
   const datosPagoForm = (
     <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4 mt-5 space-y-3">
-      <h3 className="font-semibold text-gray-900">Datos de pago</h3>
+      <h3 className="font-semibold text-gray-900">Datos de pago (Requerido)</h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Monto de mensualidad
@@ -223,18 +226,38 @@ export default function InscripcionForm({
             onChange={(e) => setMontoMensualidad(e.target.value)}
             placeholder="0.00"
             className="w-full border p-2 rounded"
+            required
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Fecha de pago
+            Día de pago (1-31)
+          </label>
+          <select
+            value={diaPago}
+            onChange={(e) => setDiaPago(e.target.value)}
+            className="w-full border p-2 rounded"
+            required
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+              <option key={day} value={day}>
+                {day}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            A partir de (Primer mes de pago)
           </label>
           <input
             type="date"
-            value={fechaPago}
-            onChange={(e) => setFechaPago(e.target.value)}
+            value={fechaInicioPago}
+            onChange={(e) => setFechaInicioPago(e.target.value)}
             className="w-full border p-2 rounded"
+            required
           />
         </div>
       </div>

@@ -7,9 +7,18 @@ const pagoSchema = new mongoose.Schema(
         grupoId: { type: String, default: "", index: true },
         nombreAlumno: { type: String, required: true },
         nombreCurso: { type: String, required: true },
-        diaPagoFijo: { type: Number, required: true },
+        diaPago: { 
+            type: Number, 
+            required: true,
+            min: 1,
+            max: 31,
+            description: "Día del mes en que vence el pago"
+        },
         montoPago: { type: Number, required: true },
-        fechaPago: { type: Date, default: null },
+        fechaInicioPago: { 
+            type: Date,
+            description: "Primer mes desde el cual aplica el pago"
+        },
         activo: { type: Boolean, default: true, index: true },
         fechaBaja: { type: Date, default: null },
     },
