@@ -168,9 +168,7 @@ router.get("/", async (req, res) => {
       // ✅ CAMBIO 1: Usar normalización consistente de idGrupoOrigen
       const alumnosOrigen = reagendacionesRaw
         .filter((r) => {
-          const grupoOrigen = normalizar(
-            r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen // ✅ Ahora busca idGrupoOrigen primero
-          );
+          const grupoOrigen = normalizar(r.idGrupoOrigen); // ✅ Solo usa idGrupoOrigen (normalizado)
           return grupoOrigen === grupoKey;
         })
         .map((r) => {
@@ -241,8 +239,7 @@ router.get("/", async (req, res) => {
     const reagendacionesAgrupadas = {};
 
     for (const r of reagendacionesRaw) {
-      const idGrupoNuevo =
-        r.idGrupoNuevo || r.IdgrupoNuevo || r.IdGrupoNuevo || "";
+      const idGrupoNuevo = r.idGrupoNuevo || ""; // ✅ Normalizado
 
       const grupoNuevo = gruposMap.get(normalizar(idGrupoNuevo));
       
@@ -323,7 +320,7 @@ router.get("/", async (req, res) => {
       }
 
       const grupoOrigen = gruposMap.get(
-        normalizar(r.idGrupoOrigen || r.IdgrupoOrigen || r.IdGrupoOrigen || "")
+        normalizar(r.idGrupoOrigen || "") // ✅ Normalizado
       );
 
       const idProfesorOriginal =

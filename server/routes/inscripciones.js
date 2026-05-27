@@ -315,7 +315,7 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
     const resultadoReagendaciones = await Reagendacion.deleteMany({
       idAlumno,
       $or: [
-        { IdgrupoOrigen: grupoId },
+        // ✅ Normalizado: solo idGrupoOrigen
         { idGrupoOrigen: grupoId },
       ],
     });

@@ -328,8 +328,7 @@ router.delete("/:grupoId", async (req, res) => {
 
     const reagendacionesRelacionadas = await Reagendacion.find({
       $or: [
-        { IdgrupoOrigen: grupoId },
-        { idGrupoOrigen: grupoId },
+        { idGrupoOrigen: grupoId }, // ✅ Normalizado
         { idGrupoNuevo: grupoId },
       ],
     }).lean();
