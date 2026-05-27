@@ -1,14 +1,16 @@
-﻿import { Navbar } from '../components/Navbar';
-
-const userStorage = localStorage.getItem('user');
-const userLogueado = userStorage ? JSON.parse(userStorage) : null;
-const esAdmin = userLogueado?.rol === 'admin';
-
+﻿
 import React, { useEffect, useState } from 'react';
+import { Navbar } from '../components/Navbar';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
 import { toast } from "sonner";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+const userStorage = localStorage.getItem('user');
+const userLogueado = userStorage ? JSON.parse(userStorage) : null;
+const esAdmin = userLogueado?.rol === 'admin';
 
 export function PagosPage() {
     const [pagos, setPagos] = useState<any[]>([]);
@@ -18,7 +20,6 @@ export function PagosPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<any>(null);
 
-    // ESTADOS PARA LOS FILTROS
     const [busquedaAlumno, setBusquedaAlumno] = useState('');
     const [fechaInicio, setFechaInicio] = useState('');
     const [fechaFin, setFechaFin] = useState('');
@@ -46,6 +47,150 @@ export function PagosPage() {
         setFechaInicio('');
         setFechaFin('');
     }, [vista]);
+
+    const handleImprimirRecibo = (pago: any) => {
+        const generarPDF = (quiereFactura: boolean) => {
+        const estadoFacturacion = quiereFactura ? "Solicitada" : "No solicitada";
+
+        const ahora = new Date();
+        const anioActual = ahora.getFullYear();
+        const mesActualNum = String(ahora.getMonth() + 1).padStart(2, '0');
+        const anioMesNomenclatura = `${anioActual}-${mesActualNum}`;
+
+        const fechaConsulta = ahora.toLocaleString('es-MX', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+
+        // Número de folio
+        const numeroTresDigitos = String(Math.floor(Math.random() * 900) + 100).padStart(3, '0');
+        const folioDocumento = `AL/CF/${anioMesNomenclatura}-R${numeroTresDigitos}`;
+
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        doc.setFillColor(0, 120, 215);
+        doc.rect(0, 0, 210, 38, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(22);
+        doc.text("GOKU LAB", 15, 16);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text("Juega, Aprende y Emprende - Algorithmics", 15, 23);
+        doc.text("COMPROBANTE DE PAGO DIGITAL", 15, 30);
+
+        // Caja de Folio (Lado derecho del encabezado)
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(135, 8, 60, 22, 2, 2, 'F');
+        doc.setDrawColor(200, 200, 200);
+        doc.roundedRect(135, 8, 60, 22, 2, 2, 'D');
+
+        doc.setTextColor(100, 100, 100);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text("FOLIO DE RECIBO", 140, 14);
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(11);
+        doc.text(folioDocumento, 140, 22);
+
+        // Bloque de Información del Recibo
+        doc.setTextColor(50, 50, 50);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text("Detalles de la Operación", 15, 52);
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(15, 55, 195, 55);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(10);
+
+        doc.text("Estudiante / Alumno:", 15, 64);
+        doc.setFont('Helvetica', 'bold');
+        doc.text(pago.nombreAlumno || "N/A", 55, 64);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.text("Fecha de Pago Real:", 15, 72);
+        doc.setFont('Helvetica', 'bold');
+        doc.text(pago.fechaPagoReal || "N/A", 55, 72);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.text("Fecha de Consulta:", 15, 80);
+        doc.setFont('Helvetica', 'bold');
+        doc.text(fechaConsulta, 55, 80);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.text("Forma de Pago:", 15, 88);
+        doc.setFont('Helvetica', 'bold');
+        doc.text(pago.metodoAbono || "Transferencia / Efectivo", 55, 88);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.text("Facturación:", 15, 96);
+        doc.setFont('Helvetica', 'bold');
+        if (quiereFactura) {
+            doc.setTextColor(2, 132, 199); 
+        } else {
+            doc.setTextColor(100, 116, 139); 
+        }
+        doc.text(estadoFacturacion, 55, 96);
+
+        doc.setTextColor(50, 50, 50);
+        autoTable(doc, {
+            startY: 106,
+            theme: 'striped',
+            headStyles: { fillColor: [15, 23, 42], fontStyle: 'bold' },
+            head: [['Concepto', 'Estatus', 'Monto']],
+            body: [
+                ['Pago de colegiatura / Servicios Académicos', 'PAGADO', `$${Number(pago.montoTotal || 0).toLocaleString('es-MX')}`]
+            ],
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: { 2: { halign: 'right' } }
+        });
+
+        const finalY = (doc as any).lastAutoTable.finalY + 15;
+
+        doc.setDrawColor(0, 120, 215);
+        doc.setLineWidth(0.5);
+        doc.rect(15, finalY, 55, 16, 'D');
+        doc.setTextColor(0, 120, 215);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text("RECIBIDO POR SYSTEM", 18, finalY + 7);
+        doc.setFontSize(7);
+        doc.setFont('Helvetica', 'normal');
+        doc.text("Procesado de forma segura", 18, finalY + 12);
+
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`Total Liquidado: $${Number(pago.montoTotal || 0).toLocaleString('es-MX')} MXN`, 125, finalY + 9);
+
+        doc.setTextColor(150, 150, 150);
+        doc.setFontSize(8);
+        doc.text("Este documento es un comprobante oficial de control interno emitido por Goku Lab.", 15, 280);
+
+        doc.save(`Recibo_${pago.nombreAlumno.replace(/\s+/g, '_')}_${anioMesNomenclatura}.pdf`);
+        toast.success("Comprobante generado exitosamente en PDF");
+        };
+        toast.message('¿Desea Facturar?', {
+            description: `Recibo de: ${pago.nombreAlumno}`,
+            duration: 8000,
+            action: {
+                label: 'Sí, Facturar',
+                onClick: () => generarPDF(true),
+            },
+            cancel: {
+                label: 'No',
+                onClick: () => generarPDF(false),
+            },
+        });
+    };
 
     const handleChangeDate = async (pago: any) => {
         const nuevoDia = window.prompt(`Nuevo dia de pago para ${pago.nombreAlumno} (1-31):`, "1");
@@ -283,34 +428,43 @@ export function PagosPage() {
                     )}
                 </div>
 
-                {/* CONTENEDOR DE LA LISTA */}
+                {/* LISTA DE RENGLONES CON BOTÓN DE IMPRESIÓN INTEGRADO */}
                 <div className="flex flex-col gap-4">
                     {pagosFiltrados.length > 0 ? (
                         pagosFiltrados.map((p) => (
-                            <PaymentRow
-                                key={p.id}
-                                payment={p}
-                                onRegisterPayment={() => {
-                                    setSelectedPayment(p);
-                                    setIsModalOpen(true);
-                                }}
-                                onChangePaymentDate={() => handleChangeDate(p)}
-                            />
+                            <div key={p.id} className="relative group">
+                                <PaymentRow
+                                    payment={p}
+                                    onRegisterPayment={() => {
+                                        setSelectedPayment(p);
+                                        setIsModalOpen(true);
+                                    }}
+                                    onChangePaymentDate={() => handleChangeDate(p)}
+                                />
+
+                                {/* BOTÓN DE IMPRESIÓN */}
+                                {vista === 'registro' && (
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
+                                        <button
+                                            onClick={() => handleImprimirRecibo(p)}
+                                            className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm hover:bg-slate-900 transition-colors flex items-center gap-2"
+                                        >
+                                            🖨️ IMPRIMIR RECIBO
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ))
                     ) : (
-                        <div className="py-20 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200 shadow-sm">
+                        <div className="py-20 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200">
                             <p className="text-gray-400 font-medium">No se encontraron registros con los filtros aplicados.</p>
                         </div>
                     )}
                 </div>
 
-                {/* Modal de Registro */}
+                {/* MODAL */}
                 {isModalOpen && selectedPayment && (
-                    <RegisterPaymentModal
-                        payment={selectedPayment}
-                        onClose={() => setIsModalOpen(false)}
-                        onConfirm={handleConfirmarPago}
-                    />
+                    <RegisterPaymentModal payment={selectedPayment} onClose={() => setIsModalOpen(false)} onConfirm={handleConfirmarPago} />
                 )}
             </div>
         </div>
