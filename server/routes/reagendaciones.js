@@ -4,6 +4,7 @@ import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import { generarId } from "../utils/generarId.js";
+import { parseFechaFlexible } from "../utils/parseFechas.js";
 
 const router = express.Router();
 
@@ -76,25 +77,20 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Falta fechaHoraNueva" });
     }
 
-    // ✅ CAMBIO 1D: Parsear fechas como Date objects
-    const parseFecha = (valor) => {
-      if (!valor) return null;
-      const d = new Date(valor);
-      return !isNaN(d.getTime()) ? d : null;
-    };
-
-    const fechaOriginalDate = parseFecha(fechaHoraOriginal);
-    const fechaNuevaDate = parseFecha(fechaHoraNueva);
+    // ✅ CAMBIO 4: Usar parseador centralizado de fechas
+    // Reemplaza la lógica inline de parseFecha con la versión unificada
+    const fechaOriginalDate = parseFechaFlexible(fechaHoraOriginal);
+    const fechaNuevaDate = parseFechaFlexible(fechaHoraNueva);
 
     if (!fechaOriginalDate) {
       return res.status(400).json({ 
-        error: "fechaHoraOriginal no es una fecha válida" 
+        error: "fechaHoraOriginal no es una fecha válida (usa YYYY-MM-DD o ISO 8601)" 
       });
     }
 
     if (!fechaNuevaDate) {
       return res.status(400).json({ 
-        error: "fechaHoraNueva no es una fecha válida" 
+        error: "fechaHoraNueva no es una fecha válida (usa YYYY-MM-DD o ISO 8601)" 
       });
     }
 

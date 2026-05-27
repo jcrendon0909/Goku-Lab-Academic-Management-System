@@ -3,6 +3,7 @@ import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
 import Grupo from "../models/Grupo.js";
 import Pago from "../models/Pago.js";
+import { parseFechaFlexible } from "../utils/parseFechas.js";
 import {
   crearOActualizarPagoDeInscripcion,
   normalizarDatosPago,
@@ -52,27 +53,17 @@ router.post("/", async (req, res) => {
 
     const grupoIdTrimmed = String(grupoId).trim();
 
-    // ✅ CAMBIO 1C: Convertir fechaInscripcion a Date válido
-    // Si viene vacía o inválida, usa default del schema (new Date())
+    // ✅ CAMBIO 4: Usar parseador centralizado de fechas
+    // Soporta ISO 8601, SQL format, input date, y JavaScript Date strings
     let fechaInscripcionFinal = undefined;
     if (fechaInscripcion) {
-      const str = String(fechaInscripcion).trim();
-      
-      // Parsear múltiples formatos
-      let d = null;
-      
-      // Formato YYYY-MM-DD (input type="date")
-      const matchFecha = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (matchFecha) {
-        d = new Date(Number(matchFecha[1]), Number(matchFecha[2]) - 1, Number(matchFecha[3]));
-      } else {
-        // Dejar que new Date() lo intente parsear automáticamente
-        d = new Date(str);
-      }
-
-      // Validar que es una fecha válida
-      if (!isNaN(d.getTime())) {
+      const d = parseFechaFlexible(fechaInscripcion);
+      if (d && !isNaN(d.getTime())) {
         fechaInscripcionFinal = d;
+      } else {
+        return res.status(400).json({
+          error: "fechaInscripcion no es válida. Usa formato YYYY-MM-DD o ISO 8601"
+        });
       }
     }
 
