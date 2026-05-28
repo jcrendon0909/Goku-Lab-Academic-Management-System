@@ -99,7 +99,12 @@ router.post("/", async (req, res) => {
 
     // ✅ CAMBIO 3b: Validar que el alumno existe
     const alumnoExiste = await Alumno.findOne({
-      idAlumno: String(idAlumno).trim()
+      $or: [
+        { idAlumno: String(idAlumno).trim() },
+        { "idAlumno ": String(idAlumno).trim() },
+        { IdAlumno: String(idAlumno).trim() },
+        { id_alumno: String(idAlumno).trim() },
+      ]
     }).lean();
 
     if (!alumnoExiste) {
