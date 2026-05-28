@@ -3,6 +3,7 @@ import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
 import Grupo from "../models/Grupo.js";
 import Pago from "../models/Pago.js";
+import Alumno from "../models/Alumno.js";
 import { parseFechaFlexible } from "../utils/parseFechas.js";
 import {
   crearOActualizarPagoDeInscripcion,
@@ -97,7 +98,6 @@ router.post("/", async (req, res) => {
     }
 
     // ✅ CAMBIO 3b: Validar que el alumno existe
-    const Alumno = require("../models/Alumno.js").default;
     const alumnoExiste = await Alumno.findOne({
       idAlumno: String(idAlumno).trim()
     }).lean();
