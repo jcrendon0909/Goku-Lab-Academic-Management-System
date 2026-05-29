@@ -1,10 +1,61 @@
 import express from "express";
 import Pago from "../models/Pago.js";
+import Inscripcion from "../models/Inscripcion.js";
+import Grupo from "../models/Grupo.js";
+import {
+  cobroAunNoInicia,
+  construirPeriodosMensuales,
+  crearOActualizarPagoDeInscripcion,
+  crearPagoId,
+  indiceMes,
+} from "../utils/pagos.js";
 
 const router = express.Router();
 
+async function sincronizarPagosDesdeInscripciones() {
+  const inscripciones = await Inscripcion.find({
+    estatus: { $ne: "Baja" },
+    montoMensualidad: { $gt: 0 },
+  }).lean();
+
+  if (!inscripciones.length) return;
+
+  const grupos = await Grupo.find().lean();
+  const gruposMap = new Map();
+  for (const g of grupos) {
+    const id = String(g.IdGrupo || g.idGrupo || "").trim();
+    if (id) gruposMap.set(id.toUpperCase(), g);
+  }
+
+  for (const ins of inscripciones) {
+    const idAlumno = String(ins.idAlumno || "").trim();
+    const grupoId = String(ins.grupoId || ins.GrupoId || "").trim();
+    if (!idAlumno || !grupoId) continue;
+
+    const pagoId = crearPagoId(idAlumno, grupoId);
+    const existe = await Pago.findOne({ pagoId }).lean();
+    if (existe) continue;
+
+    const grupo = gruposMap.get(grupoId.toUpperCase());
+    await crearOActualizarPagoDeInscripcion({
+      idAlumno,
+      nombreAlumno: ins.nombreAlumno || idAlumno,
+      grupoId,
+      nombreCurso: grupo?.nombreCurso || "Curso",
+      datosPago: {
+        montoMensualidad: Number(ins.montoMensualidad),
+        diaPago: Number(ins.diaPago) || 1,
+        fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
+        comentarios: ins.comentarios || "",
+      },
+    });
+  }
+}
+
 router.get("/lista-completa", async (req, res) => {
     try {
+        await sincronizarPagosDesdeInscripciones();
+
         const hoy = new Date();
         const mesActual = hoy.getMonth();
         const anioActual = hoy.getFullYear();
@@ -27,7 +78,16 @@ router.get("/lista-completa", async (req, res) => {
                 }
             },
             {
-                // datos de cada alumno
+                $addFields: {
+                    diaPagoResuelto: {
+                        $ifNull: ["$diaPago", "$diaPagoFijo"]
+                    },
+                    fechaInicioResuelta: {
+                        $ifNull: ["$fechaInicioPago", "$fechaPago"]
+                    }
+                }
+            },
+            {
                 $project: {
                     _id: 0,
                     id: { $toUpper: { $trim: { input: "$pagoId" } } },
@@ -36,10 +96,22 @@ router.get("/lista-completa", async (req, res) => {
                     nombreAlumno: 1,
                     nombreCurso: 1,
                     montoTotal: { $toDouble: "$montoPago" },
-                    diaPagoFijo: 1,
-                    fechaPago: 1,
+                    diaPagoFijo: "$diaPagoResuelto",
+                    fechaPago: "$fechaInicioResuelta",
                     activo: { $ifNull: ["$activo", true] },
                     fechaBaja: 1,
+                    historialAbonos: {
+                        $map: {
+                            input: "$historialAbonos",
+                            as: "a",
+                            in: {
+                                abonoId: "$$a.abonoId",
+                                fechaAbono: "$$a.fechaAbono",
+                                montoAbono: { $toDouble: "$$a.montoAbono" },
+                                metodoAbono: "$$a.metodoAbono",
+                            }
+                        }
+                    },
                     montoPagado: {
                         $sum: {
                             $map: {
@@ -96,16 +168,69 @@ router.get("/lista-completa", async (req, res) => {
             }
         ]);
 
-        // Ajuste final para las fechas límite (se hace en JS porque depende de la fecha de hoy)
-        const resultadoFinal = respuestaProcesada.map(p => {
-            const ultimoDiaMes = new Date(anioActual, mesActual + 1, 0).getDate();
+        const resultadoFinal = respuestaProcesada.map((p) => {
+            const hoy = new Date();
             const diaPago = Number(p.diaPagoFijo) || 1;
-            const diaLimite = Math.min(Math.max(diaPago, 1), ultimoDiaMes);
+            const fechaInicio = p.fechaPago ? new Date(p.fechaPago) : null;
+            const programado =
+              fechaInicio && cobroAunNoInicia(fechaInicio, hoy);
+
+            const periodosMensuales = construirPeriodosMensuales({
+              fechaInicioCobro: fechaInicio,
+              diaPagoFijo: diaPago,
+              montoMensualidad: p.montoTotal,
+              abonos: p.historialAbonos || [],
+              hoy,
+              mesesFuturosVisibles: 0,
+            });
+
+            const periodoVigente =
+              periodosMensuales.find((mes) => {
+                const idx = indiceMes(new Date(mes.vencimiento));
+                return idx === indiceMes(hoy);
+              }) ||
+              periodosMensuales.find((mes) => mes.status !== "Programado") ||
+              periodosMensuales[0];
+
+            let status = p.status;
+            let saldo = p.saldo < 0 ? 0 : p.saldo;
+            let fechaLimite = periodoVigente?.vencimiento || p.fechaPago;
+
+            if (p.activo === false) {
+              status = "Baja";
+              saldo = 0;
+            } else if (programado) {
+              status = "Programado";
+              const primerMes =
+                periodosMensuales.find((mes) => mes.status === "Programado") ||
+                periodosMensuales[0];
+              saldo = Number(
+                primerMes?.saldo ?? primerMes?.monto ?? p.montoTotal ?? 0
+              );
+              fechaLimite = primerMes?.vencimiento || fechaLimite;
+            } else if (periodoVigente) {
+              fechaLimite = periodoVigente.vencimiento;
+              saldo = periodoVigente.saldo;
+              if (periodoVigente.status === "Pagado") status = "Pagado";
+              else if (periodoVigente.status === "Parcial") status = "Parcial";
+              else if (periodoVigente.status === "Pendiente") status = "Pendiente";
+            }
 
             return {
-                ...p,
-                saldo: p.saldo < 0 ? 0 : p.saldo,
-                fechaLimite: new Date(anioActual, mesActual, diaLimite).toISOString()
+              ...p,
+              status,
+              saldo,
+              fechaLimite,
+              periodosMensuales,
+              mesCobroVigente:
+                periodoVigente?.nombreMes ||
+                (fechaInicio
+                  ? fechaInicio.toLocaleDateString("es-MX", {
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : ""),
+              cobroProgramado: programado,
             };
         });
 
@@ -135,8 +260,8 @@ router.patch("/actualizar-dia/:id", async (req, res) => {
         const resultado = await Pago.findOneAndUpdate(
             { pagoId: id },
             {
-                diaPagoFijo: Number(nuevoDia),
-                fechaPago: new Date(hoy.getFullYear(), hoy.getMonth(), diaPago)
+                diaPago: Number(nuevoDia),
+                fechaInicioPago: new Date(hoy.getFullYear(), hoy.getMonth(), diaPago)
             },
             { new: true }
         );

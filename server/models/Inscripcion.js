@@ -28,7 +28,15 @@ const inscripcionSchema = new mongoose.Schema(
       type: Date, 
       required: true,
       default: () => new Date()
-    }
+    },
+    estatus: {
+      type: String,
+      enum: ["Activa", "Baja"],
+      default: "Activa",
+      index: true,
+    },
+    fechaBaja: { type: Date, default: null },
+    motivoBaja: { type: String, default: "" },
   },
   {
     collection: "inscripciones",

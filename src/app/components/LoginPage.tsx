@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, User } from 'lucide-react';
 import { loginService } from '../../services/api';
+import { rutaInicialPorRol } from '../../utils/auth';
 
 export function LoginPage() {
     const [usuario, setUsuario] = useState('');
@@ -16,9 +17,9 @@ export function LoginPage() {
         setCargando(true);
 
         try {
-            await loginService(usuario, password);
+            const data = await loginService(usuario, password);
             toast.success('Bienvenido al sistema');
-            navigate('/pagos');
+            navigate(rutaInicialPorRol(data?.user?.rol));
         } catch (error: any) {
             toast.error(error.message || 'Credenciales incorrectas');
         } finally {

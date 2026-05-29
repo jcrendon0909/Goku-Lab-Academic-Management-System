@@ -1,5 +1,6 @@
 # --- SEGURIDAD ---
 .env
+server/.env
 *.pem
 *.key
 

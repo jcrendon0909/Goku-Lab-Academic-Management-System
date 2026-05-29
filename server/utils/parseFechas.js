@@ -25,13 +25,18 @@ export function parseFechaFlexible(valor) {
     return d;
   }
 
+  // Formato YYYY-MM (input type="month" — primer mes de cobro)
+  const matchMes = str.match(/^(\d{4})-(\d{2})$/);
+  if (matchMes) {
+    const [, y, mo] = matchMes;
+    return new Date(Number(y), Number(mo) - 1, 1, 0, 0, 0, 0);
+  }
+
   // Formato YYYY-MM-DD (input type="date")
   const matchFecha = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (matchFecha) {
-    // Crear a las 00:00 UTC (que es 18:00 del día anterior en UTC-6)
-    // Pero queremos que se interprete como medianoche local
     const [, y, mo, d] = matchFecha;
-    return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), 0, 0, 0));
+    return new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
   }
 
   // Formato YYYY-MM-DD HH:mm o YYYY-MM-DD HH:mm:ss

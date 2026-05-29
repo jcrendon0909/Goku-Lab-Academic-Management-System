@@ -6,6 +6,12 @@ import {
   getProfesores,
 } from "../../services/api";
 import { toast } from "sonner";
+import {
+  mesCobroAFechaInicio,
+  toDateInputValue,
+  toMonthInputValue,
+  validarFechasInscripcion,
+} from "../../utils/fechasInscripcion";
 
 interface NuevoGrupoFormProps {
   onClose: () => void;
@@ -63,13 +69,10 @@ export default function NuevoGrupoForm({
     "Presencial"
   );
   const [montoMensualidad, setMontoMensualidad] = useState("");
-  const [fechaPago, setFechaPago] = useState(() => {
-    const hoy = new Date();
-    const y = hoy.getFullYear();
-    const m = String(hoy.getMonth() + 1).padStart(2, "0");
-    const d = String(hoy.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  });
+  const [diaPago, setDiaPago] = useState("5");
+  const [primerMesCobro, setPrimerMesCobro] = useState(() =>
+    toMonthInputValue(new Date())
+  );
 
   const [nombreAlumnoNuevo, setNombreAlumnoNuevo] = useState("");
   const [telefonoAlumnoNuevo, setTelefonoAlumnoNuevo] = useState("");
@@ -168,7 +171,9 @@ export default function NuevoGrupoForm({
     Boolean(horaClase) &&
     Number(capacidadMaxima) > 0 &&
     Number(montoMensualidad) > 0 &&
-    Boolean(fechaPago) &&
+    Boolean(primerMesCobro) &&
+    Number(diaPago) >= 1 &&
+    Number(diaPago) <= 31 &&
     (modoAlumno === "existente"
       ? Boolean(alumnoSeleccionado)
       : Boolean(nombreAlumnoNuevo.trim()));
@@ -215,8 +220,25 @@ export default function NuevoGrupoForm({
         return;
       }
 
-      if (!fechaPago) {
-        toast.error("Captura la fecha de pago");
+      if (!primerMesCobro) {
+        toast.error("Indica el primer mes de cobro");
+        setGuardando(false);
+        return;
+      }
+
+      const errorFechas = validarFechasInscripcion(
+        fechaCreacion,
+        primerMesCobro
+      );
+      if (errorFechas) {
+        toast.error(errorFechas);
+        setGuardando(false);
+        return;
+      }
+
+      const diaPagoNumero = Number(diaPago);
+      if (!Number.isInteger(diaPagoNumero) || diaPagoNumero < 1 || diaPagoNumero > 31) {
+        toast.error("El día de pago debe ser entre 1 y 31");
         setGuardando(false);
         return;
       }
@@ -233,11 +255,13 @@ export default function NuevoGrupoForm({
           comentario: comentarioGrupo,
           capacidadMaxima: Number(capacidadMaxima),
           Estatus: "Activo",
-          fechaCreacion,
+          fechaCreacion: toDateInputValue(new Date()),
         },
+        fechaInscripcion: fechaCreacion,
         datosPago: {
           montoMensualidad: montoPagoNumero,
-          fechaPago,
+          diaPago: diaPagoNumero,
+          fechaInicioPago: mesCobroAFechaInicio(primerMesCobro),
         },
       };
 
@@ -438,7 +462,7 @@ export default function NuevoGrupoForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha de creación del grupo
+                Desde qué día empieza su clase
               </label>
               <input
                 type="date"
@@ -654,12 +678,26 @@ export default function NuevoGrupoForm({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha de pago
+                Día de pago (1-31)
               </label>
               <input
-                type="date"
-                value={fechaPago}
-                onChange={(e) => setFechaPago(e.target.value)}
+                type="number"
+                min={1}
+                max={31}
+                value={diaPago}
+                onChange={(e) => setDiaPago(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Primer mes de cobro
+              </label>
+              <input
+                type="month"
+                value={primerMesCobro}
+                onChange={(e) => setPrimerMesCobro(e.target.value)}
                 className="w-full border p-2 rounded bg-white"
               />
             </div>

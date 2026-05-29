@@ -40,7 +40,6 @@ export default function ReagendacionForm({
   const [duracion, setDuracion] = useState("2 horas");
   const [modalidad, setModalidad] = useState(data?.alumno?.modalidad || "Presencial");
   const [idProfesorNuevo, setIdProfesorNuevo] = useState("");
-  const [comentario, setComentario] = useState("");
   const [tipoReagendacion, setTipoReagendacion] = useState<"temporal" | "permanente">("temporal");
   const [guardando, setGuardando] = useState(false);
   const [grupoSugerido, setGrupoSugerido] = useState<any>(null);
@@ -68,8 +67,6 @@ export default function ReagendacionForm({
     data?.clase?.IdgrupoOrigen ||
     data?.clase?.GrupoId ||
     data?.clase?.groupId ||
-    data?.clase?.id ||
-    data?.clase?._id ||
     "";
 
   const diaNuevo = useMemo(() => obtenerNombreDia(fecha), [fecha]);
@@ -180,13 +177,24 @@ export default function ReagendacionForm({
           .replace(/\s+/g, "_")
           .replace(/[^A-Za-z0-9_\-]/g, "");
 
-      // ✅ CAMBIO 1: Formatear fechas correctamente para backend (ISO 8601)
-      // data.clase.date es un Date object, convertir a ISO
+      // Fechas en hora local (sin Z) para evitar desfase UTC en el calendario
+      const fechaHoraLocal = (d: Date, horaStr: string) => {
+        const [h = 0, m = 0] = horaStr.split(":").map((x) => parseInt(x, 10));
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const hh = String(h).padStart(2, "0");
+        const mm = String(m).padStart(2, "0");
+        return `${y}-${mo}-${day}T${hh}:${mm}:00`;
+      };
+
       const fechaOriginal = data.clase.date ? new Date(data.clase.date) : new Date();
-      const fechaOriginalISO = `${fechaOriginal.getFullYear()}-${String(fechaOriginal.getMonth() + 1).padStart(2, "0")}-${String(fechaOriginal.getDate()).padStart(2, "0")}T${data.clase.startTime || "00:00"}:00Z`;
-      
-      // fecha y hora nuevas
-      const fechaNuevaISO = `${fecha}T${hora}:00Z`;
+      const horaClaseOrigen = String(data.clase.startTime || "00:00").trim();
+      const fechaOriginalISO = fechaHoraLocal(fechaOriginal, horaClaseOrigen);
+
+      const [anio, mes, dia] = fecha.split("-").map(Number);
+      const fechaNuevaDate = new Date(anio, mes - 1, dia);
+      const fechaNuevaISO = fechaHoraLocal(fechaNuevaDate, hora);
 
       const payload = {
         idAlumno: data.alumno.idAlumno,
@@ -208,7 +216,7 @@ export default function ReagendacionForm({
         duracion: duracion,
         modalidad: modalidad,
         tipoReagendacion: tipoReagendacion, // ✅ CAMBIO 7: Usuario elige tipo
-        comentario: comentario.trim(),
+        comentario: "",
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
           : "Reagendado a clase virtual",
@@ -220,20 +228,27 @@ export default function ReagendacionForm({
       const respuesta = await crearReagendacion(payload);
       console.log("RESPUESTA SERVIDOR:", respuesta);
 
-      alert(
-        grupoSugerido
-          ? "Reagendación guardada en un grupo existente"
-          : "Reagendación guardada como nueva clase reagendada"
-      );
+      if (respuesta?.permanente) {
+        alert(
+          respuesta.mensaje ||
+            "Reagendación permanente aplicada. El alumno fue movido al nuevo grupo."
+        );
+      } else {
+        alert(
+          grupoSugerido
+            ? "Reagendación temporal guardada en un grupo existente"
+            : "Reagendación temporal guardada como clase reagendada"
+        );
+      }
 
       if (onSuccess) {
         onSuccess();
       } else {
         onClose();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("ERROR EN handleSubmit:", error);
-      alert("Error al guardar la reagendación");
+      alert(error?.message || "Error al guardar la reagendación");
     } finally {
       setGuardando(false);
       console.log("========== FIN DEBUG ==========");
@@ -254,7 +269,6 @@ Nueva fecha: ${fecha || "[pendiente]"}
 Nueva hora: ${hora || "[pendiente]"}
 Duración: ${duracion}
 Profesor sugerido: ${profesorFinal || "[pendiente]"}
-Comentario: ${comentario.trim() || "[sin comentario]"}
 
 ${
   grupoSugerido
@@ -399,19 +413,6 @@ ${
                 ))}
               </select>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Comentario de reagendacion
-            </label>
-            <textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              rows={3}
-              className="w-full border-2 border-gray-300 p-3 rounded-lg focus:outline-none focus:border-cyan-500 bg-white"
-              placeholder="Motivo, acuerdos o notas importantes de esta reagendacion"
-            />
           </div>
 
           <div>

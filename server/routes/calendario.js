@@ -4,10 +4,14 @@ import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
 import ClaseCancelada from "../models/ClaseCancelada.js";
 import Profesor from "../models/Profesor.js";
+import Curso from "../models/Curso.js";
+import { extraerFecha } from "../utils/parseFechas.js";
 
 const router = express.Router();
 
 const normalizar = (valor) => String(valor || "").trim().toUpperCase();
+
+const idReagendacion = (r) => String(r.ReagendacionId || r._id || "");
 
 const limpiarFecha = (valor) => {
   if (!valor) return "";
@@ -124,19 +128,27 @@ router.get("/", async (req, res) => {
   try {
     const gruposRaw = await Grupo.find().lean();
     const inscripcionesRaw = await Inscripcion.find().lean();
-    const reagendacionesRaw = await Reagendacion.find().lean();
+    const reagendacionesRaw = (await Reagendacion.find().lean()).filter(
+      (r) =>
+        String(r.tipoReagendacion || "temporal").trim().toLowerCase() !==
+        "permanente"
+    );
     const clasesCanceladasRaw = await ClaseCancelada.find({ estatus: "activa" }).lean();
     const profesoresRaw = await Profesor.find().lean();
+    const cursosRaw = await Curso.find().lean();
 
     const gruposMap = new Map();
     const profesoresMap = new Map();
     const profesoresNombreMap = new Map();
+    const cursosMap = new Map();
+    const cursosNombreMap = new Map();
     
     // ✅ CAMBIO 5: Crear mapa de clases canceladas para búsqueda rápida
     // Estructura: "${grupoId}|YYYY-MM-DD" → true
     const clasesCanceladasMap = new Map();
     for (const cancelacion of clasesCanceladasRaw) {
-      const fechaStr = cancelacion.fecha.toISOString().split("T")[0];
+      const fechaStr = extraerFecha(cancelacion.fecha);
+      if (!fechaStr) continue;
       const key = `${normalizar(cancelacion.idGrupo)}|${fechaStr}`;
       clasesCanceladasMap.set(key, true);
     }
@@ -154,6 +166,18 @@ router.get("/", async (req, res) => {
       }
     }
 
+    for (const curso of cursosRaw) {
+      const idCurso = curso.idCurso || curso.IdCurso || "";
+      const nombreCurso = curso.nombreCurso || curso.nombre || "";
+
+      if (idCurso) {
+        cursosMap.set(normalizar(idCurso), curso);
+      }
+      if (nombreCurso) {
+        cursosNombreMap.set(normalizar(nombreCurso), curso);
+      }
+    }
+
     for (const grupo of gruposRaw) {
       const key = normalizar(grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId);
       if (key && !gruposMap.has(key)) {
@@ -163,23 +187,57 @@ router.get("/", async (req, res) => {
 
     const grupos = Array.from(gruposMap.values());
 
-    const obtenerNombreProfesorCompleto = ({
-      idProfesor,
-      nombreProfesor,
-    }) => {
+    const resolverProfesor = ({ idProfesor, nombreProfesor }) => {
       const profesorPorId = profesoresMap.get(normalizar(idProfesor || ""));
       if (profesorPorId?.nombre) {
-        return profesorPorId.nombre;
+        return profesorPorId;
       }
 
       const profesorPorNombre = profesoresNombreMap.get(
         normalizar(nombreProfesor || "")
       );
       if (profesorPorNombre?.nombre) {
-        return profesorPorNombre.nombre;
+        return profesorPorNombre;
       }
 
-      return nombreProfesor || "";
+      return null;
+    };
+
+    const obtenerNombreProfesorCompleto = ({ idProfesor, nombreProfesor }) => {
+      const profesor = resolverProfesor({ idProfesor, nombreProfesor });
+      return profesor?.nombre || nombreProfesor || "";
+    };
+
+    // Una clase "requiere atención" en su profesor cuando no hay profesor asignado
+    // o cuando el profesor del catálogo está Inactivo. Si el profesor tiene nombre
+    // pero no está en el catálogo, NO se marca (puede ser un dato heredado).
+    const profesorEstaActivo = ({ idProfesor, nombreProfesor }) => {
+      const sinProfesor =
+        !String(nombreProfesor || "").trim() && !String(idProfesor || "").trim();
+      if (sinProfesor) return false;
+
+      const profesor = resolverProfesor({ idProfesor, nombreProfesor });
+      if (!profesor) return true; // tiene nombre pero no está catalogado
+      return String(profesor.estatus || "Activo").toLowerCase() === "activo";
+    };
+
+    const resolverCurso = ({ idCurso, nombreCurso }) => {
+      const porId = cursosMap.get(normalizar(idCurso || ""));
+      if (porId) return porId;
+      const porNombre = cursosNombreMap.get(normalizar(nombreCurso || ""));
+      if (porNombre) return porNombre;
+      return null;
+    };
+
+    // Igual que con profesores: se marca si no hay curso o si el curso está Inactivo.
+    const cursoEstaActivo = ({ idCurso, nombreCurso }) => {
+      const sinCurso =
+        !String(nombreCurso || "").trim() && !String(idCurso || "").trim();
+      if (sinCurso) return false;
+
+      const curso = resolverCurso({ idCurso, nombreCurso });
+      if (!curso) return true; // tiene nombre pero no está catalogado
+      return String(curso.estatus || "Activo").toLowerCase() === "activo";
     };
 
     const clasesBase = grupos.map((grupo) => {
@@ -195,29 +253,35 @@ router.get("/", async (req, res) => {
         nombreProfesor: grupo.nombreProfesor,
       });
 
+      const profesorActivo = profesorEstaActivo({
+        idProfesor: idProfesorGrupo,
+        nombreProfesor: grupo.nombreProfesor,
+      });
+
+      const cursoActivo = cursoEstaActivo({
+        idCurso: grupo.idCurso || grupo.IdCurso || "",
+        nombreCurso: grupo.nombreCurso,
+      });
+
       const alumnosBase = inscripcionesRaw
         .filter((ins) => {
+          const estatus = String(ins.estatus || "").trim().toLowerCase();
+          if (estatus === "baja") return false;
+
           const grupoInscripcion = normalizar(
             ins.GrupoId || ins.grupoId || ins.idGrupo || ins.IdGrupo
           );
-          
-          // ✅ CAMBIO 8: Filtro de fecha preciso
-          // Solo mostrar alumno si fechaInscripcion <= hoy
-          if (grupoInscripcion === grupoKey) {
-            const fechaInscripcion = ins.fechaInscripcion ? new Date(ins.fechaInscripcion) : null;
-            // Si no hay fecha o la fecha es en el pasado, mostrar
-            if (!fechaInscripcion || fechaInscripcion.getTime() <= Date.now()) {
-              return true;
-            }
-          }
-          
-          return false;
+
+          // La visibilidad por fecha la resuelve el calendario (por evento)
+          return grupoInscripcion === grupoKey;
         })
         .map((a) => ({
           idAlumno: a.idAlumno || a.id_alumno || "",
           nombreAlumno: a.nombreAlumno || a.nombre || a.Alumno || "",
           modalidad: a.modalidad || "Presencial",
           comentarios: a.comentarios || "",
+          grupoIdInscripcion:
+            grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId || "",
           inscripcionCreadaEn: a.fechaInscripcion || a.createdAt || a.updatedAt || null,
           reagendacion: null,
         }));
@@ -235,12 +299,29 @@ router.get("/", async (req, res) => {
             )
           );
 
+          const grupoOrigenIns =
+        r.idGrupoOrigen ||
+        r.IdgrupoOrigen ||
+        r.IdGrupoOrigen ||
+        "";
+          const insOrigenAlumno = inscripcionesRaw.find(
+            (ins) =>
+              normalizar(ins.idAlumno || ins.id_alumno || "") ===
+                normalizar(r.idAlumno || "") &&
+              normalizar(
+                ins.GrupoId || ins.grupoId || ins.idGrupo || ins.IdGrupo || ""
+              ) === normalizar(grupoOrigenIns)
+          );
+
           return {
             idAlumno: r.idAlumno || "",
             nombreAlumno: r.nombreAlumno || "",
+            modalidad: insOrigenAlumno?.modalidad || r.modalidad || "Presencial",
+            comentarios: insOrigenAlumno?.comentarios || "",
+            grupoIdInscripcion: grupoOrigenIns,
             reagendacion: {
               tipo: "origen",
-              reagendacionId: String(r._id || r.ReagendacionId || ""),
+              reagendacionId: idReagendacion(r),
               comentario: r.comentario || r.comentarios || "",
               // ✅ CAMBIO: Ahora fechas son Date objects, procesar directamente
               fechaHoraOriginal: r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal).toISOString() : "",
@@ -291,8 +372,11 @@ router.get("/", async (req, res) => {
         duracion: duracion,
         fechaCreacion: grupo.fechaCreacion || null,
         comentarioGrupo: grupo.comentario || grupo.comentarioGrupo || "",
+        idCurso: grupo.idCurso || grupo.IdCurso || "",
+        cursoActivo: cursoActivo,
         idProfesor: idProfesorGrupo,
         nombreProfesor: nombreProfesorCompleto,
+        profesorActivo: profesorActivo,
         capacidadMaxima: grupo.CapacidadMaxima,
         alumnosInscritos: alumnos.length,
         alumnos,
@@ -367,12 +451,17 @@ router.get("/", async (req, res) => {
           alumnos: [],
           reagendacionIds: [],
           reagendacionId: "",
+          idGrupoOrigen:
+            r.idGrupoOrigen ||
+            r.IdgrupoOrigen ||
+            r.IdGrupoOrigen ||
+            "",
           estatus: "Reagendado",
           esVirtual: !grupoNuevo,
         };
       }
 
-      const reagendacionId = String(r._id || r.ReagendacionId || "");
+      const reagendacionId = idReagendacion(r);
       if (
         reagendacionId &&
         !reagendacionesAgrupadas[key].reagendacionIds.includes(reagendacionId)
@@ -397,10 +486,26 @@ router.get("/", async (req, res) => {
         "";
 
       // ✅ CAMBIO: Parsear fechas que ahora son Date objects
+      const grupoOrigenIns =
+        r.idGrupoOrigen ||
+        r.IdgrupoOrigen ||
+        r.IdGrupoOrigen ||
+        "";
+      const insOrigen = inscripcionesRaw.find(
+        (ins) =>
+          normalizar(ins.idAlumno || ins.id_alumno || "") ===
+            normalizar(r.idAlumno || "") &&
+          normalizar(
+            ins.GrupoId || ins.grupoId || ins.idGrupo || ins.IdGrupo || ""
+          ) === normalizar(grupoOrigenIns)
+      );
+
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
-        modalidad: r.modalidad || "Presencial",
+        modalidad: insOrigen?.modalidad || r.modalidad || "Presencial",
+        comentarios: insOrigen?.comentarios || "",
+        grupoIdInscripcion: grupoOrigenIns,
         reagendacion: {
           tipo: "destino",
           reagendacionId,
@@ -429,10 +534,12 @@ router.get("/", async (req, res) => {
     res.json({
       clasesBase,
       reagendaciones: clasesReagendadas,
-      clasesCanceladas: Array.from(clasesCanceladasMap.entries()).map(([key, _]) => {
-        const [grupoId, fechaStr] = key.split("|");
-        return { grupoId, fecha: fechaStr };
-      }),
+      clasesCanceladas: clasesCanceladasRaw.map((cancelacion) => ({
+        grupoId: cancelacion.idGrupo,
+        fecha: extraerFecha(cancelacion.fecha),
+        claseCanceladaId: cancelacion.claseCanceladaId,
+        motivo: cancelacion.motivo || "",
+      })),
     });
   } catch (error) {
     console.error("Error al construir calendario:", error);

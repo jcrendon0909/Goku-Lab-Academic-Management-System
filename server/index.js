@@ -1,29 +1,39 @@
-import 'dotenv/config';
-console.log("CONTENIDO DE LA URI:", process.env.MONGODB_URI);
-
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
+import { verifyToken, requireRole } from "./middleware/auth.js";
 import gruposRoutes from "./routes/grupos.js";
 import inscripcionesRoutes from "./routes/inscripciones.js";
 import reagendacionesRoutes from "./routes/reagendaciones.js";
 import calendarioRoutes from "./routes/calendario.js";
 import clasesCanceladasRoutes from "./routes/clases-canceladas.js";
 import notificacionesRoutes from "./routes/notificaciones.js";
-import pagosRoutes from './routes/pagos.js';
+import pagosRoutes from "./routes/pagos.js";
 import abonosRouter from "./routes/abonos.js";
 import profesoresRoutes from "./routes/profesores.js";
 import alumnosRoutes from "./routes/alumnos.js";
 import cursosRoutes from "./routes/cursos.js";
-
 import authRoutes from "./routes/auth.js";
 
 dotenv.config({ path: "./server/.env" });
 
 const app = express();
 
-app.use(cors());
+const corsOrigins =
+  process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean) ||
+  [];
+
+app.use(
+  cors({
+    origin:
+      process.env.NODE_ENV === "production" && corsOrigins.length > 0
+        ? corsOrigins
+        : true,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 connectDB();
@@ -33,17 +43,28 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/grupos", gruposRoutes);
-app.use("/api/inscripciones", inscripcionesRoutes);
-app.use("/api/reagendaciones", reagendacionesRoutes);
-app.use("/api/calendario", calendarioRoutes);
-app.use("/api/clases-canceladas", clasesCanceladasRoutes);
-app.use("/api/notificaciones", notificacionesRoutes);
-app.use('/api/pagos', pagosRoutes);
-app.use("/api/abonos", abonosRouter);
-app.use("/api/profesores", profesoresRoutes);
-app.use("/api/alumnos", alumnosRoutes);
-app.use("/api/cursos", cursosRoutes);
+
+const apiProtegida = express.Router();
+apiProtegida.use(verifyToken);
+
+// Solo lectura del calendario: accesible para admin y profesor
+apiProtegida.use("/calendario", calendarioRoutes);
+
+// Recursos de administración: exclusivos del rol admin
+const soloAdmin = requireRole("admin");
+apiProtegida.use("/grupos", soloAdmin, gruposRoutes);
+apiProtegida.use("/inscripciones", soloAdmin, inscripcionesRoutes);
+apiProtegida.use("/reagendaciones", soloAdmin, reagendacionesRoutes);
+apiProtegida.use("/clases-canceladas", soloAdmin, clasesCanceladasRoutes);
+apiProtegida.use("/notificaciones", soloAdmin, notificacionesRoutes);
+apiProtegida.use("/pagos", soloAdmin, pagosRoutes);
+apiProtegida.use("/abonos", soloAdmin, abonosRouter);
+apiProtegida.use("/profesores", soloAdmin, profesoresRoutes);
+apiProtegida.use("/alumnos", soloAdmin, alumnosRoutes);
+apiProtegida.use("/cursos", soloAdmin, cursosRoutes);
+
+app.use("/api", apiProtegida);
+
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {

@@ -1,42 +1,101 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   crearAlumno,
+  crearGrupoConAlumno,
   crearInscripcion,
   getAlumnos,
+  getCursos,
+  getProfesores,
 } from "../../services/api";
+import {
+  mesCobroAFechaInicio,
+  toDateInputValue,
+  toMonthInputValue,
+  validarFechasInscripcion,
+} from "../../utils/fechasInscripcion";
 
 interface InscripcionFormProps {
-  classData: any;
+  /** Si viene del calendario, el grupo queda fijo */
+  classData?: any | null;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Preseleccionar alumno (desde Alumnos inscritos) */
+  alumnoInicial?: {
+    idAlumno: string;
+    nombreAlumno?: string;
+    nombre?: string;
+  } | null;
 }
 
+function normalizar(valor: string) {
+  return String(valor || "").trim().toUpperCase();
+}
+
+const DIAS_SEMANA = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+];
+
+const DURACIONES_CLASE = [
+  "1 hora",
+  "1:30 hr",
+  "2 horas",
+  "2:30 horas",
+  "3 horas",
+  "3:30 horas",
+];
+
 export default function InscripcionForm({
-  classData,
+  classData = null,
   onClose,
   onSuccess,
+  alumnoInicial = null,
 }: InscripcionFormProps) {
+  const modoLibre = !classData;
+
   const [modo, setModo] = useState<"existente" | "nuevo">("existente");
   const [busqueda, setBusqueda] = useState("");
   const [alumnosEncontrados, setAlumnosEncontrados] = useState<any[]>([]);
-  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any | null>(null);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any | null>(
+    alumnoInicial
+      ? {
+          idAlumno: alumnoInicial.idAlumno,
+          nombreAlumno:
+            alumnoInicial.nombreAlumno || alumnoInicial.nombre || "",
+        }
+      : null
+  );
 
   const [nombreAlumno, setNombreAlumno] = useState("");
   const [telefono, setTelefono] = useState("");
   const [tutor, setTutor] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [modalidad, setModalidad] = useState("Presencial");
-  const [fechaInscripcion, setFechaInscripcion] = useState<string>("");
+  const [fechaInscripcion, setFechaInscripcion] = useState("");
+  const [primerMesCobro, setPrimerMesCobro] = useState("");
   const [montoMensualidad, setMontoMensualidad] = useState("");
   const [diaPago, setDiaPago] = useState<string>("5");
-  const [fechaInicioPago, setFechaInicioPago] = useState<string>("");
+
+  const [cursos, setCursos] = useState<any[]>([]);
+  const [profesores, setProfesores] = useState<any[]>([]);
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(modoLibre);
+  const [idCursoFiltro, setIdCursoFiltro] = useState("");
+  const [idProfesorFiltro, setIdProfesorFiltro] = useState("");
+  const [diaClaseSeleccionado, setDiaClaseSeleccionado] = useState("");
+  const [horaClaseSeleccionada, setHoraClaseSeleccionada] = useState("");
+  const [duracionClaseSeleccionada, setDuracionClaseSeleccionada] =
+    useState("2 horas");
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
 
-  const grupoId = useMemo(() => {
+  const grupoIdDesdeClase = useMemo(() => {
     if (!classData) return "";
-
     return (
       classData?.idGrupo ||
       classData?.IdGrupo ||
@@ -48,31 +107,109 @@ export default function InscripcionForm({
     );
   }, [classData]);
 
-  // Valor para el input tipo="date" (YYYY-MM-DD)
-  const toDateInputValue = (value: any) => {
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return "";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
+  const cursoSeleccionado = useMemo(
+    () =>
+      cursos.find(
+        (c) => normalizar(c.idCurso) === normalizar(idCursoFiltro)
+      ) || null,
+    [cursos, idCursoFiltro]
+  );
+
+  const profesorSeleccionado = useMemo(
+    () =>
+      profesores.find(
+        (p) => normalizar(p.idProfesor) === normalizar(idProfesorFiltro)
+      ) || null,
+    [profesores, idProfesorFiltro]
+  );
+
+  const horarioCompleto = useMemo(
+    () =>
+      Boolean(
+        cursoSeleccionado &&
+          profesorSeleccionado &&
+          diaClaseSeleccionado &&
+          horaClaseSeleccionada &&
+          duracionClaseSeleccionada
+      ),
+    [
+      cursoSeleccionado,
+      profesorSeleccionado,
+      diaClaseSeleccionado,
+      horaClaseSeleccionada,
+      duracionClaseSeleccionada,
+    ]
+  );
 
   useEffect(() => {
-    // Default: día de la clase seleccionada en el calendario.
+    const hoy = toDateInputValue(new Date());
     if (classData?.date) {
-      setFechaInscripcion(toDateInputValue(classData.date));
-      setFechaInicioPago((actual) => actual || toDateInputValue(new Date()));
+      const fechaClase = toDateInputValue(classData.date);
+      setFechaInscripcion(fechaClase);
+      setPrimerMesCobro(toMonthInputValue(classData.date));
       return;
     }
-    setFechaInscripcion(toDateInputValue(new Date()));
-    setFechaInicioPago((actual) => actual || toDateInputValue(new Date()));
+    setFechaInscripcion(hoy);
+    setPrimerMesCobro(toMonthInputValue(new Date()));
   }, [classData]);
 
   useEffect(() => {
-    const buscar = async () => {
-      if (modo !== "existente") return;
+    if (!fechaInscripcion) return;
+    const mesClase = toMonthInputValue(fechaInscripcion);
+    if (!primerMesCobro) {
+      setPrimerMesCobro(mesClase);
+      return;
+    }
+    if (validarFechasInscripcion(fechaInscripcion, primerMesCobro)) {
+      setPrimerMesCobro(mesClase);
+    }
+  }, [fechaInscripcion]);
 
+  useEffect(() => {
+    if (!modoLibre) return;
+
+    const cargar = async () => {
+      try {
+        setCargandoCatalogos(true);
+        const [cursosResp, profesoresResp] = await Promise.all([
+          getCursos(),
+          getProfesores(),
+        ]);
+
+        const cursosActivos = (cursosResp || [])
+          .map((curso: any) => ({
+            idCurso: curso.idCurso || curso.IdCurso || "",
+            nombreCurso: curso.nombreCurso || curso.nombre || "",
+          }))
+          .filter((c: any) => c.nombreCurso)
+          .sort((a: any, b: any) =>
+            a.nombreCurso.localeCompare(b.nombreCurso, "es")
+          );
+
+        const profesoresActivos = (profesoresResp || [])
+          .map((prof: any) => ({
+            idProfesor: prof.idProfesor || prof.IdProfesor || "",
+            nombre: prof.nombre || prof.nombreProfesor || "",
+          }))
+          .filter((p: any) => p.nombre)
+          .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre, "es"));
+
+        setCursos(cursosActivos);
+        setProfesores(profesoresActivos);
+      } catch (error) {
+        console.error("Error al cargar catálogos:", error);
+      } finally {
+        setCargandoCatalogos(false);
+      }
+    };
+
+    cargar();
+  }, [modoLibre]);
+
+  useEffect(() => {
+    if (modo !== "existente" || alumnoInicial) return;
+
+    const buscar = async () => {
       try {
         setBuscando(true);
         const alumnos = await getAlumnos(busqueda);
@@ -86,13 +223,19 @@ export default function InscripcionForm({
     };
 
     buscar();
-  }, [busqueda, modo]);
+  }, [busqueda, modo, alumnoInicial]);
 
   useEffect(() => {
     if (modo === "nuevo") {
       setAlumnoSeleccionado(null);
+    } else if (alumnoInicial) {
+      setAlumnoSeleccionado({
+        idAlumno: alumnoInicial.idAlumno,
+        nombreAlumno:
+          alumnoInicial.nombreAlumno || alumnoInicial.nombre || "",
+      });
     }
-  }, [modo]);
+  }, [modo, alumnoInicial]);
 
   const alumnoYaElegidoTexto = useMemo(() => {
     if (!alumnoSeleccionado) return "";
@@ -107,111 +250,306 @@ export default function InscripcionForm({
     try {
       setGuardando(true);
 
-      if (!grupoId || !grupoId.trim()) {
-        console.error("Error: grupoId vacío. classData:", classData);
+      if (modoLibre && !horarioCompleto) {
+        alert("Completa curso, profesor, día, hora y duración de la clase");
+        return;
+      }
+
+      if (!modoLibre && !grupoIdDesdeClase?.trim()) {
         alert(
-          "❌ No se encontró el identificador del grupo. Por favor recarga la página e intenta de nuevo."
+          "No se encontró el grupo de la clase. Recarga e intenta de nuevo."
         );
+        return;
+      }
+
+      if (!fechaInscripcion) {
+        alert("Indica desde qué día empieza a tomar clase");
+        return;
+      }
+
+      const errorFechas = validarFechasInscripcion(
+        fechaInscripcion,
+        primerMesCobro
+      );
+      if (errorFechas) {
+        alert(errorFechas);
         return;
       }
 
       const montoPagoNumero = Number(montoMensualidad);
-
-      if (!montoMensualidad || !Number.isFinite(montoPagoNumero) || montoPagoNumero <= 0) {
-        alert("Captura un monto de mensualidad valido");
+      if (
+        !montoMensualidad ||
+        !Number.isFinite(montoPagoNumero) ||
+        montoPagoNumero <= 0
+      ) {
+        alert("Captura un monto de mensualidad válido");
         return;
       }
 
-      if (!fechaInicioPago) {
-        alert("Captura la fecha de inicio de pago");
+      if (modo === "existente" && !alumnoSeleccionado) {
+        alert("Debes seleccionar un alumno");
         return;
       }
 
-      let alumnoFinal = alumnoSeleccionado;
-
-      if (modo === "existente") {
-        if (!alumnoSeleccionado) {
-          alert("❌ Debes seleccionar un alumno");
-          return;
-        }
-      }
-
-      if (modo === "nuevo") {
-        if (!nombreAlumno.trim()) {
-          alert("❌ Debes capturar el nombre del alumno");
-          return;
-        }
-
-        try {
-          alumnoFinal = await crearAlumno({
-            nombreAlumno: nombreAlumno.trim(),
-            telefono,
-            tutor,
-            observaciones,
-            estatus: "Activo",
-          });
-        } catch (errorAlumno: any) {
-          console.error("Error al crear alumno:", errorAlumno);
-          alert(`❌ Error al crear alumno: ${errorAlumno.message || "Error desconocido"}`);
-          return;
-        }
-      }
-
-      if (!alumnoFinal?.idAlumno) {
-        console.error("Error: alumnoFinal sin idAlumno:", alumnoFinal);
-        alert("❌ No se pudo obtener el alumno creado");
+      if (modo === "nuevo" && !nombreAlumno.trim()) {
+        alert("Debes capturar el nombre del alumno");
         return;
       }
 
-      console.log("classData completo:", classData);
-      console.log("grupoId final enviado:", grupoId);
+      const datosPago = {
+        montoMensualidad: montoPagoNumero,
+        diaPago: Number(diaPago),
+        fechaInicioPago: mesCobroAFechaInicio(primerMesCobro),
+      };
 
       try {
-        await crearInscripcion({
-          idAlumno: alumnoFinal.idAlumno,
-          nombreAlumno: alumnoFinal.nombreAlumno || alumnoFinal.nombre,
-          grupoId: grupoId.trim(),
-          modalidad: modalidad,
-          fechaInscripcion: fechaInscripcion || undefined,
-          montoMensualidad: montoPagoNumero,
-          diaPago: Number(diaPago),
-          fechaInicioPago,
-        });
+        if (modoLibre) {
+          const respuesta = await crearGrupoConAlumno({
+            grupo: {
+              idCurso: cursoSeleccionado!.idCurso,
+              nombreCurso: cursoSeleccionado!.nombreCurso,
+              diaClase: diaClaseSeleccionado,
+              horaClase: horaClaseSeleccionada,
+              duracionClase: duracionClaseSeleccionada,
+              idProfesor: profesorSeleccionado!.idProfesor,
+              nombreProfesor: profesorSeleccionado!.nombre,
+              capacidadMaxima: 8,
+              fechaCreacion: toDateInputValue(new Date()),
+              Estatus: "Activo",
+            },
+            fechaInscripcion,
+            datosPago,
+            ...(modo === "existente"
+              ? {
+                  alumnoExistente: {
+                    idAlumno: alumnoSeleccionado!.idAlumno,
+                    nombreAlumno: alumnoSeleccionado!.nombreAlumno,
+                    modalidad,
+                  },
+                }
+              : {
+                  alumnoNuevo: {
+                    nombreAlumno: nombreAlumno.trim(),
+                    telefono,
+                    tutor,
+                    observaciones,
+                    modalidad,
+                  },
+                }),
+          });
+
+          const mensajeGrupo = respuesta?.grupoCreado
+            ? "Se creó el grupo y el alumno quedó inscrito."
+            : "El alumno quedó inscrito en el grupo existente.";
+          alert(`Inscripción correcta. ${mensajeGrupo}`);
+        } else {
+          let alumnoCalendario = alumnoSeleccionado;
+
+          if (modo === "nuevo") {
+            alumnoCalendario = await crearAlumno({
+              nombreAlumno: nombreAlumno.trim(),
+              telefono,
+              tutor,
+              observaciones,
+              estatus: "Activo",
+            });
+          }
+
+          if (!alumnoCalendario?.idAlumno) {
+            alert("No se pudo obtener el ID del alumno");
+            return;
+          }
+
+          await crearInscripcion({
+            idAlumno: alumnoCalendario.idAlumno,
+            nombreAlumno:
+              alumnoCalendario.nombreAlumno || alumnoCalendario.nombre,
+            grupoId: grupoIdDesdeClase.trim(),
+            modalidad,
+            fechaInscripcion,
+            ...datosPago,
+          });
+          alert("Alumno inscrito correctamente");
+        }
       } catch (errorInscripcion: any) {
-        console.error("Error al crear inscripción:", errorInscripcion);
         alert(
-          `❌ Error al inscribir alumno: ${errorInscripcion.message || "Error desconocido"}`
+          `Error al inscribir: ${errorInscripcion.message || "Error desconocido"}`
         );
         return;
       }
 
-      alert("✓ Alumno inscrito correctamente");
-
-      if (onSuccess) {
-        onSuccess();
-      }
-
+      onSuccess?.();
       onClose();
     } catch (error: any) {
-      console.error("Error inesperado al inscribir:", error);
-      alert(`❌ Error inesperado: ${error.message || "Error al inscribir alumno"}`);
+      alert(`Error inesperado: ${error.message || "Error al inscribir"}`);
     } finally {
       setGuardando(false);
     }
   };
 
   const puedeConfirmar =
-    Boolean(grupoId && grupoId.trim()) &&
-    Boolean(fechaInicioPago) &&
+    Boolean(fechaInscripcion) &&
+    Boolean(primerMesCobro) &&
     Boolean(diaPago) &&
     Number(montoMensualidad) > 0 &&
+    (modoLibre ? horarioCompleto : Boolean(grupoIdDesdeClase?.trim())) &&
     (modo === "existente"
       ? Boolean(alumnoSeleccionado)
       : Boolean(nombreAlumno.trim()));
 
+  const selectorGrupo = modoLibre && (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 space-y-3">
+      <h3 className="font-semibold text-gray-900">Clase / grupo</h3>
+      <p className="text-xs text-gray-500">
+        Elige curso, profesor, día y horario libremente. Si no existe un grupo
+        con esa combinación, se creará al confirmar la inscripción.
+      </p>
+
+      {cargandoCatalogos ? (
+        <p className="text-sm text-gray-500">Cargando cursos y profesores...</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Curso
+              </label>
+              <select
+                value={idCursoFiltro}
+                onChange={(e) => setIdCursoFiltro(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+                required
+              >
+                <option value="">Selecciona curso</option>
+                {cursos.map((c) => (
+                  <option key={c.idCurso || c.nombreCurso} value={c.idCurso}>
+                    {c.nombreCurso}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Profesor
+              </label>
+              <select
+                value={idProfesorFiltro}
+                onChange={(e) => setIdProfesorFiltro(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+                required
+              >
+                <option value="">Selecciona profesor</option>
+                {profesores.map((p) => (
+                  <option key={p.idProfesor} value={p.idProfesor}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Día
+              </label>
+              <select
+                value={diaClaseSeleccionado}
+                onChange={(e) => setDiaClaseSeleccionado(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+                required
+              >
+                <option value="">Selecciona día</option>
+                {DIAS_SEMANA.map((dia) => (
+                  <option key={dia} value={dia}>
+                    {dia}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hora
+              </label>
+              <input
+                type="time"
+                value={horaClaseSeleccionada}
+                onChange={(e) => setHoraClaseSeleccionada(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duración de la clase
+              </label>
+              <select
+                value={duracionClaseSeleccionada}
+                onChange={(e) => setDuracionClaseSeleccionada(e.target.value)}
+                className="w-full border p-2 rounded bg-white"
+                required
+              >
+                {DURACIONES_CLASE.map((dur) => (
+                  <option key={dur} value={dur}>
+                    {dur}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {horarioCompleto && (
+            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-100 rounded p-2">
+              <b>Horario:</b> {cursoSeleccionado?.nombreCurso} con{" "}
+              {profesorSeleccionado?.nombre} — {diaClaseSeleccionado},{" "}
+              {horaClaseSeleccionada} ({duracionClaseSeleccionada})
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  const camposClaseYPago = (
+    <>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Modalidad
+        </label>
+        <select
+          value={modalidad}
+          onChange={(e) => setModalidad(e.target.value)}
+          className="w-full border p-2 rounded"
+        >
+          <option value="Presencial">Presencial</option>
+          <option value="Virtual">Virtual</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Desde qué día empieza su clase
+        </label>
+        <p className="text-xs text-gray-500 mb-1">
+          Aparecerá en el calendario a partir de esta fecha
+        </p>
+        <input
+          type="date"
+          value={fechaInscripcion}
+          onChange={(e) => setFechaInscripcion(e.target.value)}
+          className="w-full border p-2 rounded"
+          required
+        />
+      </div>
+    </>
+  );
+
   const datosPagoForm = (
     <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4 mt-5 space-y-3">
-      <h3 className="font-semibold text-gray-900">Datos de pago (Requerido)</h3>
+      <h3 className="font-semibold text-gray-900">Datos de pago</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
@@ -225,7 +563,7 @@ export default function InscripcionForm({
             value={montoMensualidad}
             onChange={(e) => setMontoMensualidad(e.target.value)}
             placeholder="0.00"
-            className="w-full border p-2 rounded"
+            className="w-full border p-2 rounded bg-white"
             required
           />
         </div>
@@ -237,7 +575,7 @@ export default function InscripcionForm({
           <select
             value={diaPago}
             onChange={(e) => setDiaPago(e.target.value)}
-            className="w-full border p-2 rounded"
+            className="w-full border p-2 rounded bg-white"
             required
           >
             {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
@@ -250,140 +588,126 @@ export default function InscripcionForm({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            A partir de (Primer mes de pago)
+            Primer mes de cobro
           </label>
+          <p className="text-xs text-gray-500 mb-1">
+            El cobro mensual empieza en este mes (no el día exacto de hoy)
+          </p>
           <input
-            type="date"
-            value={fechaInicioPago}
-            onChange={(e) => setFechaInicioPago(e.target.value)}
-            className="w-full border p-2 rounded"
+            type="month"
+            value={primerMesCobro}
+            onChange={(e) => setPrimerMesCobro(e.target.value)}
+            className="w-full border p-2 rounded bg-white"
             required
           />
         </div>
       </div>
-
     </div>
   );
+
+  const tituloClase = classData
+    ? `${classData?.title || classData?.nombreCurso || "Sin curso"} | ${
+        classData?.teacher?.name || classData?.nombreProfesor || "Sin profesor"
+      } | ${classData?.startTime || ""}`
+    : null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
       <div className="bg-white w-[95vw] max-w-5xl rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-2">Inscribir alumno</h2>
 
-        <p className="text-sm text-gray-500 mb-4">
-          Grupo: {classData?.title || classData?.nombreCurso || "Sin curso"} |{" "}
-          {classData?.teacher?.name || classData?.nombreProfesor || "Sin profesor"} |{" "}
-          {classData?.startTime || ""}
-        </p>
+        {tituloClase && (
+          <p className="text-sm text-gray-500 mb-4">Clase: {tituloClase}</p>
+        )}
 
-        <div className="flex gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => {
-              setModo("existente");
-            }}
-            className={`px-4 py-2 rounded-lg ${
-              modo === "existente"
-                ? "bg-cyan-500 text-white"
-                : "bg-gray-200 text-gray-700"
-            }`}
-          >
-            Alumno existente
-          </button>
+        {selectorGrupo}
 
-          <button
-            type="button"
-            onClick={() => {
-              setModo("nuevo");
-            }}
-            className={`px-4 py-2 rounded-lg ${
-              modo === "nuevo"
-                ? "bg-cyan-500 text-white"
-                : "bg-gray-200 text-gray-700"
-            }`}
-          >
-            Alumno nuevo
-          </button>
-        </div>
+        {!alumnoInicial && (
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setModo("existente")}
+              className={`px-4 py-2 rounded-lg ${
+                modo === "existente"
+                  ? "bg-cyan-500 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              Alumno existente
+            </button>
+            <button
+              type="button"
+              onClick={() => setModo("nuevo")}
+              className={`px-4 py-2 rounded-lg ${
+                modo === "nuevo"
+                  ? "bg-cyan-500 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              Alumno nuevo
+            </button>
+          </div>
+        )}
 
         {modo === "existente" && (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Buscar alumno
-              </label>
-              <input
-                type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Escribe nombre o ID del alumno"
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Modalidad de la clase
-              </label>
-              <select
-                value={modalidad}
-                onChange={(e) => setModalidad(e.target.value)}
-                className="w-full border p-2 rounded"
-              >
-                <option value="Presencial">Presencial</option>
-                <option value="Virtual">Virtual</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha de inicio (desde cuándo aparece)
-              </label>
-              <input
-                type="date"
-                value={fechaInscripcion}
-                onChange={(e) => setFechaInscripcion(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            {alumnoSeleccionado && (
+            {alumnoInicial ? (
               <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 p-3 rounded text-sm">
-                <b>Alumno seleccionado:</b> {alumnoYaElegidoTexto}
+                <b>Alumno:</b> {alumnoYaElegidoTexto}
               </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Buscar alumno
+                  </label>
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Nombre o ID"
+                    className="w-full border p-2 rounded"
+                  />
+                </div>
+
+                {alumnoSeleccionado && (
+                  <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 p-3 rounded text-sm">
+                    <b>Seleccionado:</b> {alumnoYaElegidoTexto}
+                  </div>
+                )}
+
+                <div className="border rounded-lg max-h-48 overflow-y-auto">
+                  {buscando ? (
+                    <p className="p-3 text-sm text-gray-500">Buscando...</p>
+                  ) : alumnosEncontrados.length > 0 ? (
+                    alumnosEncontrados.map((alumno) => {
+                      const seleccionado =
+                        alumnoSeleccionado?.idAlumno === alumno.idAlumno;
+                      return (
+                        <div
+                          key={alumno.idAlumno}
+                          onClick={() => handleSeleccionarAlumno(alumno)}
+                          className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 ${
+                            seleccionado ? "bg-cyan-100" : ""
+                          }`}
+                        >
+                          <div className="font-medium">{alumno.nombreAlumno}</div>
+                          <div className="text-sm text-gray-500">
+                            {alumno.idAlumno}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="p-3 text-sm text-gray-500">
+                      No se encontraron alumnos
+                    </p>
+                  )}
+                </div>
+              </>
             )}
 
-            <div className="border rounded-lg max-h-64 overflow-y-auto">
-              {buscando ? (
-                <p className="p-3 text-sm text-gray-500">Buscando...</p>
-              ) : alumnosEncontrados.length > 0 ? (
-                alumnosEncontrados.map((alumno) => {
-                  const seleccionado =
-                    alumnoSeleccionado?.idAlumno === alumno.idAlumno;
-
-                  return (
-                    <div
-                      key={alumno.idAlumno}
-                      onClick={() => handleSeleccionarAlumno(alumno)}
-                      className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 ${
-                        seleccionado ? "bg-cyan-100 border-cyan-300" : ""
-                      }`}
-                    >
-                      <div className="font-medium text-gray-900">
-                        {alumno.nombreAlumno}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {alumno.idAlumno}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="p-3 text-sm text-gray-500">
-                  No se encontraron alumnos
-                </p>
-              )}
-            </div>
+            {camposClaseYPago}
           </div>
         )}
 
@@ -400,33 +724,7 @@ export default function InscripcionForm({
                 className="w-full border p-2 rounded"
               />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Modalidad de la clase
-              </label>
-              <select
-                value={modalidad}
-                onChange={(e) => setModalidad(e.target.value)}
-                className="w-full border p-2 rounded"
-              >
-                <option value="Presencial">Presencial</option>
-                <option value="Virtual">Virtual</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fecha de inicio (desde cuándo aparece)
-              </label>
-              <input
-                type="date"
-                value={fechaInscripcion}
-                onChange={(e) => setFechaInscripcion(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
+            {camposClaseYPago}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Teléfono
@@ -438,7 +736,6 @@ export default function InscripcionForm({
                 className="w-full border p-2 rounded"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Tutor
@@ -450,7 +747,6 @@ export default function InscripcionForm({
                 className="w-full border p-2 rounded"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Observaciones
@@ -459,7 +755,7 @@ export default function InscripcionForm({
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
                 className="w-full border p-2 rounded"
-                rows={3}
+                rows={2}
               />
             </div>
           </div>
@@ -475,7 +771,6 @@ export default function InscripcionForm({
           >
             Cancelar
           </button>
-
           <button
             type="button"
             onClick={handleGuardar}

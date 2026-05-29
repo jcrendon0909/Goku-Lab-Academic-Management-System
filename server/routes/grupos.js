@@ -3,13 +3,53 @@ import Grupo from "../models/Grupo.js";
 import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Reagendacion from "../models/Reagendacion.js";
+import Profesor from "../models/Profesor.js";
+import Curso from "../models/Curso.js";
 import { generarId } from "../utils/generarId.js";
+import { parseFechaFlexible } from "../utils/parseFechas.js";
 import {
   crearOActualizarPagoDeInscripcion,
   normalizarDatosPago,
+  validarMesPrimerCobro,
 } from "../utils/pagos.js";
 
+const normalizarHoraClase = (hora) => {
+  const texto = String(hora || "").trim();
+  const match = texto.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return texto;
+  return `${String(match[1]).padStart(2, "0")}:${match[2]}`;
+};
+
 const router = express.Router();
+
+const idGrupoDeDocumento = (grupo) =>
+  String(grupo?.IdGrupo || grupo?.idGrupo || grupo?.GrupoId || "").trim();
+
+const filtroInscripcionesPorGrupo = (idGrupo) => ({
+  $or: [
+    { grupoId: idGrupo },
+    { GrupoId: idGrupo },
+    { idGrupo: idGrupo },
+    { IdGrupo: idGrupo },
+  ],
+});
+
+const esInscripcionActiva = (ins) => {
+  const estatus = String(ins?.estatus || "Activa").trim().toLowerCase();
+  return estatus !== "baja";
+};
+
+/** Misma lógica que el calendario: activa y ya vigente por fechaInscripcion */
+const inscripcionCuentaParaCalendario = (ins) => {
+  if (!esInscripcionActiva(ins)) return false;
+  const fechaInscripcion = ins.fechaInscripcion
+    ? new Date(ins.fechaInscripcion)
+    : null;
+  if (fechaInscripcion && fechaInscripcion.getTime() > Date.now()) {
+    return false;
+  }
+  return true;
+};
 
 router.get("/", async (req, res) => {
   try {
@@ -23,7 +63,8 @@ router.get("/", async (req, res) => {
 
 router.post("/crear-con-alumno", async (req, res) => {
   try {
-    const { grupo, alumnoExistente, alumnoNuevo, datosPago } = req.body;
+    const { grupo, alumnoExistente, alumnoNuevo, datosPago, fechaInscripcion } =
+      req.body;
 
     if (!grupo) {
       return res.status(400).json({ error: "Faltan datos del grupo" });
@@ -61,9 +102,8 @@ router.post("/crear-con-alumno", async (req, res) => {
       return res.status(400).json({ error: "Falta nombreProfesor" });
     }
 
-    if (!capacidadMaxima || Number(capacidadMaxima) <= 0) {
-      return res.status(400).json({ error: "Falta capacidadMaxima válida" });
-    }
+    const capacidadGrupo =
+      Number(capacidadMaxima) > 0 ? Number(capacidadMaxima) : 8;
 
     if (!alumnoExistente && !alumnoNuevo) {
       return res.status(400).json({
@@ -78,26 +118,15 @@ router.post("/crear-con-alumno", async (req, res) => {
       return res.status(400).json({ error: errorPago.message });
     }
 
-    const grupoExistente = await Grupo.findOne({
-      nombreCurso: { $regex: `^${String(nombreCurso).trim()}$`, $options: "i" },
-      diaClase: { $regex: `^${String(diaClase).trim()}$`, $options: "i" },
-      horaClase: String(horaClase).trim(),
-      $or: [
-        ...(idProfesor ? [{ idProfesor: String(idProfesor).trim() }] : []),
-        {
-          nombreProfesor: {
-            $regex: `^${String(nombreProfesor).trim()}$`,
-            $options: "i",
-          },
-        },
-      ],
-    }).lean();
+    const fechaInscripcionFinal =
+      parseFechaFlexible(fechaInscripcion || fechaCreacion) || new Date();
 
-    if (grupoExistente) {
-      return res.status(409).json({
-        error: "Ya existe un grupo con ese curso, profesor, día y hora",
-        grupoExistente,
-      });
+    const errorMesCobro = validarMesPrimerCobro(
+      fechaInscripcionFinal,
+      datosPagoNormalizados.fechaInicioPago
+    );
+    if (errorMesCobro) {
+      return res.status(400).json({ error: errorMesCobro });
     }
 
     let alumnoFinal = null;
@@ -155,59 +184,102 @@ router.post("/crear-con-alumno", async (req, res) => {
       });
     }
 
-    const nuevoIdGrupo = await generarId("grupo");
+    const horaNormalizada = normalizarHoraClase(horaClase);
 
-    const nuevoGrupo = new Grupo({
-      IdGrupo: nuevoIdGrupo,
-      idCurso: idCurso || "",
-      nombreCurso: String(nombreCurso).trim(),
-      diaClase: String(diaClase).trim(),
-      horaClase: String(horaClase).trim(),
-      duracionClase: duracionClase || "2 horas",
-      idProfesor: idProfesor || "",
-      nombreProfesor: String(nombreProfesor).trim(),
-      comentario: String(comentario ?? comentarioGrupo ?? "").trim(),
-      CapacidadMaxima: Number(capacidadMaxima),
-      Estatus: Estatus || estatus || "Activo",
-      fechaCreacion: fechaCreacion ? new Date(fechaCreacion) : new Date(),
-    });
+    const grupoExistente = await Grupo.findOne({
+      nombreCurso: { $regex: `^${String(nombreCurso).trim()}$`, $options: "i" },
+      diaClase: { $regex: `^${String(diaClase).trim()}$`, $options: "i" },
+      horaClase: horaNormalizada,
+      $or: [
+        ...(idProfesor ? [{ idProfesor: String(idProfesor).trim() }] : []),
+        {
+          nombreProfesor: {
+            $regex: `^${String(nombreProfesor).trim()}$`,
+            $options: "i",
+          },
+        },
+      ],
+    }).lean();
 
-    const grupoGuardado = await nuevoGrupo.save();
+    let grupoGuardado = grupoExistente;
+    let grupoCreado = false;
+
+    if (!grupoExistente) {
+      const nuevoIdGrupo = await generarId("grupo");
+
+      const nuevoGrupo = new Grupo({
+        IdGrupo: nuevoIdGrupo,
+        idCurso: idCurso || "",
+        nombreCurso: String(nombreCurso).trim(),
+        diaClase: String(diaClase).trim(),
+        horaClase: horaNormalizada,
+        duracionClase: duracionClase || "2 horas",
+        idProfesor: idProfesor || "",
+        nombreProfesor: String(nombreProfesor).trim(),
+        comentario: String(comentario ?? comentarioGrupo ?? "").trim(),
+        CapacidadMaxima: capacidadGrupo,
+        Estatus: Estatus || estatus || "Activo",
+        // El horario del grupo existe desde hoy; la inscripción controla cuándo aparece el alumno
+        fechaCreacion: parseFechaFlexible(grupo.fechaCreacion) || new Date(),
+      });
+
+      grupoGuardado = await nuevoGrupo.save();
+      grupoCreado = true;
+    }
+
+    const idGrupoFinal = idGrupoDeDocumento(grupoGuardado);
 
     const inscripcionExistente = await Inscripcion.findOne({
       idAlumno: alumnoFinal.idAlumno,
-      grupoId: grupoGuardado.IdGrupo,
+      grupoId: idGrupoFinal,
     }).lean();
 
-    if (inscripcionExistente) {
+    if (inscripcionExistente && esInscripcionActiva(inscripcionExistente)) {
       return res.status(409).json({
         error: "El alumno ya está inscrito en este grupo",
       });
     }
 
-    const nuevaInscripcion = new Inscripcion({
-      idAlumno: alumnoFinal.idAlumno,
+    const datosInscripcion = {
       nombreAlumno: alumnoFinal.nombreAlumno,
-      grupoId: grupoGuardado.IdGrupo,
       modalidad: alumnoFinal.modalidad,
-      montoMensualidad: datosPagoNormalizados?.montoMensualidad ?? null,
-      fechaPago: datosPagoNormalizados?.fechaPago ?? null,
-      diaPagoFijo: datosPagoNormalizados?.diaPagoFijo ?? null,
-      comentarios: datosPagoNormalizados?.comentarios ?? "",
-    });
+      montoMensualidad: datosPagoNormalizados.montoMensualidad,
+      diaPago: datosPagoNormalizados.diaPago,
+      fechaInicioPago: datosPagoNormalizados.fechaInicioPago,
+      comentarios: datosPagoNormalizados.comentarios ?? "",
+      fechaInscripcion: fechaInscripcionFinal,
+      estatus: "Activa",
+      fechaBaja: null,
+      motivoBaja: "",
+    };
 
-    const inscripcionGuardada = await nuevaInscripcion.save();
+    let inscripcionGuardada;
+
+    if (inscripcionExistente) {
+      inscripcionGuardada = await Inscripcion.findOneAndUpdate(
+        { _id: inscripcionExistente._id },
+        { $set: datosInscripcion },
+        { new: true }
+      );
+    } else {
+      inscripcionGuardada = await new Inscripcion({
+        idAlumno: alumnoFinal.idAlumno,
+        grupoId: idGrupoFinal,
+        ...datosInscripcion,
+      }).save();
+    }
 
     const pago = await crearOActualizarPagoDeInscripcion({
       idAlumno: alumnoFinal.idAlumno,
       nombreAlumno: alumnoFinal.nombreAlumno,
-      grupoId: grupoGuardado.IdGrupo,
+      grupoId: idGrupoFinal,
       nombreCurso: grupoGuardado.nombreCurso,
       datosPago: datosPagoNormalizados,
     });
 
     res.status(201).json({
       ok: true,
+      grupoCreado,
       grupo: grupoGuardado,
       alumno: alumnoFinal,
       inscripcion: inscripcionGuardada,
@@ -303,6 +375,85 @@ router.patch("/:grupoId/comentario", async (req, res) => {
   }
 });
 
+// Reasignar (o quitar) el profesor de un grupo existente
+router.patch("/:grupoId/profesor", async (req, res) => {
+  try {
+    const { grupoId } = req.params;
+    const idProfesor = String(req.body?.idProfesor || "").trim();
+
+    // Si no se manda idProfesor, se deja el grupo sin profesor asignado
+    let datosProfesor = { idProfesor: "", nombreProfesor: "" };
+
+    if (idProfesor) {
+      const profesor = await Profesor.findOne({ idProfesor });
+      if (!profesor) {
+        return res.status(404).json({ error: "Maestro no encontrado" });
+      }
+      datosProfesor = {
+        idProfesor: profesor.idProfesor,
+        nombreProfesor: profesor.nombre,
+      };
+    }
+
+    const grupo = await Grupo.findOneAndUpdate(
+      {
+        $or: [{ IdGrupo: grupoId }, { idGrupo: grupoId }, { GrupoId: grupoId }],
+      },
+      { $set: datosProfesor },
+      { new: true }
+    ).lean();
+
+    if (!grupo) {
+      return res.status(404).json({ error: "No se encontró el grupo" });
+    }
+
+    res.status(200).json({ ok: true, grupo });
+  } catch (error) {
+    console.error("ERROR PATCH PROFESOR GRUPO:", error);
+    res.status(500).json({
+      error: "Error al reasignar el profesor del grupo",
+      detalle: error.message,
+    });
+  }
+});
+
+// Reasignar el curso de un grupo existente (para grupos que quedaron sin curso)
+router.patch("/:grupoId/curso", async (req, res) => {
+  try {
+    const { grupoId } = req.params;
+    const idCurso = String(req.body?.idCurso || "").trim();
+
+    if (!idCurso) {
+      return res.status(400).json({ error: "Falta el curso a asignar" });
+    }
+
+    const curso = await Curso.findOne({ idCurso });
+    if (!curso) {
+      return res.status(404).json({ error: "Curso no encontrado" });
+    }
+
+    const grupo = await Grupo.findOneAndUpdate(
+      {
+        $or: [{ IdGrupo: grupoId }, { idGrupo: grupoId }, { GrupoId: grupoId }],
+      },
+      { $set: { idCurso: curso.idCurso, nombreCurso: curso.nombreCurso } },
+      { new: true }
+    ).lean();
+
+    if (!grupo) {
+      return res.status(404).json({ error: "No se encontró el grupo" });
+    }
+
+    res.status(200).json({ ok: true, grupo });
+  } catch (error) {
+    console.error("ERROR PATCH CURSO GRUPO:", error);
+    res.status(500).json({
+      error: "Error al reasignar el curso del grupo",
+      detalle: error.message,
+    });
+  }
+});
+
 router.delete("/:grupoId", async (req, res) => {
   try {
     const { grupoId } = req.params;
@@ -317,28 +468,48 @@ router.delete("/:grupoId", async (req, res) => {
       });
     }
 
-    const inscripciones = await Inscripcion.find({ grupoId }).lean();
+    const idGrupoCanonico = idGrupoDeDocumento(grupo) || String(grupoId).trim();
+    const filtroGrupo = filtroInscripcionesPorGrupo(idGrupoCanonico);
 
-    if (inscripciones.length > 0) {
+    const inscripciones = await Inscripcion.find(filtroGrupo).lean();
+    const inscripcionesActivas = inscripciones.filter(inscripcionCuentaParaCalendario);
+
+    if (inscripcionesActivas.length > 0) {
       return res.status(409).json({
-        error: "No se puede eliminar el grupo porque tiene alumnos inscritos",
-        alumnosInscritos: inscripciones.length,
+        error:
+          "No se puede eliminar el grupo porque tiene alumnos activos en el calendario",
+        alumnosInscritos: inscripcionesActivas.length,
+        alumnos: inscripcionesActivas.map((ins) => ({
+          idAlumno: ins.idAlumno,
+          nombreAlumno: ins.nombreAlumno,
+          estatus: ins.estatus || "Activa",
+        })),
       });
     }
 
     const reagendacionesRelacionadas = await Reagendacion.find({
       $or: [
-        { idGrupoOrigen: grupoId }, // ✅ Normalizado
-        { idGrupoNuevo: grupoId },
+        { idGrupoOrigen: idGrupoCanonico },
+        { IdgrupoOrigen: idGrupoCanonico },
+        { idGrupoNuevo: idGrupoCanonico },
+        { IdgrupoNuevo: idGrupoCanonico },
       ],
     }).lean();
 
-    if (reagendacionesRelacionadas.length > 0) {
+    const reagendacionesActivas = reagendacionesRelacionadas.filter(
+      (r) => String(r.estatus || "reagendado").toLowerCase() !== "cancelado"
+    );
+
+    if (reagendacionesActivas.length > 0) {
       return res.status(409).json({
         error:
-          "No se puede eliminar el grupo porque tiene reagendaciones relacionadas",
-        reagendacionesRelacionadas: reagendacionesRelacionadas.length,
+          "No se puede eliminar el grupo porque tiene reagendaciones activas. Elimínalas desde el calendario primero.",
+        reagendacionesRelacionadas: reagendacionesActivas.length,
       });
+    }
+
+    if (inscripciones.length > 0) {
+      await Inscripcion.deleteMany(filtroGrupo);
     }
 
     await Grupo.deleteOne({ _id: grupo._id });

@@ -5,13 +5,41 @@ import Grupo from "../models/Grupo.js";
 import Pago from "../models/Pago.js";
 import Alumno from "../models/Alumno.js";
 import { parseFechaFlexible } from "../utils/parseFechas.js";
+import Abono from "../models/Abono.js";
 import {
   crearOActualizarPagoDeInscripcion,
+  crearPagoId,
   normalizarDatosPago,
+  validarMesPrimerCobro,
   validarPagoAlCorrienteParaBaja,
 } from "../utils/pagos.js";
 
 const router = express.Router();
+
+const normalizar = (valor) => String(valor || "").trim().toUpperCase();
+
+const grupoIdDeInscripcion = (ins) =>
+  String(ins?.grupoId || ins?.GrupoId || ins?.idGrupo || ins?.IdGrupo || "").trim();
+
+const filtroIdAlumno = (idAlumno) => {
+  const id = String(idAlumno).trim();
+  return {
+    $or: [
+      { idAlumno: id },
+      { IdAlumno: id },
+      { id_alumno: id },
+      { "idAlumno ": id },
+    ],
+  };
+};
+
+async function buscarInscripcionPorAlumnoYGrupo(idAlumno, grupoId) {
+  const grupoBuscado = normalizar(grupoId);
+  const inscripciones = await Inscripcion.find(filtroIdAlumno(idAlumno)).lean();
+  return inscripciones.find(
+    (ins) => normalizar(grupoIdDeInscripcion(ins)) === grupoBuscado
+  );
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -81,6 +109,20 @@ router.post("/", async (req, res) => {
 
     if (!datosPagoNormalizados) {
       return res.status(400).json({ error: "Datos de pago requeridos (monto, día de pago, fecha de inicio)" });
+    }
+
+    if (!fechaInscripcionFinal) {
+      return res.status(400).json({
+        error: "Indica desde qué día empieza a tomar clase (fechaInscripcion)",
+      });
+    }
+
+    const errorMesCobro = validarMesPrimerCobro(
+      fechaInscripcionFinal,
+      datosPagoNormalizados.fechaInicioPago
+    );
+    if (errorMesCobro) {
+      return res.status(400).json({ error: errorMesCobro });
     }
 
     // ✅ CAMBIO 3a: Validar que el grupo existe ANTES de hacer anything
@@ -233,6 +275,272 @@ router.get("/alumno/:idAlumno", async (req, res) => {
   }
 });
 
+router.patch("/:idAlumno/:grupoId", async (req, res) => {
+  try {
+    const { idAlumno, grupoId } = req.params;
+    const { modalidad, comentarios, comentario } = req.body || {};
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+    if (!grupoId || !String(grupoId).trim()) {
+      return res.status(400).json({ error: "Falta grupoId" });
+    }
+
+    let inscripcion = await buscarInscripcionPorAlumnoYGrupo(idAlumno, grupoId);
+
+    if (!inscripcion) {
+      const grupoParam = String(grupoId).trim();
+      if (grupoParam.toUpperCase().startsWith("VIRTUAL_")) {
+        const reag = await Reagendacion.findOne({
+          idAlumno: String(idAlumno).trim(),
+          $or: [
+            { idGrupoNuevo: grupoParam },
+            { IdgrupoNuevo: grupoParam },
+            { IdGrupoNuevo: grupoParam },
+          ],
+        }).lean();
+
+        const grupoOrigen =
+          reag?.idGrupoOrigen ||
+          reag?.IdgrupoOrigen ||
+          reag?.IdGrupoOrigen ||
+          "";
+
+        if (grupoOrigen) {
+          inscripcion = await buscarInscripcionPorAlumnoYGrupo(
+            idAlumno,
+            grupoOrigen
+          );
+        }
+      }
+    }
+
+    if (!inscripcion) {
+      return res.status(404).json({ error: "No se encontró la inscripción" });
+    }
+
+    const update = {};
+
+    if (modalidad !== undefined) {
+      const modalidadFinal = String(modalidad).trim();
+      if (!["Presencial", "Virtual"].includes(modalidadFinal)) {
+        return res.status(400).json({
+          error: 'Modalidad inválida. Usa "Presencial" o "Virtual"',
+        });
+      }
+      update.modalidad = modalidadFinal;
+    }
+
+    if (comentarios !== undefined || comentario !== undefined) {
+      update.comentarios = String(comentarios ?? comentario ?? "").trim();
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({
+        error: "Indica modalidad y/o comentarios para actualizar",
+      });
+    }
+
+    const grupoCanonico = grupoIdDeInscripcion(inscripcion);
+    const idAlumnoLimpio = String(idAlumno).trim();
+
+    const actualizada = await Inscripcion.findOneAndUpdate(
+      { _id: inscripcion._id },
+      { $set: update },
+      { new: true }
+    ).lean();
+
+    if (update.modalidad) {
+      await Reagendacion.updateMany(
+        {
+          idAlumno: idAlumnoLimpio,
+          $or: [
+            { idGrupoOrigen: grupoCanonico },
+            { IdgrupoOrigen: grupoCanonico },
+          ],
+        },
+        { $set: { modalidad: update.modalidad } }
+      );
+    }
+
+    res.status(200).json({ ok: true, inscripcion: actualizada });
+  } catch (error) {
+    console.error("ERROR PATCH INSCRIPCION:", error);
+    res.status(500).json({
+      error: "Error al actualizar inscripción",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:idAlumno/:grupoId/nota", async (req, res) => {
+  try {
+    const { idAlumno, grupoId } = req.params;
+    const comentario = String(req.body?.comentarios ?? req.body?.comentario ?? "").trim();
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+    if (!grupoId || !String(grupoId).trim()) {
+      return res.status(400).json({ error: "Falta grupoId" });
+    }
+
+    const inscripcion = await buscarInscripcionPorAlumnoYGrupo(idAlumno, grupoId);
+
+    if (!inscripcion) {
+      return res.status(404).json({ error: "No se encontró la inscripción" });
+    }
+
+    const actualizada = await Inscripcion.findOneAndUpdate(
+      { _id: inscripcion._id },
+      { $set: { comentarios: comentario } },
+      { new: true }
+    ).lean();
+
+    res.status(200).json({ ok: true, inscripcion: actualizada });
+  } catch (error) {
+    console.error("ERROR PATCH NOTA INSCRIPCION:", error);
+    res.status(500).json({
+      error: "Error al guardar la nota",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:idAlumno/:grupoId/reactivar", async (req, res) => {
+  try {
+    const { idAlumno, grupoId } = req.params;
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+    if (!grupoId || !String(grupoId).trim()) {
+      return res.status(400).json({ error: "Falta grupoId" });
+    }
+
+    const inscripcion = await Inscripcion.findOne({
+      idAlumno: String(idAlumno).trim(),
+      grupoId: String(grupoId).trim(),
+    });
+
+    if (!inscripcion) {
+      return res.status(404).json({ error: "No se encontró la inscripción" });
+    }
+
+    if (String(inscripcion.estatus || "").toLowerCase() !== "baja") {
+      return res.status(409).json({ error: "La inscripción ya está activa" });
+    }
+
+    inscripcion.estatus = "Activa";
+    inscripcion.fechaBaja = null;
+    inscripcion.motivoBaja = "";
+    // Conservar fechaInscripcion (inicio en calendario) y fechaInicioPago (cobro)
+
+    await inscripcion.save();
+
+    // Reactivar pago si existe (día/mes de cobro se cambian solo en Control de pagos)
+    const pago = await Pago.findOneAndUpdate(
+      {
+        $or: [
+          { pagoId: `${String(idAlumno).trim()}-${String(grupoId).trim()}`.toUpperCase() },
+          {
+            idAlumno: String(idAlumno).trim(),
+            grupoId: String(grupoId).trim(),
+          },
+        ],
+      },
+      {
+        $set: {
+          activo: true,
+          fechaBaja: null,
+        },
+      },
+      { new: true }
+    ).lean();
+
+    res.status(200).json({
+      ok: true,
+      inscripcion: inscripcion.toObject(),
+      pago: pago || null,
+    });
+  } catch (error) {
+    console.error("ERROR PATCH REACTIVAR INSCRIPCION:", error);
+    res.status(500).json({
+      error: "Error al reactivar la inscripción",
+      detalle: error.message,
+    });
+  }
+});
+
+router.delete("/:idAlumno/:grupoId/historial", async (req, res) => {
+  try {
+    const { idAlumno, grupoId } = req.params;
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+    if (!grupoId || !String(grupoId).trim()) {
+      return res.status(400).json({ error: "Falta grupoId" });
+    }
+
+    const idTrimmed = String(idAlumno).trim();
+    const inscripcionDoc = await buscarInscripcionPorAlumnoYGrupo(
+      idTrimmed,
+      grupoId
+    );
+
+    if (!inscripcionDoc) {
+      return res.status(404).json({
+        error: "No se encontró la inscripción del alumno en ese grupo",
+      });
+    }
+
+    if (String(inscripcionDoc.estatus || "").toLowerCase() !== "baja") {
+      return res.status(409).json({
+        error:
+          "Solo se puede eliminar del sistema un curso que ya esté de baja. Usa «Dar de baja» primero.",
+      });
+    }
+
+    const grupoCanonico = grupoIdDeInscripcion(inscripcionDoc);
+    const pagoId = crearPagoId(idTrimmed, grupoCanonico);
+
+    await Inscripcion.deleteOne({ _id: inscripcionDoc._id });
+
+    const abonosResult = await Abono.deleteMany({ pagoId });
+    const pagosResult = await Pago.deleteMany({
+      $or: [
+        { pagoId },
+        { idAlumno: idTrimmed, grupoId: grupoCanonico },
+      ],
+    });
+
+    const reagendacionesResult = await Reagendacion.deleteMany({
+      idAlumno: idTrimmed,
+      $or: [
+        { idGrupoOrigen: grupoCanonico },
+        { idGrupoNuevo: grupoCanonico },
+      ],
+    });
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Curso de baja eliminado del sistema",
+      inscripcionEliminada: true,
+      abonosEliminados: abonosResult.deletedCount,
+      pagosEliminados: pagosResult.deletedCount,
+      reagendacionesEliminadas: reagendacionesResult.deletedCount,
+    });
+  } catch (error) {
+    console.error("ERROR DELETE HISTORIAL INSCRIPCION:", error);
+    res.status(500).json({
+      error: "Error al eliminar el curso del sistema",
+      detalle: error.message,
+    });
+  }
+});
+
 router.delete("/:idAlumno/:grupoId", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
@@ -257,10 +565,15 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
       });
     }
 
-    const inscripcion = await Inscripcion.findOne({
-      idAlumno: String(idAlumno).trim(),
-      grupoId: String(grupoId).trim(),
-    });
+    const inscripcionDoc = await buscarInscripcionPorAlumnoYGrupo(idAlumno, grupoId);
+
+    if (!inscripcionDoc) {
+      return res.status(404).json({
+        error: "No se encontró la inscripción del alumno en ese grupo",
+      });
+    }
+
+    const inscripcion = await Inscripcion.findById(inscripcionDoc._id);
 
     if (!inscripcion) {
       return res.status(404).json({
@@ -268,42 +581,78 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
       });
     }
 
+    if (String(inscripcion.estatus || "").toLowerCase() === "baja") {
+      return res.status(409).json({
+        error: "El alumno ya está dado de baja en este curso",
+        detalle: {
+          fechaBaja: inscripcion.fechaBaja || null,
+        },
+      });
+    }
+
     const validacionPago = await validarPagoAlCorrienteParaBaja({
       idAlumno,
       grupoId,
+      montoMensualidadInscripcion: inscripcion.montoMensualidad,
       fechaInicioCobro:
+        inscripcion.fechaInicioPago ||
         inscripcion.fechaPago ||
         inscripcion.fechaInscripcion ||
         inscripcion.createdAt,
     });
 
     if (!validacionPago.ok) {
+      const saldo = Number(
+        validacionPago.saldoPendiente ?? validacionPago.saldoPeriodo ?? 0
+      );
+      const mes =
+        validacionPago.periodo?.nombreMes || "el periodo vigente";
+
+      let mensaje =
+        validacionPago.motivo ||
+        "No se puede dar de baja mientras existan pagos pendientes";
+
+      if (saldo > 0) {
+        mensaje = `No se puede dar de baja. Saldo pendiente: $${saldo.toFixed(2)}`;
+      } else if (validacionPago.periodo) {
+        mensaje = `No se puede dar de baja. Primero debe quedar pagado ${mes}.`;
+      }
+
       return res.status(409).json({
-        error: `No se puede dar de baja todavía. Primero debe quedar pagado ${validacionPago.periodo.nombreMes}.`,
+        error: mensaje,
         detalle: {
-          mesRequerido: validacionPago.periodo.nombreMes,
+          mesRequerido: validacionPago.periodo?.nombreMes || null,
           montoRequerido: validacionPago.montoRequerido,
+          pagadoTotal: validacionPago.totalPagado,
           pagadoEnPeriodo: validacionPago.totalPagadoPeriodo,
-          saldoPendiente: validacionPago.saldoPeriodo,
-          fechaLimite: validacionPago.periodo.vencimiento,
+          saldoPendiente: saldo,
+          saldoPeriodo: validacionPago.saldoPeriodo,
+          fechaLimite: validacionPago.periodo?.vencimiento || null,
         },
       });
     }
 
-    // Si no es un grupo reagendado, proceder con la baja de inscripción
-    const inscripcionEliminada = await Inscripcion.findOneAndDelete({
-      idAlumno: String(idAlumno).trim(),
-      grupoId: String(grupoId).trim(),
-    });
+    const fechaBaja = new Date();
+    const inscripcionBaja = await Inscripcion.findByIdAndUpdate(
+      inscripcion._id,
+      { $set: { estatus: "Baja", fechaBaja } },
+      { new: true, runValidators: false }
+    );
 
     let pagoDesactivado = null;
+    const pagoIdBaja =
+      validacionPago.pago?.pagoId || validacionPago.pagoId || null;
+
     if (validacionPago.pago?._id) {
       pagoDesactivado = await Pago.findByIdAndUpdate(
         validacionPago.pago._id,
-        {
-          activo: false,
-          fechaBaja: new Date(),
-        },
+        { activo: false, fechaBaja },
+        { new: true }
+      );
+    } else if (pagoIdBaja) {
+      pagoDesactivado = await Pago.findOneAndUpdate(
+        { pagoId: pagoIdBaja },
+        { $set: { activo: false, fechaBaja } },
         { new: true }
       );
     }
@@ -322,15 +671,16 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
       mensaje: pagoDesactivado
         ? "Alumno dado de baja; sus pagos anteriores permanecen en el historial"
         : "Alumno dado de baja correctamente del grupo",
-      inscripcionEliminada: inscripcionEliminada || null,
+      inscripcionBaja: inscripcionBaja?.toObject?.() || inscripcionBaja,
       pagoDesactivado: pagoDesactivado || null,
-      pagoValidado: validacionPago.pago
-        ? {
-            mesRequerido: validacionPago.periodo.nombreMes,
-            montoRequerido: validacionPago.montoRequerido,
-            pagadoEnPeriodo: validacionPago.totalPagadoPeriodo,
-          }
-        : null,
+      pagoValidado:
+        validacionPago.pago && validacionPago.periodo
+          ? {
+              mesRequerido: validacionPago.periodo.nombreMes,
+              montoRequerido: validacionPago.montoRequerido,
+              pagadoEnPeriodo: validacionPago.totalPagadoPeriodo,
+            }
+          : null,
       reagendacionesEliminadas: resultadoReagendaciones.deletedCount,
     });
   } catch (error) {

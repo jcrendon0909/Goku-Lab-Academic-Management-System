@@ -1,10 +1,11 @@
 ﻿
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
 import { toast } from "sonner";
+import { useSyncDataReload } from '../../utils/dataSync';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -25,7 +26,7 @@ export function PagosPage() {
     const [fechaFin, setFechaFin] = useState('');
     const [criterioFechaPagados, setCriterioFechaPagados] = useState<'limite' | 'real'>('real');
 
-    const cargarDatos = () => {
+    const cargarDatos = useCallback(() => {
         setCargando(true);
         getPagosConEstatus()
             .then((data) => {
@@ -36,11 +37,13 @@ export function PagosPage() {
                 console.error("Error al traer pagos:", err);
                 setCargando(false);
             });
-    };
+    }, []);
 
     useEffect(() => {
         cargarDatos();
-    }, []);
+    }, [cargarDatos]);
+
+    useSyncDataReload(cargarDatos);
 
     useEffect(() => {
         setBusquedaAlumno('');
@@ -228,7 +231,12 @@ export function PagosPage() {
 
     const pagosFiltrados = pagos
         .filter(p => {
-            if (vista === 'control') return p.activo !== false && p.status !== "Pagado";
+            if (vista === 'control') {
+                if (p.activo === false) return false;
+                if (p.status === "Pagado") return false;
+                if (p.status === "Baja") return false;
+                return true;
+            }
             return p.status === "Pagado" || (p.activo === false && Number(p.montoPagado || 0) > 0);
         })
         .filter(p => {

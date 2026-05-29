@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Usuario from '../models/Usuario.js';
+import { getJwtSecret } from '../utils/jwtSecret.js';
 
 const router = express.Router();
 
@@ -17,12 +18,12 @@ router.post('/login', async (req, res) => {
 
         const passwordCorrecto = await bcrypt.compare(password, user.password);
         if (!passwordCorrecto) {
-            return res.status(401).json({ error: "Usuario o contraseÒa incorrectos" });
+            return res.status(401).json({ error: "Usuario o contraseùa incorrectos" });
         }
 
         const token = jwt.sign(
             { id: user._id, rol: user.rol, usuario: user.usuario },
-            "FIRMA_SECRETA_GOKU_LAB",
+            getJwtSecret(),
             { expiresIn: '8h' }
         );
 

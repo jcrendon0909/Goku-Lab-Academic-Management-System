@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CalendarDays, CreditCard, LogOut } from 'lucide-react';
+import { CalendarDays, CreditCard, LogOut, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function Navbar() {
@@ -9,6 +9,7 @@ export function Navbar() {
 
     const userStorage = localStorage.getItem('user');
     const user = userStorage ? JSON.parse(userStorage) : null;
+    const esAdmin = String(user?.rol || '').toLowerCase() === 'admin';
 
     const handleLogout = () => {
         localStorage.clear();
@@ -40,14 +41,27 @@ export function Navbar() {
                         Calendario de clases
                     </button>
 
-                    <button
-                        type="button"
-                        onClick={() => navigate('/pagos')}
-                        className={navButtonClass('/pagos')}
-                    >
-                        <CreditCard className="h-4 w-4" />
-                        Control de pagos
-                    </button>
+                    {esAdmin && (
+                        <button
+                            type="button"
+                            onClick={() => navigate('/pagos')}
+                            className={navButtonClass('/pagos')}
+                        >
+                            <CreditCard className="h-4 w-4" />
+                            Control de pagos
+                        </button>
+                    )}
+
+                    {esAdmin && (
+                        <button
+                            type="button"
+                            onClick={() => navigate('/alumnos')}
+                            className={navButtonClass('/alumnos')}
+                        >
+                            <Users className="h-4 w-4" />
+                            Alumnos inscritos
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex min-w-0 items-center justify-end gap-3">

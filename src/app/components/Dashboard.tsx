@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ChevronLeft,
     ChevronRight,
@@ -6,12 +6,17 @@ import {
     Plus,
     UserRound,
     Users,
+    AlertTriangle,
+    GraduationCap,
+    BookOpen,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import {
     actualizarComentarioGrupo,
+    actualizarInscripcionAlumno,
     bajaAlumnoDeGrupo,
     eliminarGrupo,
     eliminarReagendacion,
@@ -19,6 +24,9 @@ import {
     getCalendario,
 } from '../../services/api';
 import { toast } from 'sonner';
+import { useSyncDataReload } from '../../utils/dataSync';
+import { esAdmin } from '../../utils/auth';
+import { resolverGrupoIdInscripcion } from '../../utils/grupoInscripcion';
 import ReagendacionForm from './ReagendacionForm';
 import InscripcionForm from './InscripcionForm';
 import NuevoGrupoForm from './NuevoGrupoForm';
@@ -39,7 +47,6 @@ interface StudentItem {
   reagendacion?: {
     tipo: 'origen' | 'destino';
     texto: string;
-    comentario?: string;
     reagendacionId?: string;
   } | null;
 }
@@ -66,6 +73,9 @@ interface CalendarClass {
   fechaEspecifica?: string;
   idGrupo?: string;
   idProfesor?: string;
+  profesorActivo?: boolean;
+  idCurso?: string;
+  cursoActivo?: boolean;
   comentarioGrupo?: string;
 }
 
@@ -99,33 +109,80 @@ function obtenerFechasDelDiaEnMes(diaClase: string, year: number, month: number)
     return fechas;
 }
 
-function calcularHoraFin(horaInicio: string) {
+function calcularHoraFinDesdeDuracion(horaInicio: string, duracion?: string) {
     if (!horaInicio) return '';
-    const [h, m] = horaInicio.split(':').map(Number);
-    const fecha = new Date();
-    fecha.setHours(h, m + 120);
-    return `${fecha.getHours().toString().padStart(2, '0')}:${fecha.getMinutes().toString().padStart(2, '0')}`;
+    const [horas, minutos] = horaInicio.split(':').map(Number);
+    if (isNaN(horas) || isNaN(minutos)) return '';
+
+    const duracionStr = String(duracion || '2 horas').toLowerCase().trim();
+    let totalMinutos = 0;
+    const matchHoras = duracionStr.match(/(\d+(?:\.\d+)?)\s*horas?/);
+    if (matchHoras) totalMinutos += Number(matchHoras[1]) * 60;
+    const matchMinutos = duracionStr.match(/(\d+)\s*min/);
+    if (matchMinutos) totalMinutos += Number(matchMinutos[1]);
+    if (totalMinutos === 0) totalMinutos = 120;
+
+    let horaFin = horas;
+    let minutoFin = minutos + totalMinutos;
+    while (minutoFin >= 60) {
+        horaFin += 1;
+        minutoFin -= 60;
+    }
+
+    return `${String(horaFin).padStart(2, '0')}:${String(minutoFin).padStart(2, '0')}`;
 }
 
+// Paleta alineada al logo de Goku Lab (azul, cian, verde, amarillo/ámbar, rojo/coral)
+// y tonos hermanos. Colores alegres pero no fluorescentes; texto blanco encima.
+const PALETA_GOKU: Array<[number, number, number]> = [
+    [205, 72, 48], // Azul Goku
+    [192, 68, 44], // Cian
+    [133, 52, 42], // Verde Goku
+    [42, 80, 48], // Ámbar
+    [6, 68, 54], // Rojo / coral
+    [172, 55, 40], // Teal
+    [222, 58, 56], // Índigo
+    [96, 46, 42], // Verde lima
+    [26, 76, 50], // Naranja
+    [200, 70, 54], // Azul cielo
+    [160, 52, 42], // Verde menta
+    [48, 70, 44], // Mostaza
+    [262, 40, 58], // Morado suave
+    [145, 48, 36], // Verde bosque
+    [218, 64, 50], // Azul marino
+    [330, 48, 56], // Frambuesa suave
+];
+
 function obtenerColorPorCurso(curso: string) {
-    const colores: Record<string, string> = {
-        'Programación Visual': '#06b6d4',
-        'Diseño de Videojuegos': '#ec4899',
-        'Python Star': '#10b981',
-        'Java Scripts': '#f59e0b',
-        JavaScript: '#f59e0b',
-        'Robótica 26-1 (Torneo)': '#ef4444',
-        Robótica: '#ef4444',
-        'Alfabetización Digital': '#8b5cf6',
-        Matemáticas: '#3b82f6',
-        Inglés: '#3b82f6',
-        'Diseño Gráfico': '#3b82f6',
-        'Programación Avanzada': '#0ea5e9',
-        Emprendimiento: '#14b8a6',
-        'Taller de Creatividad': '#f97316',
-        'Caballero del Código': '#6366f1',
-    };
-    return colores[curso] || '#3b82f6';
+    const nombre = String(curso || '').trim();
+    if (!nombre) return 'hsl(215, 16%, 55%)';
+
+    // Colores fijos por curso (coincidencia por palabra clave, ignora acentos)
+    const clave = nombre
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    if (clave.includes('robotica')) return 'hsl(2, 72%, 52%)'; // rojo
+    if (clave.includes('matematica')) return 'hsl(205, 72%, 48%)'; // azul
+    if (clave.includes('programacion visual')) return 'hsl(26, 82%, 52%)'; // naranja
+    if (clave.includes('diseno grafico')) return 'hsl(45, 90%, 50%)'; // amarillo
+
+    // Hash estable a partir del nombre del curso
+    let hash = 0;
+    for (let i = 0; i < nombre.length; i++) {
+        hash = (hash * 31 + nombre.charCodeAt(i)) >>> 0;
+    }
+
+    const [h, s, l] = PALETA_GOKU[hash % PALETA_GOKU.length];
+
+    // Para cursos que repiten color de la paleta, variamos un poco la tonalidad
+    // (más claro / más oscuro) sin salirnos del rango legible con texto blanco.
+    const variante = Math.floor(hash / PALETA_GOKU.length) % 3; // 0, 1, 2
+    const ajuste = variante === 1 ? -7 : variante === 2 ? 7 : 0;
+    const lightness = Math.max(36, Math.min(60, l + ajuste));
+
+    return `hsl(${h}, ${s}%, ${lightness}%)`;
 }
 
 function parseFechaFlexible(valor: string) {
@@ -177,7 +234,7 @@ export function Dashboard() {
         const hoy = new Date();
         return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     });
-    const [view, setView] = useState<'month' | 'day'>('month');
+    const [view, setView] = useState<'month' | 'week' | 'day'>('month');
     const [selectedClass, setSelectedClass] = useState<CalendarClass | null>(null);
     const [reagendacionData, setReagendacionData] = useState<any>(null);
     const [showReagendacion, setShowReagendacion] = useState(false);
@@ -187,10 +244,14 @@ export function Dashboard() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
+    const puedeEditar = esAdmin();
+    const navigate = useNavigate();
 
-    const recargarCalendario = () => {
+    const recargarCalendario = useCallback(() => {
         setReloadKey((prev) => prev + 1);
-    };
+    }, []);
+
+    useSyncDataReload(recargarCalendario);
 
     const handleReagendar = (student: any) => {
         setReagendacionData({ alumno: student, clase: selectedClass });
@@ -240,12 +301,14 @@ export function Dashboard() {
     const handleBajaAlumno = async (student: any, classData: CalendarClass) => {
         try {
             const idAlumno = student?.idAlumno;
-            const grupoId = classData?.idGrupo;
+            const grupoId = resolverGrupoIdInscripcion(student, classData);
             if (!idAlumno || !grupoId) {
-                alert('No se encontró el alumno o el grupo');
+                alert('No se encontró el alumno o el grupo de inscripción');
                 return;
             }
-            const confirmado = window.confirm(`¿Seguro que deseas dar de baja a ${student.nombreAlumno} de este grupo?`);
+            const confirmado = window.confirm(
+                `¿Inactivar a ${student.nombreAlumno} en este grupo?\n\nDeja de aparecer en el calendario. Solo se permitirá si no tiene pagos pendientes.`
+            );
             if (!confirmado) return;
 
       const respuesta = await bajaAlumnoDeGrupo(idAlumno, grupoId);
@@ -302,6 +365,93 @@ export function Dashboard() {
         }
     };
 
+    const actualizarAlumnoEnClases = (
+        idAlumno: string,
+        grupoIdInscripcion: string,
+        cambios: { modalidad?: string; comentarios?: string }
+    ) => {
+        const aplicar = (students: any[]) =>
+            students.map((alumno) => {
+                if (alumno.idAlumno !== idAlumno) return alumno;
+                const grupoAlumno =
+                    alumno.grupoIdInscripcion || grupoIdInscripcion;
+                if (
+                    normalizar(grupoAlumno) !== normalizar(grupoIdInscripcion)
+                ) {
+                    return alumno;
+                }
+                return {
+                    ...alumno,
+                    ...(cambios.modalidad !== undefined
+                        ? { modalidad: cambios.modalidad }
+                        : {}),
+                    ...(cambios.comentarios !== undefined
+                        ? { comentarios: cambios.comentarios }
+                        : {}),
+                };
+            });
+
+        setClasses((prev) =>
+            prev.map((cls) => ({
+                ...cls,
+                students: aplicar(cls.students || []),
+            }))
+        );
+
+        setSelectedClass((prev) =>
+            prev
+                ? {
+                      ...prev,
+                      students: aplicar(prev.students || []),
+                  }
+                : prev
+        );
+    };
+
+    const handleActualizarInscripcion = async (
+        student: any,
+        classData: CalendarClass,
+        datos: { modalidad?: string; comentarios?: string }
+    ) => {
+        const idGrupoClase = String(classData.idGrupo || '');
+        const esGrupoVirtual = idGrupoClase.toUpperCase().startsWith('VIRTUAL_');
+        const grupoId =
+            student.grupoIdInscripcion ||
+            (classData as any).idGrupoOrigen ||
+            (esGrupoVirtual ? '' : idGrupoClase);
+
+        if (!student.idAlumno || !grupoId) {
+            toast.error(
+                'No se encontró el grupo de inscripción. Recarga el calendario e intenta de nuevo.'
+            );
+            return;
+        }
+
+        try {
+            const respuesta = await actualizarInscripcionAlumno(
+                student.idAlumno,
+                grupoId,
+                datos
+            );
+
+            const inscripcion = respuesta?.inscripcion || {};
+            actualizarAlumnoEnClases(student.idAlumno, grupoId, {
+                modalidad: inscripcion.modalidad ?? datos.modalidad,
+                comentarios: inscripcion.comentarios ?? datos.comentarios,
+            });
+
+            if (datos.modalidad) {
+                toast.success(`Modalidad actualizada a ${datos.modalidad}`);
+            } else {
+                toast.success('Comentario guardado');
+            }
+        } catch (error: any) {
+            console.error('Error al actualizar inscripción:', error);
+            toast.error(error.message || 'Error al actualizar inscripción');
+            throw error;
+        }
+    };
+
     const handleGuardarComentarioGrupo = async (
         classData: CalendarClass,
         comentario: string
@@ -348,9 +498,22 @@ export function Dashboard() {
                 const clasesBase = data.clasesBase || [];
                 const reagendaciones = data.reagendaciones || [];
 
+                // Generamos ocurrencias para el mes anterior, actual y siguiente,
+                // así la vista de semana/día funciona correctamente en los bordes de mes.
+                const ventanaMeses = [-1, 0, 1].map((delta) => {
+                    const d = new Date(year, month + delta, 1);
+                    return { y: d.getFullYear(), m: d.getMonth() };
+                });
+                const dentroDeVentana = (fecha: Date) =>
+                    ventanaMeses.some(
+                        (v) => fecha.getFullYear() === v.y && fecha.getMonth() === v.m
+                    );
+
                 const transformedBase: CalendarClass[] = clasesBase.reduce((acc: CalendarClass[], item: any) => {
                     if (!item.diaClase || !item.horaClase) return acc;
-                    const fechas = obtenerFechasDelDiaEnMes(item.diaClase, year, month);
+                    const fechas = ventanaMeses.flatMap((v) =>
+                        obtenerFechasDelDiaEnMes(item.diaClase, v.y, v.m)
+                    );
 
                     const eventos: CalendarClass[] = fechas
                         .filter((fecha) => {
@@ -366,6 +529,9 @@ export function Dashboard() {
                         .map((fecha, index) => {
                             const fechaEvento = soloFecha(new Date(fecha));
                             const horaInicio = item.horaClase || '';
+                            const horaFin =
+                                item.horaFin ||
+                                calcularHoraFinDesdeDuracion(horaInicio, item.duracion);
 
                             const studentsFiltrados = (item.alumnos || [])
                                 .filter((alumno: any) => {
@@ -389,7 +555,6 @@ export function Dashboard() {
                     reagendacion: {
                       tipo: 'origen',
                       reagendacionId: reag.reagendacionId || '',
-                      comentario: reag.comentario || '',
                       texto: fechaNueva
                         ? `Nuevo horario: ${fechaNueva.toLocaleDateString('es-MX', {
                             weekday: 'short',
@@ -413,10 +578,10 @@ export function Dashboard() {
 
                             return {
                                 id: `${item.idGrupo}-${index}`,
-                                title: item.nombreCurso,
+                                title: item.nombreCurso || 'Sin curso asignado',
                                 date: fechaEvento,
                                 startTime: horaInicio,
-                                endTime: calcularHoraFin(horaInicio),
+                                endTime: horaFin,
                                 teacher: { name: item.nombreProfesor || '', email: '' },
                                 students: studentsFiltrados,
                                 color: obtenerColorPorCurso(item.nombreCurso),
@@ -424,6 +589,9 @@ export function Dashboard() {
                                 esReagendacion: false,
                                 idGrupo: item.idGrupo || '',
                                 idProfesor: item.idProfesor || '',
+                                profesorActivo: item.profesorActivo !== false,
+                                idCurso: item.idCurso || '',
+                                cursoActivo: item.cursoActivo !== false,
                                 comentarioGrupo: item.comentarioGrupo || item.comentario || '',
                                 tipoReagendacionClase: tieneOrigen ? 'origen' : null,
                             };
@@ -443,10 +611,13 @@ export function Dashboard() {
                     const fechaNuevaTexto = r.alumnos?.[0]?.reagendacion?.fechaHoraNueva || r.fechaHoraNueva || '';
                     const fechaNueva = parseFechaFlexible(fechaNuevaTexto);
                     if (!fechaNueva) return;
-                    if (fechaNueva.getFullYear() !== year || fechaNueva.getMonth() !== month) return;
+                    if (!dentroDeVentana(fechaNueva)) return;
 
                     const fechaSolo = soloFecha(fechaNueva);
                     const horaNueva = r.horaClase || obtenerHoraDesdeFecha(fechaNuevaTexto) || '00:00';
+                    const horaFinReag =
+                        r.horaFin ||
+                        calcularHoraFinDesdeDuracion(horaNueva, r.duracion);
 
                     if (!r.esVirtual) {
                         const existente = baseConDestinos.find((cls) => {
@@ -474,10 +645,14 @@ export function Dashboard() {
                     idAlumno: alumno.idAlumno,
                     nombreAlumno: alumno.nombreAlumno,
                     modalidad: alumno.modalidad || 'Presencial',
+                    comentarios: alumno.comentarios || '',
+                    grupoIdInscripcion:
+                      alumno.grupoIdInscripcion ||
+                      r.idGrupoOrigen ||
+                      '',
                     reagendacion: {
                       tipo: 'destino',
                       reagendacionId: alumno.reagendacion?.reagendacionId || '',
-                      comentario: alumno.reagendacion?.comentario || '',
                       texto: fechaOriginal
                         ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                             weekday: 'short',
@@ -523,10 +698,14 @@ export function Dashboard() {
               idAlumno: alumno.idAlumno,
               nombreAlumno: alumno.nombreAlumno,
               modalidad: alumno.modalidad || 'Presencial',
+              comentarios: alumno.comentarios || '',
+              grupoIdInscripcion:
+                alumno.grupoIdInscripcion ||
+                r.idGrupoOrigen ||
+                '',
               reagendacion: {
                 tipo: 'destino' as const,
                 reagendacionId: alumno.reagendacion?.reagendacionId || '',
-                comentario: alumno.reagendacion?.comentario || '',
                 texto: fechaOriginal
                   ? `Viene de: ${fechaOriginal.toLocaleDateString('es-MX', {
                       weekday: 'short',
@@ -548,7 +727,7 @@ export function Dashboard() {
             title: r.nombreCurso,
             date: fechaSolo,
             startTime: horaNueva,
-            endTime: calcularHoraFin(horaNueva),
+            endTime: horaFinReag,
             teacher: {
               name: r.nombreProfesor || '',
               email: '',
@@ -558,6 +737,7 @@ export function Dashboard() {
             status: 'rescheduled-destination',
             esReagendacion: true,
             idGrupo: r.idGrupo || '',
+            idGrupoOrigen: r.idGrupoOrigen || '',
             idProfesor: r.idProfesor || '',
             comentarioGrupo: r.comentarioGrupo || r.comentario || '',
             reagendacionId: r.reagendacionId || r.reagendacionIds?.[0] || '',
@@ -608,8 +788,78 @@ export function Dashboard() {
             .sort((a, b) => horaAMinutos(a.startTime) - horaAMinutos(b.startTime));
     };
 
-    const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-    const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    const getInicioSemana = (date: Date) => {
+        const inicio = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        inicio.setDate(inicio.getDate() - inicio.getDay()); // Domingo como inicio
+        return inicio;
+    };
+
+    const getDiasSemana = (date: Date) => {
+        const inicio = getInicioSemana(date);
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(inicio);
+            d.setDate(inicio.getDate() + i);
+            return d;
+        });
+    };
+
+    const handlePrev = () => {
+        if (view === 'month') {
+            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+        } else if (view === 'week') {
+            const d = new Date(currentDate);
+            d.setDate(d.getDate() - 7);
+            setCurrentDate(d);
+        } else {
+            const d = new Date(currentDate);
+            d.setDate(d.getDate() - 1);
+            setCurrentDate(d);
+        }
+    };
+
+    const handleNext = () => {
+        if (view === 'month') {
+            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+        } else if (view === 'week') {
+            const d = new Date(currentDate);
+            d.setDate(d.getDate() + 7);
+            setCurrentDate(d);
+        } else {
+            const d = new Date(currentDate);
+            d.setDate(d.getDate() + 1);
+            setCurrentDate(d);
+        }
+    };
+
+    const tituloVista = () => {
+        if (view === 'month') {
+            return (
+                <>
+                    {MONTHS[currentDate.getMonth()]}{' '}
+                    <span className="text-cyan-600">{currentDate.getFullYear()}</span>
+                </>
+            );
+        }
+        if (view === 'week') {
+            const dias = getDiasSemana(currentDate);
+            const ini = dias[0];
+            const fin = dias[6];
+            const fmt = (d: Date) =>
+                d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+            return (
+                <>
+                    {fmt(ini)} - {fmt(fin)}{' '}
+                    <span className="text-cyan-600">{fin.getFullYear()}</span>
+                </>
+            );
+        }
+        return (
+            <>
+                {currentDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{' '}
+                <span className="text-cyan-600">{currentDate.getFullYear()}</span>
+            </>
+        );
+    };
     const handleClassClick = (cls: CalendarClass) => {
         setSelectedClass(cls);
         setIsDialogOpen(true);
@@ -653,6 +903,18 @@ export function Dashboard() {
                                             >
                                                 <div className="font-semibold truncate pr-7 text-sm leading-tight">{cls.title}</div>
                                                 <div className="text-[11px] opacity-95 font-medium">{cls.startTime}</div>
+                                                {cls.cursoActivo === false && (
+                                                    <div className="mt-1 flex items-center gap-1 rounded bg-orange-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        {cls.title && cls.title !== 'Sin curso asignado' ? 'Curso inactivo' : 'Sin curso'}
+                                                    </div>
+                                                )}
+                                                {(!cls.teacher?.name || cls.profesorActivo === false) && (
+                                                    <div className="mt-1 flex items-center gap-1 rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Sin profesor
+                                                    </div>
+                                                )}
                                                 {cls.tipoReagendacionClase === 'origen' && <div className="absolute top-1.5 right-1.5 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">RP</div>}
                                                 {cls.tipoReagendacionClase === 'destino' && <div className="absolute top-1.5 right-1.5 bg-sky-300 text-sky-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">RP</div>}
                                             </button>
@@ -660,6 +922,93 @@ export function Dashboard() {
                                     </div>
                                 </>
                             )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const renderWeekView = () => {
+        const dias = getDiasSemana(currentDate);
+        const hoy = new Date();
+        const esHoy = (d: Date) =>
+            d.getDate() === hoy.getDate() &&
+            d.getMonth() === hoy.getMonth() &&
+            d.getFullYear() === hoy.getFullYear();
+
+        return (
+            <div className="grid grid-cols-7 gap-3 w-full">
+                {dias.map((day, index) => {
+                    const dayClasses = getClassesForDate(day);
+                    const hoyFlag = esHoy(day);
+
+                    return (
+                        <div
+                            key={index}
+                            className={`min-h-[420px] p-3 border-2 rounded-xl overflow-y-auto transition-all shadow-sm hover:shadow-md ${
+                                hoyFlag
+                                    ? 'bg-gradient-to-br from-cyan-100 to-blue-50 border-cyan-400 ring-2 ring-cyan-300'
+                                    : 'bg-white border-gray-200 hover:border-cyan-300'
+                            }`}
+                        >
+                            <div className="mb-3 text-center">
+                                <div className="text-xs font-bold uppercase text-cyan-700">
+                                    {DAYS[day.getDay()]}
+                                </div>
+                                <div
+                                    className={`mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold ${
+                                        hoyFlag ? 'bg-cyan-500 text-white' : 'text-gray-700 bg-gray-100'
+                                    }`}
+                                >
+                                    {day.getDate()}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {dayClasses.length === 0 ? (
+                                    <p className="text-center text-[11px] text-gray-300 italic mt-2">
+                                        —
+                                    </p>
+                                ) : (
+                                    dayClasses.map((cls) => (
+                                        <button
+                                            key={cls.id}
+                                            onClick={() => handleClassClick(cls)}
+                                            className={`w-full text-left p-2 rounded-lg text-xs text-white hover:opacity-85 transition-all relative shadow-md hover:shadow-lg ${
+                                                cls.tipoReagendacionClase === 'origen'
+                                                    ? 'ring-2 ring-yellow-400 border-2 border-yellow-300'
+                                                    : cls.tipoReagendacionClase === 'destino'
+                                                    ? 'ring-2 ring-sky-300 border-2 border-sky-200'
+                                                    : ''
+                                            }`}
+                                            style={{ backgroundColor: cls.color }}
+                                            title={`${cls.title} - ${cls.startTime}`}
+                                        >
+                                            <div className="font-semibold truncate pr-6 text-[13px] leading-tight">
+                                                {cls.title}
+                                            </div>
+                                            <div className="text-[11px] opacity-95 font-medium">
+                                                {cls.startTime} - {cls.endTime}
+                                            </div>
+                                            {cls.cursoActivo === false && (
+                                                <div className="mt-1 flex items-center gap-1 rounded bg-orange-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    {cls.title && cls.title !== 'Sin curso asignado' ? 'Curso inactivo' : 'Sin curso'}
+                                                </div>
+                                            )}
+                                            {(!cls.teacher?.name || cls.profesorActivo === false) && (
+                                                <div className="mt-1 flex items-center gap-1 rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Sin profesor
+                                                </div>
+                                            )}
+                                            {cls.tipoReagendacionClase === 'origen' && <div className="absolute top-1 right-1 bg-yellow-400 text-yellow-900 text-[9px] font-bold px-1 py-0.5 rounded-full shadow-md">RP</div>}
+                                            {cls.tipoReagendacionClase === 'destino' && <div className="absolute top-1 right-1 bg-sky-300 text-sky-900 text-[9px] font-bold px-1 py-0.5 rounded-full shadow-md">RP</div>}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     );
                 })}
@@ -702,10 +1051,27 @@ export function Dashboard() {
                                         >
                                             <div className="font-bold text-lg pr-8">{cls.title}</div>
                                             <div className="text-sm opacity-90 font-semibold">{cls.startTime} - {cls.endTime}</div>
-                                            <div className="mt-2 flex items-center gap-1.5 text-xs opacity-85">
-                                                <UserRound className="h-3.5 w-3.5" />
-                                                {cls.teacher.name}
-                                            </div>
+                                            {cls.cursoActivo === false && (
+                                                <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-orange-600/90 px-2 py-0.5 text-xs font-bold text-white">
+                                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                                    {cls.title && cls.title !== 'Sin curso asignado'
+                                                        ? 'Curso inactivo'
+                                                        : 'Sin curso asignado'}
+                                                </div>
+                                            )}
+                                            {cls.teacher?.name && cls.profesorActivo !== false ? (
+                                                <div className="mt-2 flex items-center gap-1.5 text-xs opacity-85">
+                                                    <UserRound className="h-3.5 w-3.5" />
+                                                    {cls.teacher.name}
+                                                </div>
+                                            ) : (
+                                                <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-red-600/90 px-2 py-0.5 text-xs font-bold text-white">
+                                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                                    {cls.teacher?.name
+                                                        ? 'Profesor inactivo'
+                                                        : 'Sin profesor asignado'}
+                                                </div>
+                                            )}
                                             <div className="mt-1 flex items-center gap-1.5 text-xs opacity-80">
                                                 <Users className="h-3.5 w-3.5" />
                                                 {cls.students.length} {cls.students.length === 1 ? 'alumno' : 'alumnos'}
@@ -762,13 +1128,35 @@ export function Dashboard() {
                         </div>
                     </div>
 
-                    <Button
-                        onClick={() => setShowNuevoGrupo(true)}
-                        className="h-11 rounded-lg bg-[#0047B8] px-5 text-sm font-black text-white shadow-md shadow-blue-900/15 transition-colors hover:bg-[#003A96]"
-                    >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Crear nuevo grupo
-                    </Button>
+                    {puedeEditar && (
+                        <div className="flex flex-shrink-0 items-center gap-3">
+                            <Button
+                                variant="outline"
+                                onClick={() => navigate('/maestros')}
+                                className="h-11 rounded-lg border-2 border-cyan-200 bg-white px-4 text-sm font-black text-cyan-700 shadow-sm transition-colors hover:bg-cyan-50"
+                            >
+                                <GraduationCap className="mr-2 h-4 w-4" />
+                                Maestros
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                onClick={() => navigate('/cursos')}
+                                className="h-11 rounded-lg border-2 border-cyan-200 bg-white px-4 text-sm font-black text-cyan-700 shadow-sm transition-colors hover:bg-cyan-50"
+                            >
+                                <BookOpen className="mr-2 h-4 w-4" />
+                                Cursos
+                            </Button>
+
+                            <Button
+                                onClick={() => setShowNuevoGrupo(true)}
+                                className="h-11 rounded-lg bg-[#0047B8] px-5 text-sm font-black text-white shadow-md shadow-blue-900/15 transition-colors hover:bg-[#003A96]"
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Crear nuevo grupo
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -779,20 +1167,20 @@ export function Dashboard() {
                             <Button
                                 variant="outline"
                                 size="icon"
-                                onClick={handlePrevMonth}
+                                onClick={handlePrev}
                                 className="rounded-lg border-2 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all"
                             >
                                 <ChevronLeft className="h-5 w-5 text-cyan-600" />
                             </Button>
 
-                            <h2 className="text-4xl font-bold text-gray-900 min-w-fit">
-                                {MONTHS[currentDate.getMonth()]} <span className="text-cyan-600">{currentDate.getFullYear()}</span>
+                            <h2 className="text-4xl font-bold text-gray-900 min-w-fit capitalize">
+                                {tituloVista()}
                             </h2>
 
                             <Button
                                 variant="outline"
                                 size="icon"
-                                onClick={handleNextMonth}
+                                onClick={handleNext}
                                 className="rounded-lg border-2 border-cyan-300 hover:bg-cyan-100 hover:border-cyan-400 transition-all"
                             >
                                 <ChevronRight className="h-5 w-5 text-cyan-600" />
@@ -811,6 +1199,16 @@ export function Dashboard() {
                             </Button>
 
                             <Button
+                                variant={view === 'week' ? 'default' : 'outline'}
+                                onClick={() => setView('week')}
+                                className={`rounded-lg font-semibold transition-all ${view === 'week' ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg' : 'border-2 border-cyan-200 hover:bg-cyan-50 text-gray-700'
+                                    }`}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                Semana
+                            </Button>
+
+                            <Button
                                 variant={view === 'day' ? 'default' : 'outline'}
                                 onClick={() => setView('day')}
                                 className={`rounded-lg font-semibold transition-all ${view === 'day' ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg' : 'border-2 border-cyan-200 hover:bg-cyan-50 text-gray-700'
@@ -822,7 +1220,11 @@ export function Dashboard() {
                         </div>
                     </div>
 
-                    {view === 'month' ? renderMonthView() : renderDayView()}
+                    {view === 'month'
+                        ? renderMonthView()
+                        : view === 'week'
+                        ? renderWeekView()
+                        : renderDayView()}
                 </Card>
 
             </main>
@@ -831,6 +1233,7 @@ export function Dashboard() {
                 <ClassDetailsDialog
                     classData={selectedClass}
                     isOpen={isDialogOpen}
+                    puedeEditar={puedeEditar}
                     onClose={() => setIsDialogOpen(false)}
                     onReagendar={handleReagendar}
                     onInscribirAlumno={handleInscribirAlumno}
@@ -839,6 +1242,7 @@ export function Dashboard() {
                     onEliminarReagendacion={handleEliminarReagendacion}
                     onBajaAlumno={handleBajaAlumno}
                     onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}
+                    onActualizarInscripcion={handleActualizarInscripcion}
                 />
             )}
 

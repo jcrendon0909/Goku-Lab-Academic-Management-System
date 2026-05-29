@@ -1,12 +1,27 @@
 import express from "express";
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
+import Inscripcion from "../models/Inscripcion.js";
+import Pago from "../models/Pago.js";
+import { validarPagoAlCorrienteParaBaja } from "../utils/pagos.js";
 
 const router = express.Router();
 
 function normalizar(valor) {
   return String(valor || "").trim().toUpperCase();
 }
+
+const filtroIdAlumno = (idAlumno) => {
+  const id = String(idAlumno).trim();
+  return {
+    $or: [
+      { idAlumno: id },
+      { "idAlumno ": id },
+      { IdAlumno: id },
+      { id_alumno: id },
+    ],
+  };
+};
 
 router.get("/", async (req, res) => {
   try {
@@ -71,6 +86,255 @@ router.get("/", async (req, res) => {
     console.error("ERROR GET ALUMNOS:", error);
     res.status(500).json({
       error: "Error al obtener alumnos",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:idAlumno/nota", async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+    const observaciones = String(
+      req.body?.observaciones ?? req.body?.nota ?? req.body?.comentarios ?? ""
+    ).trim();
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+
+    const idTrimmed = String(idAlumno).trim();
+
+    const actualizado = await Alumno.findOneAndUpdate(
+      {
+        $or: [
+          { idAlumno: idTrimmed },
+          { "idAlumno ": idTrimmed },
+          { IdAlumno: idTrimmed },
+          { id_alumno: idTrimmed },
+        ],
+      },
+      { $set: { observaciones } },
+      { new: true }
+    ).lean();
+
+    if (!actualizado) {
+      return res.status(404).json({ error: "No se encontró el alumno" });
+    }
+
+    res.status(200).json({
+      ok: true,
+      alumno: {
+        ...actualizado,
+        idAlumno:
+          actualizado.idAlumno ||
+          actualizado["idAlumno "] ||
+          actualizado.IdAlumno ||
+          actualizado.id_alumno ||
+          idTrimmed,
+        nombreAlumno:
+          actualizado.nombreAlumno || actualizado.nombre || "",
+        observaciones: actualizado.observaciones || "",
+      },
+    });
+  } catch (error) {
+    console.error("ERROR PATCH NOTA ALUMNO:", error);
+    res.status(500).json({
+      error: "Error al guardar la nota del alumno",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:idAlumno", async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+
+    const idTrimmed = String(idAlumno).trim();
+    const telefono = req.body?.telefono;
+    const tutor = req.body?.tutor;
+    const estatus = req.body?.estatus;
+
+    const update = {};
+    if (telefono !== undefined) update.telefono = String(telefono || "").trim();
+    if (tutor !== undefined) update.tutor = String(tutor || "").trim();
+    if (estatus !== undefined) update.estatus = String(estatus || "").trim();
+    if (req.body?.observaciones !== undefined) {
+      update.observaciones = String(req.body?.observaciones || "").trim();
+    }
+
+    const actualizado = await Alumno.findOneAndUpdate(
+      {
+        $or: [
+          { idAlumno: idTrimmed },
+          { "idAlumno ": idTrimmed },
+          { IdAlumno: idTrimmed },
+          { id_alumno: idTrimmed },
+        ],
+      },
+      { $set: update },
+      { new: true }
+    ).lean();
+
+    if (!actualizado) {
+      return res.status(404).json({ error: "No se encontró el alumno" });
+    }
+
+    res.status(200).json({
+      ok: true,
+      alumno: {
+        ...actualizado,
+        idAlumno:
+          actualizado.idAlumno ||
+          actualizado["idAlumno "] ||
+          actualizado.IdAlumno ||
+          actualizado.id_alumno ||
+          idTrimmed,
+        nombreAlumno: actualizado.nombreAlumno || actualizado.nombre || "",
+      },
+    });
+  } catch (error) {
+    console.error("ERROR PATCH ALUMNOS:", error);
+    res.status(500).json({
+      error: "Error al actualizar alumno",
+      detalle: error.message,
+    });
+  }
+});
+
+router.patch("/:idAlumno/desactivar", async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+
+    const idTrimmed = String(idAlumno).trim();
+
+    // Validar que no tenga pagos pendientes en cursos activos
+    const inscripcionesActivas = await Inscripcion.find({
+      idAlumno: idTrimmed,
+      estatus: { $ne: "Baja" },
+    }).lean();
+
+    for (const ins of inscripcionesActivas) {
+      const validacion = await validarPagoAlCorrienteParaBaja({
+        idAlumno: idTrimmed,
+        grupoId: ins.grupoId,
+        montoMensualidadInscripcion: ins.montoMensualidad,
+        fechaInicioCobro:
+          ins.fechaInicioPago ||
+          ins.fechaPago ||
+          ins.fechaInscripcion ||
+          ins.createdAt,
+      });
+
+      if (!validacion.ok) {
+        const saldo = Number(validacion.saldoPendiente || 0);
+        let mensaje =
+          validacion.motivo ||
+          "No se puede desactivar mientras existan pagos pendientes";
+        if (saldo > 0) {
+          mensaje = `No se puede desactivar. Saldo pendiente: $${saldo.toFixed(2)}`;
+        }
+
+        return res.status(409).json({
+          error: mensaje,
+          detalle: {
+            grupoId: ins.grupoId,
+            mesRequerido: validacion.periodo?.nombreMes || null,
+            saldoPendiente: saldo,
+            saldoPeriodo: validacion.saldoPeriodo,
+          },
+        });
+      }
+    }
+
+    const actualizado = await Alumno.findOneAndUpdate(
+      {
+        $or: [
+          { idAlumno: idTrimmed },
+          { "idAlumno ": idTrimmed },
+          { IdAlumno: idTrimmed },
+          { id_alumno: idTrimmed },
+        ],
+      },
+      { $set: { estatus: "Inactivo" } },
+      { new: true }
+    ).lean();
+
+    if (!actualizado) {
+      return res.status(404).json({ error: "No se encontró el alumno" });
+    }
+
+    res.status(200).json({ ok: true, alumno: actualizado });
+  } catch (error) {
+    console.error("ERROR DESACTIVAR ALUMNO:", error);
+    res.status(500).json({
+      error: "Error al desactivar alumno",
+      detalle: error.message,
+    });
+  }
+});
+
+router.delete("/:idAlumno", async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+    if (!idAlumno || !String(idAlumno).trim()) {
+      return res.status(400).json({ error: "Falta idAlumno" });
+    }
+
+    const idTrimmed = String(idAlumno).trim();
+
+    const activas = await Inscripcion.countDocuments({
+      ...filtroIdAlumno(idTrimmed),
+      estatus: { $ne: "Baja" },
+    });
+
+    if (activas > 0) {
+      return res.status(409).json({
+        error: "No se puede eliminar el alumno porque tiene cursos activos",
+        detalle: { inscripcionesActivas: activas },
+      });
+    }
+
+    const eliminado = await Alumno.findOneAndDelete({
+      $or: filtroIdAlumno(idTrimmed).$or,
+    }).lean();
+
+    const inscripcionesResult = await Inscripcion.deleteMany(
+      filtroIdAlumno(idTrimmed)
+    );
+    const pagosResult = await Pago.deleteMany(filtroIdAlumno(idTrimmed));
+
+    if (
+      !eliminado &&
+      inscripcionesResult.deletedCount === 0 &&
+      pagosResult.deletedCount === 0
+    ) {
+      return res.status(404).json({
+        error: "No se encontró el alumno ni historial de inscripciones",
+      });
+    }
+
+    res.status(200).json({
+      ok: true,
+      alumno: eliminado,
+      historialLimpiado: !eliminado,
+      inscripcionesEliminadas: inscripcionesResult.deletedCount,
+      pagosEliminados: pagosResult.deletedCount,
+      mensaje: eliminado
+        ? "Alumno eliminado"
+        : "Se quitó el historial del listado (el alumno ya no estaba en el catálogo)",
+    });
+  } catch (error) {
+    console.error("ERROR DELETE ALUMNO:", error);
+    res.status(500).json({
+      error: "Error al eliminar alumno",
       detalle: error.message,
     });
   }

@@ -3,11 +3,185 @@ import Reagendacion from "../models/Reagendacion.js";
 import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
+import Pago from "../models/Pago.js";
+import Abono from "../models/Abono.js";
 import { generarId } from "../utils/generarId.js";
 import { parseFechaFlexible } from "../utils/parseFechas.js";
+import { crearPagoId } from "../utils/pagos.js";
 import { notificarReagendacionProfesor } from "../utils/notificaciones.js";
 
 const router = express.Router();
+
+const normalizar = (valor) => String(valor || "").trim().toUpperCase();
+
+const grupoIdDeInscripcion = (ins) =>
+  String(ins?.grupoId || ins?.GrupoId || ins?.idGrupo || ins?.IdGrupo || "").trim();
+
+const DIAS_SEMANA = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+
+async function buscarGrupoPorId(grupoId) {
+  const id = String(grupoId || "").trim();
+  if (!id) return null;
+  return Grupo.findOne({
+    $or: [{ IdGrupo: id }, { idGrupo: id }],
+  }).lean();
+}
+
+async function resolverGrupoDestinoPermanente({
+  grupoNuevoFinal,
+  nombreCurso,
+  fechaNuevaDate,
+  duracion,
+  idProfesorNuevo,
+  profesorNuevo,
+}) {
+  const existente = await buscarGrupoPorId(grupoNuevoFinal);
+  if (existente) {
+    return existente.IdGrupo || existente.idGrupo || grupoNuevoFinal;
+  }
+
+  const diaClase = DIAS_SEMANA[fechaNuevaDate.getDay()] || "Lunes";
+  const horaClase = `${String(fechaNuevaDate.getHours()).padStart(2, "0")}:${String(
+    fechaNuevaDate.getMinutes()
+  ).padStart(2, "0")}`;
+  const nuevoId = await generarId("grupo");
+
+  const nuevoGrupo = new Grupo({
+    IdGrupo: nuevoId,
+    nombreCurso: nombreCurso || "",
+    diaClase,
+    horaClase,
+    duracionClase: duracion || "2 horas",
+    idProfesor: idProfesorNuevo || "",
+    nombreProfesor: profesorNuevo || "Sin profesor",
+    CapacidadMaxima: 8,
+    Estatus: "Activo",
+    fechaCreacion: new Date(),
+  });
+
+  await nuevoGrupo.save();
+  return nuevoId;
+}
+
+async function moverPagoAlNuevoGrupo(
+  idAlumno,
+  grupoOrigen,
+  grupoDestino,
+  nombreCurso
+) {
+  const pagoIdViejo = crearPagoId(idAlumno, grupoOrigen);
+  const pagoIdNuevo = crearPagoId(idAlumno, grupoDestino);
+
+  const pago = await Pago.findOne({ pagoId: pagoIdViejo });
+  if (!pago) return null;
+
+  const pagoDestinoExistente = await Pago.findOne({ pagoId: pagoIdNuevo }).lean();
+  if (pagoDestinoExistente) {
+    return pagoDestinoExistente;
+  }
+
+  await Pago.findByIdAndUpdate(pago._id, {
+    $set: {
+      pagoId: pagoIdNuevo,
+      grupoId: grupoDestino,
+      nombreCurso: nombreCurso || pago.nombreCurso,
+    },
+  });
+
+  await Abono.updateMany(
+    { pagoId: pagoIdViejo },
+    { $set: { pagoId: pagoIdNuevo } }
+  );
+
+  return { pagoIdAnterior: pagoIdViejo, pagoIdNuevo };
+}
+
+async function aplicarReagendacionPermanente({
+  inscripcionOrigen,
+  idAlumno,
+  grupoOrigenCanonico,
+  grupoNuevoFinal,
+  nombreCurso,
+  fechaNuevaDate,
+  duracion,
+  modalidad,
+  idProfesorNuevo,
+  profesorNuevo,
+  inscripcionesAlumno,
+}) {
+  const grupoDestinoId = await resolverGrupoDestinoPermanente({
+    grupoNuevoFinal,
+    nombreCurso,
+    fechaNuevaDate,
+    duracion,
+    idProfesorNuevo,
+    profesorNuevo,
+  });
+
+  if (normalizar(grupoOrigenCanonico) === normalizar(grupoDestinoId)) {
+    const error = new Error("El grupo destino es el mismo que el grupo origen");
+    error.status = 400;
+    throw error;
+  }
+
+  const yaInscritoDestino = inscripcionesAlumno.find(
+    (ins) =>
+      normalizar(grupoIdDeInscripcion(ins)) === normalizar(grupoDestinoId) &&
+      String(ins.estatus || "Activa").trim().toLowerCase() !== "baja"
+  );
+
+  if (yaInscritoDestino) {
+    const error = new Error(
+      "El alumno ya está inscrito en el grupo destino. Usa inactivar en el grupo anterior primero."
+    );
+    error.status = 409;
+    throw error;
+  }
+
+  const inscripcionActualizada = await Inscripcion.findByIdAndUpdate(
+    inscripcionOrigen._id,
+    {
+      $set: {
+        grupoId: grupoDestinoId,
+        modalidad: modalidad || inscripcionOrigen.modalidad || "Presencial",
+        fechaInscripcion: fechaNuevaDate,
+      },
+    },
+    { new: true, runValidators: false }
+  );
+
+  const pagoMovido = await moverPagoAlNuevoGrupo(
+    idAlumno,
+    grupoOrigenCanonico,
+    grupoDestinoId,
+    nombreCurso
+  );
+
+  const reagendacionesEliminadas = await Reagendacion.deleteMany({
+    idAlumno,
+    $or: [
+      { idGrupoOrigen: grupoOrigenCanonico },
+      { idGrupoNuevo: grupoNuevoFinal },
+      { idGrupoNuevo: grupoDestinoId },
+    ],
+  });
+
+  return {
+    grupoIdAnterior: grupoOrigenCanonico,
+    grupoIdNuevo: grupoDestinoId,
+    inscripcion: inscripcionActualizada,
+    pagoMovido,
+    reagendacionesEliminadas: reagendacionesEliminadas.deletedCount,
+  };
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -58,10 +232,6 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
 
-    if (!nombreAlumno) {
-      return res.status(400).json({ error: "Falta nombreAlumno" });
-    }
-
     if (!grupoOrigenFinal) {
       return res.status(400).json({ error: "Falta idGrupoOrigen" });
     }
@@ -95,33 +265,100 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ✅ CAMBIO 3c: Validar que alumno existe
-    const alumnoExiste = await Alumno.findOne({
-      idAlumno: String(idAlumno).trim()
-    }).lean();
+    const idAlumnoLimpio = String(idAlumno).trim();
 
-    if (!alumnoExiste) {
-      return res.status(404).json({
-        error: `Alumno "${idAlumno}" no existe`
-      });
-    }
+    const filtroIdAlumno = {
+      $or: [
+        { idAlumno: idAlumnoLimpio },
+        { IdAlumno: idAlumnoLimpio },
+        { id_alumno: idAlumnoLimpio },
+        { "idAlumno ": idAlumnoLimpio },
+      ],
+    };
 
-    // ✅ CAMBIO 3d: Validar que alumno está inscrito en grupo origen
-    const inscripcionOrigen = await Inscripcion.findOne({
-      idAlumno: String(idAlumno).trim(),
-      grupoId: grupoOrigenFinal
-    }).lean();
+    // Inscripción en grupo origen (tolera mayúsculas y campos legacy)
+    const inscripcionesAlumno = await Inscripcion.find(filtroIdAlumno).lean();
+
+    const inscripcionOrigen = inscripcionesAlumno.find(
+      (ins) => normalizar(grupoIdDeInscripcion(ins)) === normalizar(grupoOrigenFinal)
+    );
 
     if (!inscripcionOrigen) {
       return res.status(404).json({
-        error: `Alumno no está inscrito en el grupo origen "${grupoOrigenFinal}"`
+        error: `Alumno no está inscrito en el grupo origen "${grupoOrigenFinal}"`,
       });
     }
 
+    const alumnoExiste = await Alumno.findOne(filtroIdAlumno).lean();
+
+    if (!alumnoExiste) {
+      console.warn(
+        `[reagendaciones] ${idAlumnoLimpio} tiene inscripción pero no está en colección alumnos`
+      );
+    }
+
+    const nombreAlumnoFinal =
+      String(nombreAlumno || "").trim() ||
+      String(alumnoExiste?.nombreAlumno || alumnoExiste?.nombre || "").trim() ||
+      String(
+        inscripcionOrigen.nombreAlumno ||
+          inscripcionOrigen.nombre ||
+          inscripcionOrigen.Alumno ||
+          ""
+      ).trim();
+
+    if (!nombreAlumnoFinal) {
+      return res.status(400).json({ error: "Falta nombreAlumno" });
+    }
+
+    const estatusInscripcion = String(inscripcionOrigen.estatus || "Activa")
+      .trim()
+      .toLowerCase();
+    if (estatusInscripcion === "baja") {
+      return res.status(400).json({
+        error: "El alumno tiene este curso dado de baja. Reactívalo antes de reagendar.",
+      });
+    }
+
+    const grupoOrigenCanonico = grupoIdDeInscripcion(inscripcionOrigen);
+    const esPermanente =
+      String(tipoReagendacion || "temporal").trim().toLowerCase() === "permanente";
+
+    if (esPermanente) {
+      try {
+        const resultado = await aplicarReagendacionPermanente({
+          inscripcionOrigen,
+          idAlumno: idAlumnoLimpio,
+          grupoOrigenCanonico,
+          grupoNuevoFinal,
+          nombreCurso,
+          fechaNuevaDate,
+          duracion,
+          modalidad,
+          idProfesorNuevo,
+          profesorNuevo,
+          inscripcionesAlumno,
+        });
+
+        return res.status(200).json({
+          ok: true,
+          permanente: true,
+          mensaje:
+            "Reagendación permanente aplicada. El alumno fue movido al nuevo grupo y ya no aparece en el horario original.",
+          ...resultado,
+        });
+      } catch (errorPermanente) {
+        const status = errorPermanente.status || 500;
+        return res.status(status).json({
+          error: errorPermanente.message || "Error al aplicar reagendación permanente",
+        });
+      }
+    }
+
     const datosReagendacion = {
-      idAlumno,
-      nombreAlumno,
-      idGrupoOrigen: grupoOrigenFinal, // ✅ Normalizado
+      idAlumno: idAlumnoLimpio,
+      nombreAlumno: nombreAlumnoFinal,
+      idGrupoOrigen: grupoOrigenCanonico,
       idGrupoNuevo: grupoNuevoFinal,
       nombreCurso: nombreCurso || "",
       profesorOriginal: profesorOriginal || "",
@@ -143,8 +380,11 @@ router.post("/", async (req, res) => {
     // ✅ CAMBIO: Buscar por idGrupoOrigen (campo normalizado)
     const actualizada = await Reagendacion.findOneAndUpdate(
       {
-        idAlumno,
-        idGrupoOrigen: grupoOrigenFinal,
+        idAlumno: idAlumnoLimpio,
+        $or: [
+          { idGrupoOrigen: grupoOrigenCanonico },
+          { IdgrupoOrigen: grupoOrigenCanonico },
+        ],
         fechaHoraOriginal: fechaOriginalDate,
       },
       { $set: datosReagendacion },
@@ -235,16 +475,6 @@ router.delete("/:id", async (req, res) => {
       (await Reagendacion.findOneAndDelete({ ReagendacionId: id }));
 
     if (!eliminada) {
-      const resultadoGrupo = await Reagendacion.deleteMany({ idGrupoNuevo: id });
-
-      if (resultadoGrupo.deletedCount > 0) {
-        return res.status(200).json({
-          ok: true,
-          mensaje: "Reagendación eliminada correctamente",
-          reagendacionesEliminadas: resultadoGrupo.deletedCount,
-        });
-      }
-
       return res.status(404).json({
         error: "No se encontró la reagendación",
       });
