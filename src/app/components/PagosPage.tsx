@@ -195,23 +195,61 @@ export function PagosPage() {
         });
     };
 
-    const handleChangeDate = async (pago: any) => {
-        const nuevoDia = window.prompt(`Nuevo dia de pago para ${pago.nombreAlumno} (1-31):`, "1");
-
-        if (nuevoDia && !isNaN(Number(nuevoDia))) {
-            const diaNum = Number(nuevoDia);
-            if (diaNum < 1 || diaNum > 31) return toast.error("Dia invalido");
-
-            try {
-                await actualizarDiaPago(pago.id, diaNum);
-                toast.success("Dia de pago actualizado");
-                cargarDatos();
-            } catch (error) {
-                toast.error("Error al cambiar la fecha");
-            }
-        }
+    const handleChangeDate = (pago: any) => {
+        toast.custom((t) => (
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-lg flex flex-col gap-3 min-w-[280px]">
+                <h3 className="font-bold text-sm text-gray-800">
+                    Día de pago para <span className="text-cyan-600">{pago.nombreAlumno}</span>
+                </h3>
+                <input
+                    id={`input-dia-${pago.id}`}
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="Ingresa un día (1-31)"
+                    className="border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:border-cyan-500"
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2 mt-1">
+                    <button
+                        onClick={() => toast.dismiss(t)}
+                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600 transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={async () => {
+                            const inputElement = document.getElementById(`input-dia-${pago.id}`) as HTMLInputElement;
+                            const nuevoDia = inputElement?.value;
+    
+                            if (!nuevoDia || isNaN(Number(nuevoDia))) return;
+    
+                            const diaNum = Number(nuevoDia);
+                            if (diaNum < 1 || diaNum > 31) {
+                                toast.error("Por favor ingresa un día válido entre 1 y 31");
+                                return;
+                            }
+    
+                            toast.dismiss(t);
+                            const loadingToast = toast.loading("Actualizando fecha...");
+    
+                            try {
+                                await actualizarDiaPago(pago.id, diaNum);
+                                toast.success("Día de pago actualizado exitosamente", { id: loadingToast });
+                                cargarDatos();
+                            } catch (error) {
+                                toast.error("Error al cambiar la fecha en la base de datos", { id: loadingToast });
+                            }
+                        }}
+                        className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 rounded-lg text-xs font-bold text-white transition-colors"
+                    >
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        ), { duration: Infinity }); 
     };
-
+    
     const handleConfirmarPago = async (pagoId: string, monto: number, metodo: string) => {
         try {
             await registrarAbono({
