@@ -242,7 +242,6 @@ router.get("/lista-completa", async (req, res) => {
     }
 });
 
-// Ruta para cambiar el día de pago fijo del alumno
 router.patch("/actualizar-dia/:id", async (req, res) => {
     try {
         const { nuevoDia } = req.body;
@@ -256,14 +255,15 @@ router.patch("/actualizar-dia/:id", async (req, res) => {
         const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
         const diaPago = Math.min(Number(nuevoDia), ultimoDiaMes);
 
-        // Actualizamos en la colección 'pagos'
+        const regexId = new RegExp(`^\\s*${id}\\s*$`, "i");
+
         const resultado = await Pago.findOneAndUpdate(
-            { pagoId: id },
+            { pagoId: regexId },
             {
-                diaPago: Number(nuevoDia),
-                fechaInicioPago: new Date(hoy.getFullYear(), hoy.getMonth(), diaPago)
+                diaPagoFijo: Number(nuevoDia),
+                fechaPago: new Date(hoy.getFullYear(), hoy.getMonth(), diaPago)
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!resultado) return res.status(404).json({ error: "Alumno no encontrado" });
