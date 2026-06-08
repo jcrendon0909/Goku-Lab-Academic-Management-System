@@ -11,3 +11,28 @@ La plataforma cuenta con autenticación de usuarios (login) y herramientas para 
 
   Run `npm run dev` to start the development server.
   
+🛠️ Pasos para resolver AHORA
+1. Verifica los remotos actuales
+Ejecuta (sin comentarios):
+
+bash
+git remote -v
+Debes ver origin (tu fork) y upstream (el repositorio original). Si upstream ya aparece, está bien.
+
+# 1. Descarga los cambios del repositorio original
+# 2. Cambia a tu rama principal (main)
+# 3. Fusiona los cambios del original en tu rama
+
+git fetch upstream
+git checkout main
+git merge upstream/main
+git push origin main
+
+(Si no hay conflictos, no necesitas --force).
+
+bash
+git stash list
+git stash drop
+
+
+
