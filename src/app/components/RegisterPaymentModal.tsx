@@ -1,144 +1,159 @@
-import React, { useState } from "react";
-import { X, DollarSign, AlertCircle, Info, CreditCard } from "lucide-react";
-
-interface PaymentData {
-    id: string;
-    nombreAlumno: string;
-    nombreCurso: string;
-    montoTotal: number;
-    montoPagado: number;
-    saldo: number;
-    status: string;
-}
+import React, { useState } from 'react';
 
 interface RegisterPaymentModalProps {
-    payment: PaymentData;
+    payment: any;
     onClose: () => void;
-    onConfirm: (id: string, amount: number, metodo: string) => void;
+    onConfirm: (pagoId: string, monto: number, metodo: string, fechaAbono: string, nuevoMontoMensual?: number) => void;
 }
 
 export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPaymentModalProps) {
-    const [amount, setAmount] = useState<string>("");
-    const [metodo, setMetodo] = useState<string>("Efectivo");
-    const [error, setError] = useState<string | null>(null);
+    const [monto, setMonto] = useState<number | string>(payment.saldo || 0);
+    const [metodo, setMetodo] = useState<string>('Efectivo');
+    const [fechaAbono, setFechaAbono] = useState<string>(new Date().toISOString().substring(0, 10));
 
-    const balance = payment.saldo;
+    const [cambiarTarifa, setCambiarTarifa] = useState<boolean>(false);
+    const [nuevoMonto, setNuevoMonto] = useState<number | string>(payment.montoTotal || 0);
 
-    const handleConfirm = () => {
-        const numAmount = parseFloat(amount);
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
 
-        if (isNaN(numAmount) || numAmount <= 0) {
-            setError("Ingrese un monto válido");
-            return;
-        }
+        const montoAbono = Number(monto);
+        if (isNaN(montoAbono) || montoAbono <= 0) return;
 
-        if (numAmount > balance) {
-            setError(`El monto no puede ser mayor al saldo pendiente ($${balance})`);
-            return;
-        }
+        const tarifaFutura = cambiarTarifa ? Number(nuevoMonto) : undefined;
 
-        onConfirm(payment.id, numAmount, metodo);
+        // Ejecutamos onConfirm pasándole todos los datos hacia PagosPage.tsx
+        onConfirm(payment.id, montoAbono, metodo, fechaAbono, tarifaFutura);
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                {/* header */}
-                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                    <h2 className="text-lg font-bold text-gray-900">Registrar Abono</h2>
-                    <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
-                        <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+
+                {/* ENCABEZADO DEL MODAL */}
+                <div className="bg-cyan-600 px-6 py-4 flex justify-between items-center">
+                    <div>
+                        <h2 className="text-white font-black text-lg leading-tight">
+                            Registrar Abono
+                        </h2>
+                        <p className="text-cyan-100 text-xs font-medium mt-0.5">
+                            {payment.nombreAlumno} • {payment.claveMes ? `Periodo: ${payment.claveMes}` : 'Abono Global'}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-cyan-100 hover:text-white transition-colors">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
-                    {/* Información del Alumno */}
-                    <div className="flex flex-col gap-1">
-                        <span className="text-sm text-gray-500">Alumno</span>
-                        <span className="text-lg font-bold text-gray-900">{payment.nombreAlumno}</span>
-                        <span className="text-xs text-cyan-600 font-medium">{payment.nombreCurso}</span>
-                    </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
-                    {/* Resumen de Montos */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Monto Total</span>
-                            <span className="text-lg font-bold text-gray-700">${payment.montoTotal}</span>
-                        </div>
-                        <div className="p-4 bg-cyan-50 rounded-xl border border-cyan-100">
-                            <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider block mb-1">Saldo Pendiente</span>
-                            <span className="text-lg font-bold text-cyan-700 font-mono">${balance}</span>
-                        </div>
-                    </div>
-
-                    {/* Selector de Método de Pago */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Método de Pago</label>
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                                <CreditCard className="w-5 h-5" />
+                    {/* SECCIÓN 1: DATOS DEL ABONO ACTUAL */}
+                    <div className="space-y-4">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Monto a abonar hoy</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    required
+                                    value={monto}
+                                    onChange={(e) => setMonto(e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-4 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:border-cyan-500 transition-colors"
+                                />
                             </div>
-                            <select
-                                value={metodo}
-                                onChange={(e) => setMetodo(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500 appearance-none"
-                            >
-                                <option value="Efectivo">Efectivo</option>
-                                <option value="Transferencia">Transferencia</option>
-                                <option value="Tarjeta">Tarjeta</option>
-                            </select>
+                            <p className="text-[10px] text-gray-400 font-medium text-right">
+                                Saldo pendiente: ${Number(payment.saldo || 0).toLocaleString('es-MX')}
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Método</label>
+                                <select
+                                    value={metodo}
+                                    onChange={(e) => setMetodo(e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:border-cyan-500 transition-colors"
+                                >
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Transferencia">Transferencia</option>
+                                    <option value="Tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Fecha</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={fechaAbono}
+                                    onChange={(e) => setFechaAbono(e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:border-cyan-500 transition-colors"
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Ingresa Monto */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Monto a abonar</label>
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                                <DollarSign className="w-5 h-5" />
+                    {/* SECCIÓN 2: ACTUALIZAR TARIFA FUTURA (El nuevo requerimiento) */}
+                    <div className="border-t border-gray-100 pt-4 mt-2">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className="relative">
+                                <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={cambiarTarifa}
+                                    onChange={(e) => setCambiarTarifa(e.target.checked)}
+                                />
+                                <div className={`block w-10 h-6 rounded-full transition-colors ${cambiarTarifa ? 'bg-purple-500' : 'bg-gray-200'}`}></div>
+                                <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${cambiarTarifa ? 'translate-x-4' : ''}`}></div>
                             </div>
-                            <input
-                                autoFocus
-                                type="number"
-                                value={amount}
-                                onChange={(e) => {
-                                    setAmount(e.target.value);
-                                    setError(null);
-                                }}
-                                placeholder="0.00"
-                                className={`w-full pl-12 pr-4 py-4 bg-white border rounded-xl text-xl font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all ${error ? 'border-red-300 ring-1 ring-red-100' : 'border-gray-200'
-                                    }`}
-                            />
-                        </div>
-                        {error ? (
-                            <p className="text-xs text-red-500 font-medium flex items-center gap-1.5 mt-2">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                {error}
-                            </p>
-                        ) : (
-                            <p className="text-[11px] text-gray-400 flex items-center gap-1.5 mt-2">
-                                <Info className="w-3.5 h-3.5" />
-                                El estatus cambiará a {amount && parseFloat(amount) === balance ? 'Pagado' : 'Parcial'}
-                            </p>
+                            <span className="text-xs font-bold text-gray-700 group-hover:text-purple-700 transition-colors">
+                                Cambiar mensualidad para próximos meses
+                            </span>
+                        </label>
+
+                        {/* Solo se muestra si el usuario activa el switch */}
+                        {cambiarTarifa && (
+                            <div className="mt-3 bg-purple-50 border border-purple-100 rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
+                                <label className="text-[10px] font-bold text-purple-600 uppercase tracking-wider mb-1.5 block">
+                                    Nueva tarifa mensual (Aplicará a meses futuros)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-400 font-bold">$</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        required={cambiarTarifa}
+                                        value={nuevoMonto}
+                                        onChange={(e) => setNuevoMonto(e.target.value)}
+                                        className="w-full bg-white border border-purple-200 rounded-lg pl-8 pr-4 py-2 text-sm font-bold text-purple-900 focus:outline-none focus:border-purple-500 transition-colors"
+                                    />
+                                </div>
+                                <p className="text-[9px] text-purple-500/70 font-medium mt-2 leading-tight">
+                                    * Esta tarifa reemplazará el costo de colegiatura del alumno a partir del siguiente mes pendiente en su historial.
+                                </p>
+                            </div>
                         )}
                     </div>
-                </div>
 
-                {/* Acciones */}
-                <div className="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100">
-                    <button
-                        onClick={onClose}
-                        className="px-6 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        className="px-8 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition-all active:scale-95 flex items-center gap-2"
-                    >
-                        Confirmar pago
-                    </button>
-                </div>
+                    {/* BOTONES DE ACCIÓN */}
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-5 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-cyan-500 hover:bg-cyan-600 shadow-sm shadow-cyan-500/20 transition-all"
+                        >
+                            Confirmar Abono
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );
