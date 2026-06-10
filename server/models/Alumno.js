@@ -7,7 +7,8 @@ const alumnoSchema = new mongoose.Schema(
     telefono: { type: String, default: "" },
     tutor: { type: String, default: "" },
     observaciones: { type: String, default: "" },
-    estatus: { type: String, default: "Activo" }
+    estatus: { type: String, default: "Activo" },
+    saldoAFavor: { type: Number, default: 0 }
   },
   {
     collection: "alumnos",

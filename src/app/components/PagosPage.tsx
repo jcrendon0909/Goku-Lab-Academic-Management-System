@@ -1,5 +1,4 @@
-﻿
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
@@ -9,14 +8,10 @@ import { useSyncDataReload } from '../../utils/dataSync';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const userStorage = localStorage.getItem('user');
-const userLogueado = userStorage ? JSON.parse(userStorage) : null;
-const esAdmin = userLogueado?.rol === 'admin';
-
 export function PagosPage() {
     const [pagos, setPagos] = useState<any[]>([]);
     const [cargando, setCargando] = useState(true);
-    const [vista, setVista] = useState<'control' | 'registro'>('control');
+    const [vista, setVista] = useState<'control' | 'registro' | 'proximos'>('control');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<any>(null);
@@ -27,10 +22,100 @@ export function PagosPage() {
     const [criterioFechaPagados, setCriterioFechaPagados] = useState<'limite' | 'real'>('real');
 
     const cargarDatos = useCallback(() => {
-        setCargando(true);
         getPagosConEstatus()
             .then((data) => {
-                setPagos(data);
+                const alumnosMap: Record<string, any> = {};
+
+                data.forEach((pago: any) => {
+                    const key = pago.nombreAlumno?.trim();
+                    if (!key) return;
+
+                    if (!alumnosMap[key]) {
+                        alumnosMap[key] = {
+                            id: pago.id || pago.pagoId,
+                            nombreAlumno: pago.nombreAlumno,
+                            cursosLista: [],
+                            montoTotal: 0,
+                            montoPagado: 0,
+                            saldo: 0,
+                            activo: false,
+                            fechaLimite: pago.fechaLimite,
+                            fechaPagoReal: pago.fechaPagoReal,
+                            metodoAbono: pago.metodoAbono,
+                            periodosMap: {}
+                        };
+                    }
+
+                    const alum = alumnosMap[key];
+
+                    if (!alum.cursosLista.includes(pago.nombreCurso)) {
+                        alum.cursosLista.push(pago.nombreCurso);
+                    }
+
+                    // Consolidación financiera multi-materia
+                    alum.montoTotal += (Number(pago.montoTotal) || 0);
+                    alum.montoPagado += (Number(pago.montoPagado) || 0);
+                    if (pago.activo !== false) alum.activo = true;
+
+                    const periodos = pago.periodosMensuales || [];
+                    periodos.forEach((mes: any) => {
+                        const mesKey = mes.clave;
+                        if (!alum.periodosMap[mesKey]) {
+                            alum.periodosMap[mesKey] = {
+                                clave: mes.clave,
+                                nombreMes: mes.nombreMes,
+                                vencimiento: mes.vencimiento,
+                                monto: 0,
+                                pagado: 0,
+                                saldo: 0,
+                                status: "Pendiente"
+                            };
+                        }
+                        // Sumamos la tarifa requerida de este mes para todas sus materias
+                        alum.periodosMap[mesKey].monto += (Number(mes.monto) || 0);
+                    });
+                });
+
+                const pagosAgrupados = Object.values(alumnosMap).map((alum: any) => {
+                    const periodosMensuales = Object.values(alum.periodosMap).sort((a: any, b: any) => {
+                        return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
+                    });
+
+                    // -----------------------------------------------------------------
+                    // ALGORITMO DE DISTRIBUCIÓN EN CASCADA UNIFICADO (FRONTEND)
+                    // -----------------------------------------------------------------
+                    let bolsaDinero = alum.montoPagado;
+
+                    periodosMensuales.forEach((m: any) => {
+                        m.pagado = 0;
+                        m.saldo = m.monto;
+                        m.status = "Pendiente";
+
+                        if (bolsaDinero > 0) {
+                            if (bolsaDinero >= m.monto) {
+                                m.pagado = m.monto;
+                                m.saldo = 0;
+                                m.status = "Pagado";
+                                bolsaDinero -= m.monto;
+                            } else {
+                                m.pagado = bolsaDinero;
+                                m.saldo = m.monto - bolsaDinero;
+                                m.status = "Parcial";
+                                bolsaDinero = 0;
+                            }
+                        }
+                    });
+
+                    const tienePendientes = periodosMensuales.some((m: any) => m.status !== "Pagado");
+                    alum.status = !tienePendientes ? "Pagado" : (alum.montoPagado > 0 ? "Parcial" : "Pendiente");
+                    alum.saldo = alum.montoTotal - alum.montoPagado;
+                    alum.periodosMensuales = periodosMensuales;
+                    alum.nombreCurso = alum.cursosLista.join(", ");
+
+                    return alum;
+                });
+
+                setPagos(pagosAgrupados);
                 setCargando(false);
             })
             .catch((err) => {
@@ -51,263 +136,326 @@ export function PagosPage() {
         setFechaFin('');
     }, [vista]);
 
-    const handleImprimirRecibo = (pago: any) => {
-        const generarPDF = (quiereFactura: boolean) => {
-        const estadoFacturacion = quiereFactura ? "Solicitada" : "No solicitada";
+    const handleImprimirRecibo = (pago: any, mesEspecifico?: any) => {
 
-        const ahora = new Date();
-        const anioActual = ahora.getFullYear();
-        const mesActualNum = String(ahora.getMonth() + 1).padStart(2, '0');
-        const anioMesNomenclatura = `${anioActual}-${mesActualNum}`;
+        // ── helpers ──────────────────────────────────────────────────────────────
+        const toBase64 = (url: string): Promise<string> =>
+            fetch(url)
+                .then((r) => r.blob())
+                .then(
+                    (blob) =>
+                        new Promise((res, rej) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => res(reader.result as string);
+                            reader.onerror = rej;
+                            reader.readAsDataURL(blob);
+                        })
+                );
 
-        const fechaConsulta = ahora.toLocaleString('es-MX', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
+        const generarPDF = async (quiereFactura: boolean) => {
+            // ── datos del recibo ────────────────────────────────────────────────────
+            const estadoFacturacion = quiereFactura ? "Solicitada" : "No solicitada";
 
-        // Número de folio
-        const numeroTresDigitos = String(Math.floor(Math.random() * 900) + 100).padStart(3, '0');
-        const folioDocumento = `AL/CF/${anioMesNomenclatura}-R${numeroTresDigitos}`;
+            const ahora = new Date();
+            const anioActual = ahora.getFullYear();
+            const mesActualNum = String(ahora.getMonth() + 1).padStart(2, "0");
+            const anioMesNomenclatura = `${anioActual}-${mesActualNum}`;
+            const numeroTresDigitos = String(Math.floor(Math.random() * 900) + 100).padStart(3, "0");
+            const folioDocumento = `AL/CF/${anioMesNomenclatura}-R${numeroTresDigitos}`;
 
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
-
-        doc.setFillColor(0, 120, 215);
-        doc.rect(0, 0, 210, 38, 'F');
-
-        doc.setTextColor(255, 255, 255);
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(22);
-        doc.text("GOKU LAB", 15, 16);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text("Juega, Aprende y Emprende - Algorithmics", 15, 23);
-        doc.text("COMPROBANTE DE PAGO DIGITAL", 15, 30);
-
-        // Caja de Folio (Lado derecho del encabezado)
-        doc.setFillColor(255, 255, 255);
-        doc.roundedRect(135, 8, 60, 22, 2, 2, 'F');
-        doc.setDrawColor(200, 200, 200);
-        doc.roundedRect(135, 8, 60, 22, 2, 2, 'D');
-
-        doc.setTextColor(100, 100, 100);
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.text("FOLIO DE RECIBO", 140, 14);
-        doc.setTextColor(15, 23, 42);
-        doc.setFontSize(11);
-        doc.text(folioDocumento, 140, 22);
-
-        // Bloque de Información del Recibo
-        doc.setTextColor(50, 50, 50);
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text("Detalles de la Operación", 15, 52);
-
-        doc.setDrawColor(226, 232, 240);
-        doc.line(15, 55, 195, 55);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.setFontSize(10);
-
-        doc.text("Estudiante / Alumno:", 15, 64);
-        doc.setFont('Helvetica', 'bold');
-        doc.text(pago.nombreAlumno || "N/A", 55, 64);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.text("Fecha de Pago Real:", 15, 72);
-        doc.setFont('Helvetica', 'bold');
-        doc.text(pago.fechaPagoReal || "N/A", 55, 72);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.text("Fecha de Consulta:", 15, 80);
-        doc.setFont('Helvetica', 'bold');
-        doc.text(fechaConsulta, 55, 80);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.text("Forma de Pago:", 15, 88);
-        doc.setFont('Helvetica', 'bold');
-        doc.text(pago.metodoAbono || "Transferencia / Efectivo", 55, 88);
-
-        doc.setFont('Helvetica', 'normal');
-        doc.text("Facturación:", 15, 96);
-        doc.setFont('Helvetica', 'bold');
-        if (quiereFactura) {
-            doc.setTextColor(2, 132, 199); 
-        } else {
-            doc.setTextColor(100, 116, 139); 
-        }
-        doc.text(estadoFacturacion, 55, 96);
-
-        doc.setTextColor(50, 50, 50);
-        autoTable(doc, {
-            startY: 106,
-            theme: 'striped',
-            headStyles: { fillColor: [15, 23, 42], fontStyle: 'bold' },
-            head: [['Concepto', 'Estatus', 'Monto']],
-            body: [
-                ['Pago de colegiatura / Servicios Académicos', 'PAGADO', `$${Number(pago.montoTotal || 0).toLocaleString('es-MX')}`]
-            ],
-            styles: { fontSize: 10, cellPadding: 5 },
-            columnStyles: { 2: { halign: 'right' } }
-        });
-
-        const finalY = (doc as any).lastAutoTable.finalY + 15;
-
-        doc.setDrawColor(0, 120, 215);
-        doc.setLineWidth(0.5);
-        doc.rect(15, finalY, 55, 16, 'D');
-        doc.setTextColor(0, 120, 215);
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text("RECIBIDO POR SYSTEM", 18, finalY + 7);
-        doc.setFontSize(7);
-        doc.setFont('Helvetica', 'normal');
-        doc.text("Procesado de forma segura", 18, finalY + 12);
-
-        doc.setTextColor(15, 23, 42);
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text(`Total Liquidado: $${Number(pago.montoTotal || 0).toLocaleString('es-MX')} MXN`, 125, finalY + 9);
-
-        doc.setTextColor(150, 150, 150);
-        doc.setFontSize(8);
-        doc.text("Este documento es un comprobante oficial de control interno emitido por Goku Lab.", 15, 280);
-
-        doc.save(`Recibo_${pago.nombreAlumno.replace(/\s+/g, '_')}_${anioMesNomenclatura}.pdf`);
-        toast.success("Comprobante generado exitosamente en PDF");
-        };
-        toast.message('¿Desea Facturar?', {
-            description: `Recibo de: ${pago.nombreAlumno}`,
-            duration: 8000,
-            action: {
-                label: 'Sí, Facturar',
-                onClick: () => generarPDF(true),
-            },
-            cancel: {
-                label: 'No',
-                onClick: () => generarPDF(false),
-            },
-        });
-    };
-
-    const handleChangeDate = (pago: any) => {
-        toast.custom((t) => (
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-lg flex flex-col gap-3 min-w-[280px]">
-                <h3 className="font-bold text-sm text-gray-800">
-                    Día de pago para <span className="text-cyan-600">{pago.nombreAlumno}</span>
-                </h3>
-                <input
-                    id={`input-dia-${pago.id}`}
-                    type="number"
-                    min="1"
-                    max="31"
-                    placeholder="Ingresa un día (1-31)"
-                    className="border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:border-cyan-500"
-                    autoFocus
-                />
-                <div className="flex justify-end gap-2 mt-1">
-                    <button
-                        onClick={() => toast.dismiss(t)}
-                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={async () => {
-                            const inputElement = document.getElementById(`input-dia-${pago.id}`) as HTMLInputElement;
-                            const nuevoDia = inputElement?.value;
-    
-                            if (!nuevoDia || isNaN(Number(nuevoDia))) return;
-    
-                            const diaNum = Number(nuevoDia);
-                            if (diaNum < 1 || diaNum > 31) {
-                                toast.error("Por favor ingresa un día válido entre 1 y 31");
-                                return;
-                            }
-    
-                            toast.dismiss(t);
-                            const loadingToast = toast.loading("Actualizando fecha...");
-    
-                            try {
-                                await actualizarDiaPago(pago.id, diaNum);
-                                toast.success("Día de pago actualizado exitosamente", { id: loadingToast });
-                                cargarDatos();
-                            } catch (error) {
-                                toast.error("Error al cambiar la fecha en la base de datos", { id: loadingToast });
-                            }
-                        }}
-                        className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 rounded-lg text-xs font-bold text-white transition-colors"
-                    >
-                        Guardar
-                    </button>
-                </div>
-            </div>
-        ), { duration: Infinity }); 
-    };
-    
-    const handleConfirmarPago = async (pagoId: string, monto: number, metodo: string) => {
-        try {
-            await registrarAbono({
-                pagoId: pagoId,
-                montoAbono: monto,
-                nombreAlumno: selectedPayment?.nombreAlumno || "",
-                metodoAbono: metodo
+            const fechaConsulta = ahora.toLocaleString("es-MX", {
+                year: "numeric", month: "2-digit", day: "2-digit",
+                hour: "2-digit", minute: "2-digit", second: "2-digit",
+            });
+            const fechaPago = ahora.toLocaleDateString("es-MX", {
+                weekday: "long", year: "numeric", month: "long", day: "numeric",
             });
 
+            const nombreConcepto = mesEspecifico
+                ? `Mensualidad - ${mesEspecifico.nombreMes}`
+                : "Mensualidad";
+
+            const montoAImprimir = mesEspecifico ? mesEspecifico.pagado : pago.montoTotal;
+            const esAbono = mesEspecifico && mesEspecifico.status !== "Pagado";
+
+            // ── colores / tipografía de marca ───────────────────────────────────────
+            const PURPLE: [number, number, number] = [88, 28, 135];   // Algorithmics violeta
+            const DARK: [number, number, number] = [15, 23, 42];
+            const GRAY: [number, number, number] = [100, 116, 139];
+            const LIGHT_BG: [number, number, number] = [248, 250, 252];
+            const BORDER: [number, number, number] = [226, 232, 240];
+
+            // ── documento ───────────────────────────────────────────────────────────
+            const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+            const PW = 210; // page width
+
+            // ── logo ────────────────────────────────────────────────────────────────
+            const logoB64 = await toBase64("/logo-goku-lab.png");
+            doc.addImage(logoB64, "PNG", 15, 8, 22, 22);
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(13);
+            doc.setTextColor(...PURPLE);
+            doc.text("GOKU LAB", 40, 16);
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(...GRAY);
+            doc.text("Algorithmics", 40, 22);
+
+            // Dirección bajo el logo
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(7.5);
+            doc.setTextColor(...GRAY);
+            doc.text("Av. Vía Adolfo López Mateos 201-local 418 b, MZ 001,", 15, 34);
+            doc.text("Sta Cruz Acatlan, 53150 Naucalpan de Juárez, Méx.", 15, 29);
+
+            // "Recibo" — derecha
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(36);
+            doc.setTextColor(...DARK);
+            doc.text("Recibo", PW - 15, 28, { align: "right" });
+
+            // Línea separadora
+            doc.setDrawColor(...BORDER);
+            doc.setLineWidth(0.4);
+            doc.line(15, 42, PW - 15, 42);
+
+            // ── bloque folio / fechas ───────────────────────────────────────────────
+            const ROW_H = 8;
+            let y = 52;
+
+            const drawRow = (label: string, value: string, yPos: number) => {
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(9.5);
+                doc.setTextColor(...GRAY);
+                doc.text(label, 15, yPos);
+                doc.setTextColor(...DARK);
+                doc.setFont("Helvetica", "bold");
+                doc.text(value, PW - 15, yPos, { align: "right" });
+            };
+
+            drawRow("Folio", folioDocumento, y); y += ROW_H;
+            drawRow("Fecha de pago", fechaPago, y); y += ROW_H;
+            drawRow("Fecha de consulta", fechaConsulta, y); y += ROW_H + 4;
+
+            // ── caja DETALLES ───────────────────────────────────────────────────────
+            const boxX = 15, boxW = PW - 30;
+            const boxY = y;
+            const detRows = [
+                ["Estudiante (s)", pago.nombreAlumno || "N/A"],
+                ["Concepto", nombreConcepto],
+                ["Forma de Pago", pago.metodoAbono || "Tarjeta débito/crédito"],
+                ["Facturación", estadoFacturacion],
+                ["Recibido por", "SYSTEM"],
+            ];
+            const boxH = 10 + detRows.length * ROW_H + 2;
+
+            doc.setFillColor(...LIGHT_BG);
+            doc.setDrawColor(...BORDER);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, "FD");
+
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(8);
+            doc.setTextColor(...GRAY);
+            doc.text("DETALLES:", boxX + 5, boxY + 7);
+
+            let dy = boxY + 14;
+            detRows.forEach(([lbl, val]) => {
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(9.5);
+                doc.setTextColor(...GRAY);
+                doc.text(lbl, boxX + 5, dy);
+                doc.setFont("Helvetica", "bold");
+                doc.setTextColor(...DARK);
+                doc.text(val, boxX + boxW - 5, dy, { align: "right" });
+                dy += ROW_H;
+            });
+
+            y = boxY + boxH + 6;
+
+            // ── línea punteada + Monto / Total ──────────────────────────────────────
+            doc.setDrawColor(...BORDER);
+            doc.setLineDash([1.5, 1.5], 0);
+            doc.line(15, y, PW - 15, y);
+            doc.setLineDash([], 0);
+            y += 8;
+
+            // Observaciones + monto
+            const montoFmt = `$${Number(montoAImprimir || 0).toLocaleString("es-MX", {
+                minimumFractionDigits: 2, maximumFractionDigits: 2,
+            })}`;
+
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(9.5);
+            doc.setTextColor(...GRAY);
+            doc.text("Observaciones", boxX, y);
+
+            if (esAbono) {
+                doc.setFontSize(8);
+                doc.setTextColor(180, 83, 9); // amber
+                doc.text("ABONO PARCIAL", boxX + 35, y);
+            }
+
+            doc.setFont("Helvetica", "normal");
+            doc.setTextColor(...GRAY);
+            doc.setFontSize(9.5);
+            doc.text("Monto", PW - 15 - 30, y);
+            doc.setFont("Helvetica", "bold");
+            doc.setTextColor(...DARK);
+            doc.text(montoFmt, PW - 15, y, { align: "right" });
+
+            y += ROW_H;
+
+            // Fecha inicio / nombre concepto como observación
+            const fechaInicioLabel = mesEspecifico
+                ? `FECHA DE INICIO ${ahora.toLocaleDateString("es-MX")}, ${ahora.getHours()}:00 H`
+                : `Historial completo al ${ahora.toLocaleDateString("es-MX")}`;
+
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(9.5);
+            doc.setTextColor(...DARK);
+            doc.text(fechaInicioLabel, boxX, y);
+
+            doc.text("Total", PW - 15 - 30, y);
+            doc.setFontSize(11);
+            doc.text(montoFmt, PW - 15, y, { align: "right" });
+
+            y += 14;
+
+            // ── Notas pie de página
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(18);
+            doc.setTextColor(...DARK);
+            doc.text("¡Gracias por tu pago!", PW / 2, y, { align: "center" });
+            y += 8;
+
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(9);
+            doc.setTextColor(...GRAY);
+            if (estadoFacturacion === "Solicitada") {
+                const msg =
+                    "Tienes hasta antes del fin de mes para solicitar tu factura. " +
+                    "Solo escríbenos por chat o comunícate\n" +
+                    "directamente con la gestión del centro. ¡Así de fácil! \n" +
+                    "- Equipo Algorithmics";
+                doc.text(msg, PW / 2, y, { align: "center", lineHeightFactor: 1.6 });
+                y += 24;
+            } else {
+                const msg = "Cualquier aclaración sobre este recibo o tu pago" +
+                    " solo escríbenos por chat o comunícate\n" +
+                    "directamente con la gestión del centro. ¡Así de fácil! \n" +
+                    "- Equipo Algorithmics";
+                doc.text(msg, PW / 2, y, { align: "center", lineHeightFactor: 1.6 });
+                y += 24;
+            }
+
+            // Contacto
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(10);
+            doc.setTextColor(...DARK);
+            doc.text("Contacto", PW / 2, y, { align: "center" });
+            y += 6;
+            doc.setFont("Helvetica", "normal");
+            doc.setFontSize(9);
+            doc.setTextColor(...GRAY);
+            doc.text(
+                "Teléfono & WhatsApp: (+52) 5612668168 & (+52) 5580177920",
+                PW / 2, y, { align: "center" }
+            );
+
+            // ── pie de página ───────────────────────────────────────────────────────
+            doc.setFont("Helvetica", "italic");
+            doc.setFontSize(8);
+            doc.setTextColor(...GRAY);
+            doc.text(
+                "Este documento es solo informativo y no tiene validez fiscal.",
+                PW / 2, 285, { align: "center" }
+            );
+
+            // ── guardar ─────────────────────────────────────────────────────────────
+            const nombreArchivo = mesEspecifico
+                ? `Recibo_${mesEspecifico.nombreMes.replace(/\s+/g, "_")}_${pago.nombreAlumno.replace(/\s+/g, "_")}.pdf`
+                : `Recibo_Global_${pago.nombreAlumno.replace(/\s+/g, "_")}.pdf`;
+
+            doc.save(nombreArchivo);
+            toast.success(`Comprobante ${mesEspecifico ? "mensual" : "global"} generado exitosamente`);
+        };
+
+        // ── toast de confirmación de factura ─────────────────────────────────────
+        toast.message("¿Desea Facturar?", {
+            description: mesEspecifico
+                ? `Recibo de: ${mesEspecifico.nombreMes}`
+                : `Recibo Global: ${pago.nombreAlumno}`,
+            duration: 8000,
+            action: { label: "Sí, Facturar", onClick: () => generarPDF(true) },
+            cancel: { label: "No", onClick: () => generarPDF(false) },
+        });
+    };
+
+
+
+    const handleConfirmarPago = async (pagoId: string, monto: number, metodo: string, fechaAbono: string, nuevoMontoMensual?: number) => {
+        try {
+            await registrarAbono({
+                pagoId,
+                montoAbono: monto,
+                nombreAlumno: selectedPayment?.nombreAlumno || "",
+                metodoAbono: metodo,
+                fechaAbono,
+                nuevoMontoMensual: nuevoMontoMensual || null
+            });
             toast.success("Pago registrado correctamente");
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error: any) {
-            toast.error("Error al registrar: " + error.message);
-        }
+        } catch (error: any) { toast.error("Error al registrar: " + error.message); }
     };
 
     const pagosFiltrados = pagos
         .filter(p => {
+            const periodos = p.periodosMensuales || [];
+            const hoy = new Date();
+            const totalMesesHoy = hoy.getFullYear() * 12 + hoy.getMonth();
+
+            // Validación estricta para segmentar las pestañas sin fugas
+            const tienePendientesPasados = periodos.some((m: any) => {
+                const v = new Date(m.vencimiento);
+                return (v.getFullYear() * 12 + v.getMonth()) <= totalMesesHoy && m.status !== "Pagado";
+            });
+
+            const tieneProximosFuturos = periodos.some((m: any) => {
+                const v = new Date(m.vencimiento);
+                return (v.getFullYear() * 12 + v.getMonth()) > totalMesesHoy && m.status !== "Pagado";
+            });
+
             if (vista === 'control') {
-                if (p.activo === false) return false;
-                if (p.status === "Pagado") return false;
-                if (p.status === "Baja") return false;
-                return true;
+                return p.activo !== false && tienePendientesPasados;
+            } else if (vista === 'registro') {
+                return periodos.some((m: any) => m.status === "Pagado") || (p.activo === false && Number(p.montoPagado || 0) > 0);
+            } else if (vista === 'proximos') {
+                return p.activo !== false && tieneProximosFuturos;
             }
-            return p.status === "Pagado" || (p.activo === false && Number(p.montoPagado || 0) > 0);
+            return false;
         })
-        .filter(p => {
-            if (!busquedaAlumno) return true;
-            return p.nombreAlumno?.toLowerCase().includes(busquedaAlumno.toLowerCase());
-        })
+        .filter(p => !busquedaAlumno || p.nombreAlumno?.toLowerCase().includes(busquedaAlumno.toLowerCase()))
         .filter(p => {
             if (!fechaInicio && !fechaFin) return true;
-
-            let fechaEvaluarTexto = p.fechaLimite;
-            if (vista === 'registro') {
-                fechaEvaluarTexto = criterioFechaPagados === 'real' ? p.fechaPagoReal : p.fechaLimite;
-            }
-
-            if (!fechaEvaluarTexto) return false;
-
-            const fechaLimpiaObj = fechaEvaluarTexto.substring(0, 10);
-
-            if (fechaInicio && fechaLimpiaObj < fechaInicio) return false;
-
-            if (fechaFin && fechaLimpiaObj > fechaFin) return false;
-
-            return true;
-        })
-        .sort((a, b) => {
-            if (vista === 'control') {
-                const fechaA = a.fechaLimite ? new Date(a.fechaLimite).getTime() : 0;
-                const fechaB = b.fechaLimite ? new Date(b.fechaLimite).getTime() : 0;
-                return fechaA - fechaB;
+            if (vista === 'control' || vista === 'proximos') {
+                const pendientes = (p.periodosMensuales || []).filter((m: any) => m.status !== "Pagado" && m.status !== "Programado");
+                if (pendientes.length === 0) return false;
+                return pendientes.some((mes: any) => {
+                    const fechaVence = mes.vencimiento ? mes.vencimiento.substring(0, 10) : "";
+                    if (!fechaVence) return false;
+                    if (fechaInicio && fechaVence < fechaInicio) return false;
+                    if (fechaFin && fechaVence > fechaFin) return false;
+                    return true;
+                });
             } else {
-                const fechaA = a.fechaPagoReal ? new Date(a.fechaPagoReal).getTime() : 0;
-                const fechaB = b.fechaPagoReal ? new Date(b.fechaPagoReal).getTime() : 0;
-                return fechaB - fechaA;
+                let fechaEvaluarTexto = criterioFechaPagados === 'real' ? p.fechaPagoReal : p.fechaLimite;
+                if (!fechaEvaluarTexto) return false;
+                const fechaLimpia = fechaEvaluarTexto.substring(0, 10);
+                if (fechaInicio && fechaLimpia < fechaInicio) return false;
+                if (fechaFin && fechaLimpia > fechaFin) return false;
+                return true;
             }
         });
 
@@ -318,21 +466,25 @@ export function PagosPage() {
     const anioActual = hoy.getFullYear();
 
     const totalPorRecolectar = pagos
-        .filter(p => {
-            if (p.activo === false) return false;
-            if (p.status === "Pagado") return false;
-            const fecha = new Date(p.fechaLimite);
-            return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
-        })
-        .reduce((sum, p) => sum + p.montoTotal, 0);
+        .filter(p => p.activo !== false)
+        .reduce((sum, p) => {
+            const mesEnCurso = (p.periodosMensuales || []).find((m: any) => {
+                if (!m.vencimiento) return false;
+                const v = new Date(m.vencimiento);
+                return v.getMonth() === mesActual && v.getFullYear() === anioActual;
+            });
+            return sum + (mesEnCurso ? (mesEnCurso.saldo || 0) : 0);
+        }, 0);
 
     const totalRecolectado = pagos
-        .filter(p => {
-            if (p.status !== "Pagado" || !p.fechaPagoReal) return false;
-            const fecha = new Date(p.fechaPagoReal);
-            return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
-        })
-        .reduce((sum, p) => sum + p.montoTotal, 0);
+        .reduce((sum, p) => {
+            const mesEnCurso = (p.periodosMensuales || []).find((m: any) => {
+                if (!m.vencimiento) return false;
+                const v = new Date(m.vencimiento);
+                return v.getMonth() === mesActual && v.getFullYear() === anioActual;
+            });
+            return sum + (mesEnCurso ? (mesEnCurso.pagado || 0) : 0);
+        }, 0);
 
     return (
         <div className="bg-gray-50 min-h-screen w-full">
@@ -340,166 +492,69 @@ export function PagosPage() {
 
             <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
                 <div className="absolute right-10 top-0 h-24 w-24 rounded-full border-[18px] border-white/40" />
-
                 <div className="relative mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
                     <div className="flex min-w-0 items-center gap-4">
-                        <img
-                            src="/logo-goku-lab.png"
-                            alt="Goku Lab"
-                            className="h-20 w-20 flex-shrink-0 object-contain drop-shadow-md"
-                        />
-
+                        <img src="/logo-goku-lab.png" alt="Goku Lab" className="h-20 w-20 flex-shrink-0 object-contain drop-shadow-md" />
                         <div className="min-w-0">
-                            <h1 className="text-3xl font-black leading-none text-[#0078D7]">
-                                Goku Lab
-                            </h1>
+                            <h1 className="text-3xl font-black leading-none text-[#0078D7]">Goku Lab</h1>
                             <p className="mt-1 text-base font-black leading-tight">
-                                <span className="text-[#FFC400]">Juega, </span>
-                                <span className="text-[#EF2D2D]">Aprende </span>
-                                <span className="text-[#0078D7]">y </span>
-                                <span className="text-[#2FB34A]">Emprende</span>
+                                <span className="text-[#FFC400]">Juega, </span><span className="text-[#EF2D2D]">Aprende </span><span className="text-[#0078D7]">y </span><span className="text-[#2FB34A]">Emprende</span>
                             </p>
-                            <p className="mt-1 text-sm font-black text-[#003B73]">
-                                Sistema de Gestión Académica
-                            </p>
+                            <p className="mt-1 text-sm font-black text-[#003B73]">Sistema de Gestión Académica</p>
                         </div>
                     </div>
-
-                    <div className="flex rounded-xl border border-cyan-100 bg-white/80 p-1 shadow-sm">
-                        <button
-                            onClick={() => setVista('control')}
-                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'control'
-                                    ? 'bg-[#0047B8] text-white shadow-md shadow-blue-900/15'
-                                    : 'text-gray-500 hover:bg-cyan-50 hover:text-cyan-700'
-                                }`}
-                        >
-                            PENDIENTES
-                        </button>
-                        <button
-                            onClick={() => setVista('registro')}
-                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'registro'
-                                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-900/15'
-                                    : 'text-gray-500 hover:bg-emerald-50 hover:text-emerald-700'
-                                }`}
-                        >
-                            PAGADOS
-                        </button>
+                    <div className="flex rounded-xl border border-cyan-100 bg-white/80 p-1 shadow-sm gap-1">
+                        <button onClick={() => setVista('control')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'control' ? 'bg-[#0047B8] text-white shadow-md shadow-blue-900/15' : 'text-gray-500 hover:bg-cyan-50 hover:text-cyan-700'}`}>PENDIENTES</button>
+                        <button onClick={() => setVista('registro')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'registro' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-900/15' : 'text-gray-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>PAGADOS</button>
+                        <button onClick={() => setVista('proximos')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'proximos' ? 'bg-purple-600 text-white shadow-md shadow-purple-900/15' : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700'}`}>PRÓXIMOS</button>
                     </div>
                 </div>
             </header>
 
             <div className="max-w-6xl mx-auto space-y-6 py-8 px-4 lg:px-0">
-
-                {/* BARRA DE FILTROS */}
                 <div className="bg-white border rounded-2xl p-5 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    {/* Filtro: Alumno */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buscar Alumno</label>
-                        <input
-                            type="text"
-                            placeholder="Escribe el nombre..."
-                            value={busquedaAlumno}
-                            onChange={(e) => setBusquedaAlumno(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
-                        />
-                    </div>
-
-                    {/* Filtro: Fecha Inicio */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Desde fecha</label>
-                        <input
-                            type="date"
-                            value={fechaInicio}
-                            onChange={(e) => setFechaInicio(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors"
-                        />
-                    </div>
-
-                    {/* Filtro: Fecha Fin */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hasta fecha</label>
-                        <input
-                            type="date"
-                            value={fechaFin}
-                            onChange={(e) => setFechaFin(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors"
-                        />
-                    </div>
-
-                    {/* Filtro: Criterio para Pagados */}
+                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buscar Alumno</label><input type="text" placeholder="Escribe el nombre..." value={busquedaAlumno} onChange={(e) => setBusquedaAlumno(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors" /></div>
+                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Desde fecha</label><input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors" /></div>
+                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hasta fecha</label><input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors" /></div>
                     {vista === 'registro' ? (
                         <div className="flex flex-col gap-1.5">
                             <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Filtrar Historial por</label>
-                            <select
-                                value={criterioFechaPagados}
-                                onChange={(e) => setCriterioFechaPagados(e.target.value as 'limite' | 'real')}
-                                className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 text-xs font-bold text-emerald-800 focus:outline-none transition-colors"
-                            >
-                                <option value="real">📅 FECHA DE PAGO REAL</option>
-                                <option value="limite">⏳ FECHA QUE DEBIÓ PAGAR</option>
-                            </select>
+                            <select value={criterioFechaPagados} onChange={(e) => setCriterioFechaPagados(e.target.value as 'limite' | 'real')} className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 text-xs font-bold text-emerald-800 focus:outline-none transition-colors"><option value="real">📅 FECHA DE PAGO REAL</option><option value="limite">⏳ FECHA QUE DEBIÓ PAGAR</option></select>
                         </div>
                     ) : (
-                        <button
-                            onClick={() => { setBusquedaAlumno(''); setFechaInicio(''); setFechaFin(''); }}
-                            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl py-2 text-xs font-bold transition-colors h-[34px]"
-                        >
-                            Limpiar Filtros
-                        </button>
+                        <button onClick={() => { setBusquedaAlumno(''); setFechaInicio(''); setFechaFin(''); }} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl py-2 text-xs font-bold transition-colors h-[34px]">Limpiar Filtros</button>
                     )}
                 </div>
 
-                {/* TARJETAS DE TOTALES DEL MES */}
                 <div>
-                    {vista === 'control' ? (
+                    {vista === 'control' && (
                         <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-5 flex items-center justify-between max-w-sm shadow-sm">
-                            <div>
-                                <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Por recolectar en el mes</span>
-                                <h2 className="text-2xl font-black text-cyan-900 mt-1">
-                                    ${totalPorRecolectar.toLocaleString('es-MX')}
-                                </h2>
-                            </div>
+                            <div><span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Por recolectar en el mes</span><h2 className="text-2xl font-black text-cyan-900 mt-1">${totalPorRecolectar.toLocaleString('es-MX')}</h2></div>
                             <span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-cyan-50">📅</span>
                         </div>
-                    ) : (
+                    )}
+                    {vista === 'registro' && (
                         <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between max-w-sm shadow-sm">
-                            <div>
-                                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total recolectado del mes</span>
-                                <h2 className="text-2xl font-black text-emerald-900 mt-1">
-                                    ${totalRecolectado.toLocaleString('es-MX')}
-                                </h2>
-                            </div>
+                            <div><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total recolectado del mes</span><h2 className="text-2xl font-black text-emerald-900 mt-1">${totalRecolectado.toLocaleString('es-MX')}</h2></div>
                             <span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-emerald-50">💰</span>
                         </div>
                     )}
                 </div>
 
-                {/* LISTA DE RENGLONES CON BOTÓN DE IMPRESIÓN INTEGRADO */}
                 <div className="flex flex-col gap-4">
                     {pagosFiltrados.length > 0 ? (
                         pagosFiltrados.map((p) => (
-                            <div key={p.id} className="relative group">
-                                <PaymentRow
-                                    payment={p}
-                                    onRegisterPayment={() => {
-                                        setSelectedPayment(p);
-                                        setIsModalOpen(true);
-                                    }}
-                                    onChangePaymentDate={() => handleChangeDate(p)}
-                                />
-
-                                {/* BOTÓN DE IMPRESIÓN */}
-                                {vista === 'registro' && (
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
-                                        <button
-                                            onClick={() => handleImprimirRecibo(p)}
-                                            className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm hover:bg-slate-900 transition-colors flex items-center gap-2"
-                                        >
-                                            🖨️ IMPRIMIR RECIBO
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            <PaymentRow
+                                key={p.id}
+                                payment={p}
+                                vista={vista}
+                                onRegisterPayment={(mesElegido) => {
+                                    setSelectedPayment({ ...p, saldo: mesElegido.saldo, montoTotal: mesElegido.monto, id: p.id, claveMes: mesElegido.clave });
+                                    setIsModalOpen(true);
+                                }}
+                                onChangePaymentDate={() => { }}
+                                onPrintReceipt={(mes) => handleImprimirRecibo(p, mes)}
+                            />
                         ))
                     ) : (
                         <div className="py-20 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200">
@@ -508,9 +563,12 @@ export function PagosPage() {
                     )}
                 </div>
 
-                {/* MODAL */}
                 {isModalOpen && selectedPayment && (
-                    <RegisterPaymentModal payment={selectedPayment} onClose={() => setIsModalOpen(false)} onConfirm={handleConfirmarPago} />
+                    <RegisterPaymentModal
+                        payment={selectedPayment}
+                        onClose={() => setIsModalOpen(false)}
+                        onConfirm={handleConfirmarPago}
+                    />
                 )}
             </div>
         </div>

@@ -147,6 +147,12 @@ export function construirPeriodosMensuales({
 
   const periodos = [];
 
+  // Sumamos todo lo que ha pagado históricamente
+  let bolsaDeDinero = abonos.reduce(
+    (total, abono) => total + Number(abono.montoAbono || 0),
+    0
+  );
+
   for (let indice = mesInicio; indice <= limiteSuperior; indice += 1) {
     const anio = Math.floor(indice / 12);
     const mes = indice % 12;
@@ -156,24 +162,26 @@ export function construirPeriodosMensuales({
     const finMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
     const vencimiento = new Date(anio, mes, diaVenc, 23, 59, 59, 999);
 
-    const pagadoMes = abonos.reduce((total, abono) => {
-      const fechaAbono = parseFechaLocal(abono.fechaAbono);
-      if (!fechaAbono) return total;
-      if (fechaAbono >= inicioMes && fechaAbono <= finMes) {
-        return total + Number(abono.montoAbono || 0);
-      }
-      return total;
-    }, 0);
+    // REPARTIMOS EL DINERO CRONOLÓGICAMENTE 
+    let pagadoMes = 0;
+    if (bolsaDeDinero >= monto) {
+      pagadoMes = monto;
+      bolsaDeDinero -= monto; // Descontamos lo que costó este mes
+    } else if (bolsaDeDinero > 0) {
+      pagadoMes = bolsaDeDinero;
+      bolsaDeDinero = 0; // Se acabó la bolsa en un pago parcial
+    }
 
     const saldoMes = Math.max(monto - pagadoMes, 0);
     let status = "Pendiente";
 
-    if (indice > mesHoy) {
-      status = "Programado";
-    } else if (indice < mesInicio) {
+    // ASIGNAMOS EL ESTATUS 
+    if (indice < mesInicio) {
       status = "Programado";
     } else if (saldoMes < 0.01) {
-      status = "Pagado";
+      status = "Pagado"; 
+    } else if (indice > mesHoy) {
+      status = "Programado"; 
     } else if (pagadoMes > 0) {
       status = "Parcial";
     } else if (hoy > vencimiento) {
