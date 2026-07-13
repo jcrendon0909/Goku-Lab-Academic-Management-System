@@ -21,6 +21,18 @@ const pagoSchema = new mongoose.Schema(
         },
         activo: { type: Boolean, default: true, index: true },
         fechaBaja: { type: Date, default: null },
+
+        // 🆕 NUEVOS CAMPOS (opcionales para no romper)
+        mes_correspondiente: {
+            type: String,
+            enum: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
+            default: null
+        },
+        periodo: {
+            type: String,
+            enum: ["Primera", "Segunda", "Tercera", "Cuarta"],
+            default: null
+        }
     },
     {
         collection: 'pago',
