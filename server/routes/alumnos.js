@@ -157,6 +157,9 @@ router.patch("/:idAlumno", async (req, res) => {
     const telefono = req.body?.telefono;
     const tutor = req.body?.tutor;
     const estatus = req.body?.estatus;
+    // 👇 NUEVOS CAMPOS
+    const origen = req.body?.origen;
+    const situacion_percibida = req.body?.situacion_percibida;
 
     const update = {};
     if (telefono !== undefined) update.telefono = String(telefono || "").trim();
@@ -164,6 +167,14 @@ router.patch("/:idAlumno", async (req, res) => {
     if (estatus !== undefined) update.estatus = String(estatus || "").trim();
     if (req.body?.observaciones !== undefined) {
       update.observaciones = String(req.body?.observaciones || "").trim();
+    }
+    // 👇 AGREGAR NUEVOS CAMPOS AL UPDATE (solo si se envían)
+    if (origen !== undefined) {
+      // Validar que el valor esté dentro del enum (opcional, Mongoose lo hará)
+      update.origen = String(origen || "Naucalpan").trim();
+    }
+    if (situacion_percibida !== undefined) {
+      update.situacion_percibida = String(situacion_percibida || "Estable").trim();
     }
 
     const actualizado = await Alumno.findOneAndUpdate(
@@ -342,7 +353,16 @@ router.delete("/:idAlumno", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { nombreAlumno, telefono, tutor, observaciones, estatus } = req.body;
+    const { 
+      nombreAlumno, 
+      telefono, 
+      tutor, 
+      observaciones, 
+      estatus,
+      // 👇 NUEVOS CAMPOS (extraídos del body)
+      origen,
+      situacion_percibida
+    } = req.body;
 
     if (!nombreAlumno || !String(nombreAlumno).trim()) {
       return res.status(400).json({
@@ -361,6 +381,9 @@ router.post("/", async (req, res) => {
       tutor: tutor || "",
       observaciones: observaciones || "",
       estatus: estatus || "Activo",
+      // 👇 ASIGNAR NUEVOS CAMPOS (con defaults)
+      origen: origen || "Naucalpan",
+      situacion_percibida: situacion_percibida || "Estable"
     });
 
     const guardado = await nuevoAlumno.save();

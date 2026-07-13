@@ -1,175 +1,188 @@
 import express from "express";
 import Pago from "../models/Pago.js";
-import Gasto from "../models/Gasto.js";
 import Alumno from "../models/Alumno.js";
+import Gasto from "../models/Gasto.js";
 
 const router = express.Router();
 
-// Helper para obtener el mes a partir de una fecha
-function obtenerMes(fecha) {
-  const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-  return meses[fecha.getMonth()];
-}
-
-// 1. Resumen financiero (Ingresos, Gastos, Utilidad)
+// --- 1. Resumen General: Ingresos, Gastos, Utilidad ---
 router.get("/resumen", async (req, res) => {
-  try {
-    const { anio } = req.query;
-    const year = parseInt(anio) || new Date().getFullYear();
+    try {
+        const { anio = new Date().getFullYear(), mes } = req.query;
 
-    // Ingresos totales del año (suma de montos de pago)
-    const ingresos = await Pago.aggregate([
-      {
-        $match: {
-          $expr: { $eq: [{ $year: "$fechaInicioPago" }, year] }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$montoPago" }
-        }
-      }
-    ]);
+        // Construir filtro de fecha para el año (y mes si se proporciona)
+        const filtroAnio = { anio: parseInt(anio) };
+        if (mes) filtroAnio.mes = mes;
 
-    // Gastos totales del año
-    const gastos = await Gasto.aggregate([
-      {
-        $match: { anio: year }
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$monto" }
-        }
-      }
-    ]);
+        // Total de Ingresos (suma de montos de pago de alumnos activos o estables)
+        // Aquí puedes filtrar por situación_percibida si quieres (ej: solo "Estable" y "Terminó curso")
+        const ingresos = await Pago.aggregate([
+            { $match: { ...filtroAnio, activo: true } },
+            { $group: { _id: null, total: { $sum: "$montoPago" } } }
+        ]);
 
-    const totalIngresos = ingresos.length > 0 ? ingresos[0].total : 0;
-    const totalGastos = gastos.length > 0 ? gastos[0].total : 0;
-    const utilidad = totalIngresos - totalGastos;
+        // Total de Gastos
+        const gastos = await Gasto.aggregate([
+            { $match: filtroAnio },
+            { $group: { _id: null, total: { $sum: "$monto" } } }
+        ]);
 
-    res.json({
-      anio: year,
-      ingresos: totalIngresos,
-      gastos: totalGastos,
-      utilidad,
-      porcentajeUtilidad: totalIngresos > 0 ? (utilidad / totalIngresos) * 100 : 0
-    });
-  } catch (error) {
-    console.error("Error en /resumen:", error);
-    res.status(500).json({ error: "Error al obtener resumen financiero" });
-  }
-});
+        const totalIngresos = ingresos.length > 0 ? ingresos[0].total : 0;
+        const totalGastos = gastos.length > 0 ? gastos[0].total : 0;
+        const utilidad = totalIngresos - totalGastos;
+        const porcentajeUtilidad = totalIngresos > 0 ? (utilidad / totalIngresos) * 100 : 0;
 
-// 2. Rentabilidad por profesor (similar a tu tabla de productividad)
-router.get("/rentabilidad-profesores", async (req, res) => {
-  try {
-    const { anio, mes } = req.query;
-    const year = parseInt(anio) || new Date().getFullYear();
-
-    // Filtro de pagos por año y mes (si se proporciona)
-    const matchPagos = { $expr: { $eq: [{ $year: "$fechaInicioPago" }, year] } };
-    if (mes) {
-      matchPagos.$expr.$and = [
-        { $eq: [{ $year: "$fechaInicioPago" }, year] },
-        { $eq: [{ $month: "$fechaInicioPago" }, new Date(mes + " 1, 2000").getMonth() + 1] }
-      ];
+        res.json({
+            anio: parseInt(anio),
+            mes: mes || "Anual",
+            ingresos: totalIngresos,
+            gastos: totalGastos,
+            utilidad,
+            porcentajeUtilidad: parseFloat(porcentajeUtilidad.toFixed(2))
+        });
+    } catch (error) {
+        console.error("ERROR RESUMEN FINANCIERO:", error);
+        res.status(500).json({ error: "Error al obtener resumen financiero", detalle: error.message });
     }
-
-    // Obtener ingresos agrupados por profesor
-    // Nota: Asumimos que el profesor está en el campo "nombreCurso" o se puede inferir.
-    // Si tienes un campo "profesor" en Pago, deberías usarlo.
-    // Aquí haremos una agregación por "nombreCurso" como proxy (ajústalo según tu modelo).
-    const ingresosPorProfesor = await Pago.aggregate([
-      { $match: matchPagos },
-      {
-        $group: {
-          _id: "$nombreCurso", // Cambiar por el campo real de profesor
-          totalIngresos: { $sum: "$montoPago" },
-          numAlumnos: { $addToSet: "$idAlumno" }
-        }
-      },
-      {
-        $project: {
-          profesor: "$_id",
-          totalIngresos: 1,
-          numAlumnos: { $size: "$numAlumnos" }
-        }
-      }
-    ]);
-
-    // Aquí podrías obtener el costo por hora de cada profesor desde otro modelo
-    // Por ahora, devolvemos los ingresos y el número de alumnos
-    res.json(ingresosPorProfesor);
-  } catch (error) {
-    console.error("Error en /rentabilidad-profesores:", error);
-    res.status(500).json({ error: "Error al obtener rentabilidad por profesor" });
-  }
 });
 
-// 3. Ingresos mensuales (para gráficos)
-router.get("/ingresos-mensuales", async (req, res) => {
-  try {
-    const { anio } = req.query;
-    const year = parseInt(anio) || new Date().getFullYear();
+// --- 2. Rentabilidad por Profesor ---
+router.get("/rentabilidad-profesores", async (req, res) => {
+    try {
+        const { anio = new Date().getFullYear(), mes } = req.query;
 
-    const ingresos = await Pago.aggregate([
-      {
-        $match: {
-          $expr: { $eq: [{ $year: "$fechaInicioPago" }, year] }
-        }
-      },
-      {
-        $group: {
-          _id: { $month: "$fechaInicioPago" },
-          total: { $sum: "$montoPago" }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+        // Filtro de año para pagos
+        const filtroAnio = { anio: parseInt(anio) };
+        if (mes) filtroAnio.mes = mes;
 
-    const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-    const resultado = meses.map((mes, idx) => {
-      const mesData = ingresos.find(i => i._id === idx + 1);
-      return { mes, total: mesData ? mesData.total : 0 };
-    });
+        // 1. Ingresos por profesor: sumar montos de pago agrupados por profesor
+        // Nota: Asumimos que el profesor se obtiene del curso en Inscripcion o del pago.
+        // Para este ejemplo, usaremos un campo `profesor` en Pago (si no existe, podemos obtenerlo de Inscripcion).
+        // Como no tenemos ese campo en Pago, haremos un lookup con Inscripcion.
+        const ingresosPorProfesor = await Pago.aggregate([
+            { $match: { ...filtroAnio, activo: true } },
+            {
+                $lookup: {
+                    from: "inscripciones",
+                    localField: "idAlumno",
+                    foreignField: "idAlumno",
+                    as: "inscripcion"
+                }
+            },
+            { $unwind: { path: "$inscripcion", preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: "$inscripcion.profesor", // Asumiendo que Inscripcion tiene campo `profesor`
+                    totalIngresos: { $sum: "$montoPago" },
+                    alumnos: { $addToSet: "$idAlumno" }
+                }
+            },
+            {
+                $project: {
+                    profesor: { $ifNull: ["$_id", "Sin Profesor"] },
+                    totalIngresos: 1,
+                    numAlumnos: { $size: "$alumnos" },
+                    _id: 0
+                }
+            }
+        ]);
 
-    res.json(resultado);
-  } catch (error) {
-    console.error("Error en /ingresos-mensuales:", error);
-    res.status(500).json({ error: "Error al obtener ingresos mensuales" });
-  }
+        // 2. Costo por profesor (lo obtienes de una tabla de configuración o de un modelo Profesor)
+        // Aquí puedes mockearlo o consultar un modelo Profesor si existe.
+        // Por ahora, usaremos un objeto en memoria para simular.
+        const costoPorProfesor = {
+            "Ana Karina Matías": 13000,
+            "Eduardo Castro": 6400,
+            "José Daniel Piña": 0,
+            "Adam": 0,
+            "Claudia Sierra": 0,
+            "Juan Carlos Rendón": 0,
+            "Krishna": 1200,
+            "Robotica": 2400,
+            "Daniel Altamirano": 3200,
+            "Lizbeth": 2400
+        };
+
+        // 3. Combinar y calcular utilidad
+        const resultado = ingresosPorProfesor.map(item => {
+            const costo = costoPorProfesor[item.profesor] || 0;
+            const utilidad = item.totalIngresos - costo;
+            const porcentajeUtilidad = item.totalIngresos > 0 ? (utilidad / item.totalIngresos) * 100 : 0;
+
+            return {
+                profesor: item.profesor,
+                alumnos: item.numAlumnos,
+                ingresos: item.totalIngresos,
+                costo,
+                utilidad,
+                porcentajeUtilidad: parseFloat(porcentajeUtilidad.toFixed(2))
+            };
+        });
+
+        res.json(resultado);
+    } catch (error) {
+        console.error("ERROR RENTABILIDAD PROFESORES:", error);
+        res.status(500).json({ error: "Error al obtener rentabilidad por profesor", detalle: error.message });
+    }
 });
 
-// 4. Gastos mensuales
-router.get("/gastos-mensuales", async (req, res) => {
-  try {
-    const { anio } = req.query;
-    const year = parseInt(anio) || new Date().getFullYear();
+// --- 3. (Opcional) Ingresos por Curso y Mes ---
+router.get("/ingresos-por-curso", async (req, res) => {
+    try {
+        const { anio = new Date().getFullYear() } = req.query;
 
-    const gastos = await Gasto.aggregate([
-      { $match: { anio: year } },
-      {
-        $group: {
-          _id: "$mes",
-          total: { $sum: "$monto" }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+        const ingresosPorCurso = await Pago.aggregate([
+            { $match: { anio: parseInt(anio), activo: true } },
+            {
+                $group: {
+                    _id: { mes: "$mesCorrespondiente", curso: "$nombreCurso" },
+                    total: { $sum: "$montoPago" }
+                }
+            },
+            {
+                $group: {
+                    _id: "$_id.mes",
+                    cursos: { $push: { nombre: "$_id.curso", total: "$total" } },
+                    totalMes: { $sum: "$total" }
+                }
+            },
+            { $sort: { "_id": 1 } } // Ordenar por mes
+        ]);
 
-    const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-    const resultado = meses.map(mes => {
-      const mesData = gastos.find(g => g._id === mes);
-      return { mes, total: mesData ? mesData.total : 0 };
-    });
+        res.json(ingresosPorCurso);
+    } catch (error) {
+        console.error("ERROR INGRESOS POR CURSO:", error);
+        res.status(500).json({ error: "Error al obtener ingresos por curso", detalle: error.message });
+    }
+});
 
-    res.json(resultado);
-  } catch (error) {
-    console.error("Error en /gastos-mensuales:", error);
-    res.status(500).json({ error: "Error al obtener gastos mensuales" });
-  }
+// --- 4. (Opcional) Lista de Gastos con Filtros ---
+router.get("/gastos", async (req, res) => {
+    try {
+        const { mes, anio, categoria } = req.query;
+        const filtro = {};
+        if (mes) filtro.mes = mes;
+        if (anio) filtro.anio = parseInt(anio);
+        if (categoria) filtro.categoria = categoria;
+
+        const gastos = await Gasto.find(filtro).sort({ fecha: -1 });
+        res.json(gastos);
+    } catch (error) {
+        console.error("ERROR LISTA GASTOS:", error);
+        res.status(500).json({ error: "Error al obtener gastos", detalle: error.message });
+    }
+});
+
+// --- 5. (Opcional) Crear un Gasto ---
+router.post("/gastos", async (req, res) => {
+    try {
+        const nuevoGasto = new Gasto(req.body);
+        await nuevoGasto.save();
+        res.status(201).json(nuevoGasto);
+    } catch (error) {
+        console.error("ERROR CREAR GASTO:", error);
+        res.status(400).json({ error: "Error al crear gasto", detalle: error.message });
+    }
 });
 
 export default router;
