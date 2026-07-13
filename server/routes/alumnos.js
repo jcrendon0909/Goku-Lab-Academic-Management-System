@@ -145,6 +145,7 @@ router.patch("/:idAlumno/nota", async (req, res) => {
   }
 });
 
+// 🔥 MODIFICADO: Agregar 'origen' y 'situacion_percibida' al PATCH general
 router.patch("/:idAlumno", async (req, res) => {
   try {
     const { idAlumno } = req.params;
@@ -157,7 +158,6 @@ router.patch("/:idAlumno", async (req, res) => {
     const telefono = req.body?.telefono;
     const tutor = req.body?.tutor;
     const estatus = req.body?.estatus;
-    // 👇 NUEVOS CAMPOS
     const origen = req.body?.origen;
     const situacion_percibida = req.body?.situacion_percibida;
 
@@ -168,11 +168,7 @@ router.patch("/:idAlumno", async (req, res) => {
     if (req.body?.observaciones !== undefined) {
       update.observaciones = String(req.body?.observaciones || "").trim();
     }
-    // 👇 AGREGAR NUEVOS CAMPOS AL UPDATE (solo si se envían)
-    if (origen !== undefined) {
-      // Validar que el valor esté dentro del enum (opcional, Mongoose lo hará)
-      update.origen = String(origen || "Naucalpan").trim();
-    }
+    if (origen !== undefined) update.origen = String(origen || "Naucalpan").trim();
     if (situacion_percibida !== undefined) {
       update.situacion_percibida = String(situacion_percibida || "Estable").trim();
     }
@@ -217,6 +213,7 @@ router.patch("/:idAlumno", async (req, res) => {
 });
 
 router.patch("/:idAlumno/desactivar", async (req, res) => {
+  // ... (código existente, sin cambios) ...
   try {
     const { idAlumno } = req.params;
 
@@ -226,7 +223,6 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
 
     const idTrimmed = String(idAlumno).trim();
 
-    // Validar que no tenga pagos pendientes en cursos activos
     const inscripcionesActivas = await Inscripcion.find({
       idAlumno: idTrimmed,
       estatus: { $ne: "Baja" },
@@ -293,6 +289,7 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
 });
 
 router.delete("/:idAlumno", async (req, res) => {
+  // ... (código existente, sin cambios) ...
   try {
     const { idAlumno } = req.params;
     if (!idAlumno || !String(idAlumno).trim()) {
@@ -351,15 +348,15 @@ router.delete("/:idAlumno", async (req, res) => {
   }
 });
 
+// 🔥 MODIFICADO: Agregar 'origen' y 'situacion_percibida' al POST
 router.post("/", async (req, res) => {
   try {
-    const { 
-      nombreAlumno, 
-      telefono, 
-      tutor, 
-      observaciones, 
+    const {
+      nombreAlumno,
+      telefono,
+      tutor,
+      observaciones,
       estatus,
-      // 👇 NUEVOS CAMPOS (extraídos del body)
       origen,
       situacion_percibida
     } = req.body;
@@ -381,7 +378,6 @@ router.post("/", async (req, res) => {
       tutor: tutor || "",
       observaciones: observaciones || "",
       estatus: estatus || "Activo",
-      // 👇 ASIGNAR NUEVOS CAMPOS (con defaults)
       origen: origen || "Naucalpan",
       situacion_percibida: situacion_percibida || "Estable"
     });

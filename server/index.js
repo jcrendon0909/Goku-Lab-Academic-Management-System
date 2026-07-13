@@ -1,72 +1,50 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { connectDB } from "./config/db.js";
-import { verifyToken, requireRole } from "./middleware/auth.js";
-import gruposRoutes from "./routes/grupos.js";
-import inscripcionesRoutes from "./routes/inscripciones.js";
-import reagendacionesRoutes from "./routes/reagendaciones.js";
-import calendarioRoutes from "./routes/calendario.js";
-import clasesCanceladasRoutes from "./routes/clases-canceladas.js";
-import notificacionesRoutes from "./routes/notificaciones.js";
-import pagosRoutes from "./routes/pagos.js";
-import abonosRouter from "./routes/abonos.js";
-import profesoresRoutes from "./routes/profesores.js";
-import alumnosRoutes from "./routes/alumnos.js";
-import cursosRoutes from "./routes/cursos.js";
-import authRoutes from "./routes/auth.js";
+import mongoose from "mongoose";
+import { connectDB } from "../server/db.js";
+import Pago from "../server/models/Pago.js";
+import Alumno from "../server/models/Alumno.js";
 
-dotenv.config({ path: "./server/.env" });
+const run = async () => {
+  await connectDB();
 
-const app = express();
+  // 1. Actualizar todos los pagos: asignar anio, mesCorrespondiente y periodo
+  const pagos = await Pago.find({});
+  console.log(`📊 Procesando ${pagos.length} pagos...`);
+  for (const pago of pagos) {
+    const fecha = pago.fechaInicioPago || pago.createdAt || new Date();
+    const mes = fecha.toLocaleString("es", { month: "short" });
+    const mesCapitalizado = mes.charAt(0).toUpperCase() + mes.slice(1);
+    const anio = fecha.getFullYear();
 
-const corsOrigins =
-  process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean) ||
-  [];
+    await Pago.updateOne(
+      { _id: pago._id },
+      {
+        $set: {
+          mesCorrespondiente: mesCapitalizado,
+          anio: anio,
+          periodo: "Mes"
+        }
+      }
+    );
+  }
+  console.log(`✅ ${pagos.length} pagos actualizados`);
 
-app.use(
-  cors({
-    origin:
-      process.env.NODE_ENV === "production" && corsOrigins.length > 0
-        ? corsOrigins
-        : true,
-    credentials: true,
-  })
-);
-app.use(express.json());
+  // 2. Actualizar alumnos: asignar origen y situacion_percibida si están vacíos
+  const alumnos = await Alumno.updateMany(
+    { origen: { $exists: false } },
+    { $set: { origen: "Naucalpan" } }
+  );
+  console.log(`✅ Alumnos actualizados con origen: ${alumnos.modifiedCount}`);
 
-connectDB();
+  const alumnos2 = await Alumno.updateMany(
+    { situacion_percibida: { $exists: false } },
+    { $set: { situacion_percibida: "Estable" } }
+  );
+  console.log(`✅ Alumnos actualizados con situacion_percibida: ${alumnos2.modifiedCount}`);
 
-app.get("/", (req, res) => {
-  res.json({ ok: true, message: "API funcionando 🚀" });
-});
+  process.exit(0);
+};
 
-app.use("/api/auth", authRoutes);
-
-const apiProtegida = express.Router();
-apiProtegida.use(verifyToken);
-
-// Solo lectura del calendario: accesible para admin y profesor
-apiProtegida.use("/calendario", calendarioRoutes);
-
-// Recursos de administración: exclusivos del rol admin
-const soloAdmin = requireRole("admin");
-apiProtegida.use("/grupos", soloAdmin, gruposRoutes);
-apiProtegida.use("/inscripciones", soloAdmin, inscripcionesRoutes);
-apiProtegida.use("/reagendaciones", soloAdmin, reagendacionesRoutes);
-apiProtegida.use("/clases-canceladas", soloAdmin, clasesCanceladasRoutes);
-apiProtegida.use("/notificaciones", soloAdmin, notificacionesRoutes);
-apiProtegida.use("/pagos", soloAdmin, pagosRoutes);
-apiProtegida.use("/abonos", soloAdmin, abonosRouter);
-apiProtegida.use("/profesores", soloAdmin, profesoresRoutes);
-apiProtegida.use("/alumnos", soloAdmin, alumnosRoutes);
-apiProtegida.use("/cursos", soloAdmin, cursosRoutes);
-
-app.use("/api", apiProtegida);
-
-const PORT = process.env.PORT || 4000;
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+run().catch(err => {
+  console.error("❌ Error:", err);
+  process.exit(1);
 });
