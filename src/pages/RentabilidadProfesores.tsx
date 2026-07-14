@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { getRentabilidadProfesores } from "../api";
+
+import { getRentabilidadProfesores } from "../api"; // Espera, esta ya es correcta si api.ts está en src/
 
 interface RentabilidadItem {
   idProfesor: string;
@@ -18,7 +19,6 @@ const RentabilidadProfesores: React.FC = () => {
   const [data, setData] = useState<RentabilidadItem[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [mes, setMes] = useState("Abr");
   const [anio, setAnio] = useState("2026");
 

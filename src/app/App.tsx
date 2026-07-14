@@ -7,7 +7,6 @@ import { MaestrosPage } from './components/MaestrosPage';
 import { CursosPage } from './components/CursosPage';
 import { LoginPage } from './components/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
-// ===== NUEVA IMPORTACIÓN =====
 import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
