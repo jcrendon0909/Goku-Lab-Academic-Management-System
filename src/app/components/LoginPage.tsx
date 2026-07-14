@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, User } from 'lucide-react';
 import { loginService } from '../../services/api';
 import { rutaInicialPorRol } from '../../utils/auth';
+import { rutaInicialPorRol } from '../../utils/roles';
 
 export function LoginPage() {
     const [usuario, setUsuario] = useState('');

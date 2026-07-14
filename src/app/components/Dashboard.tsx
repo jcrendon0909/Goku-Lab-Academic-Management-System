@@ -25,7 +25,7 @@ import {
 } from '../../services/api';
 import { toast } from 'sonner';
 import { useSyncDataReload } from '../../utils/dataSync';
-import { esAdmin } from '../../utils/auth';
+import { esAdmin } from '../../utils/roles';
 import { resolverGrupoIdInscripcion } from '../../utils/grupoInscripcion';
 import ReagendacionForm from './ReagendacionForm';
 import InscripcionForm from './InscripcionForm';
