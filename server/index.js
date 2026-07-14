@@ -47,4 +47,8 @@ const run = async () => {
 run().catch(err => {
   console.error("❌ Error:", err);
   process.exit(1);
-});
+}
+import reportesRoutes from './routes/reportes.js';
+// ...
+app.use('/api/reportes', reportesRoutes);
+);
