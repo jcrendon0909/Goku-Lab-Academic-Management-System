@@ -12,6 +12,9 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
+import { AdminUsuarios } from './components/AdminUsuarios';
+import { CalendarioProfesor } from './components/CalendarioProfesor';
+
 
 export const router = createBrowserRouter([
     {
@@ -66,6 +69,25 @@ export const router = createBrowserRouter([
             </ProtectedRoute>
         ),
     },
+   
+// Dentro de router:
+{
+  path: '/admin/usuarios',
+  element: (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <AdminUsuarios />
+    </ProtectedRoute>
+  ),
+},
+// Dentro de router:
+{
+  path: '/calendario',
+  element: (
+    <ProtectedRoute>
+      <CalendarioProfesor />
+    </ProtectedRoute>
+  ),
+},
     // ===== NUEVA RUTA =====
     {
         path: '/reportes/rentabilidad',

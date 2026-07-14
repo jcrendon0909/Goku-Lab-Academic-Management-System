@@ -8,6 +8,7 @@ import { Label } from './ui/label';
 import { teachers, Teacher } from '../data/mockData';
 import { useClasses } from '../context/ClassContext';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
 
 export function ReschedulingFlow() {
   const navigate = useNavigate();
@@ -23,17 +24,16 @@ export function ReschedulingFlow() {
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [selectedDuration, setSelectedDuration] = useState('2'); // duración por defecto: 2 horas
+  const [selectedDuration, setSelectedDuration] = useState('2');
   const [isConfirming, setIsConfirming] = useState(false);
 
   // Combinar profesores disponibles + el profesor original de la clase
   const originalTeacher = classData?.teacher;
   let allAvailableTeachers = teachers.filter(t => t.available);
   
-  // Agregar el profesor original si no está en la lista de disponibles
   if (originalTeacher && !allAvailableTeachers.find(t => t.id === originalTeacher.id)) {
     allAvailableTeachers = [
-      { ...originalTeacher, available: true }, // Marcar como disponible
+      { ...originalTeacher, available: true },
       ...allAvailableTeachers
     ];
   }
@@ -54,7 +54,6 @@ export function ReschedulingFlow() {
 
     setIsConfirming(true);
     
-    // Simular proceso de reprogramación
     setTimeout(() => {
       rescheduleClass(classId, studentId, {
         newDate: selectedDate,
@@ -66,7 +65,7 @@ export function ReschedulingFlow() {
       
       setIsConfirming(false);
       toast.success('Clase reprogramada exitosamente');
-      navigate('/');
+      navigate('/dashboard');
     }, 1500);
   };
 
@@ -75,8 +74,8 @@ export function ReschedulingFlow() {
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-600">Clase no encontrada</p>
-          <Button onClick={() => navigate('/')} className="mt-4">
-            Volver al inicio
+          <Button onClick={() => navigate('/dashboard')} className="mt-4">
+            Volver al Dashboard
           </Button>
         </div>
       </div>
@@ -88,14 +87,15 @@ export function ReschedulingFlow() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-4xl mx-auto">
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/')}
-            className="mb-4 -ml-2 hover:bg-gray-100 rounded-lg"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver al panel
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Volver al Dashboard
+            </Link>
+          </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Reprogramación de Clase</h1>
             <p className="text-cyan-600 mt-2 text-lg font-medium">
@@ -105,7 +105,7 @@ export function ReschedulingFlow() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content - igual que antes */}
       <main className="max-w-4xl mx-auto px-6 py-6">
         {/* Original Class Info */}
         <Card className="p-6 mb-6 rounded-xl shadow-sm bg-gray-50">
@@ -142,7 +142,6 @@ export function ReschedulingFlow() {
           </div>
 
           <div className="space-y-3 mb-4">
-            {/* Profesores Disponibles */}
             {allAvailableTeachers.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
@@ -194,7 +193,6 @@ export function ReschedulingFlow() {
               </div>
             )}
 
-            {/* Profesores No Disponibles */}
             {unavailableTeachers.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2 mt-4">
@@ -228,7 +226,6 @@ export function ReschedulingFlow() {
             )}
           </div>
 
-          {/* WhatsApp Button - Always visible */}
           <div className="pt-4 border-t border-gray-200">
             {allAvailableTeachers.length === 0 && (
               <Card className="p-4 bg-amber-50 border-amber-200 rounded-lg mb-4">
@@ -253,7 +250,6 @@ export function ReschedulingFlow() {
           </div>
         </Card>
 
-        {/* Date and Time Selection */}
         {allAvailableTeachers.length > 0 && (
           <Card className="p-6 mb-6 rounded-xl shadow-sm">
             <div className="flex items-center gap-2 mb-4">
@@ -328,7 +324,6 @@ export function ReschedulingFlow() {
           </Card>
         )}
 
-        {/* Tracking Info */}
         {allAvailableTeachers.length > 0 && (
           <Card className="p-6 mb-6 rounded-xl shadow-sm bg-amber-50 border-amber-200">
             <h3 className="font-medium text-amber-900 mb-2">Seguimiento de Reprogramación</h3>
@@ -340,7 +335,6 @@ export function ReschedulingFlow() {
           </Card>
         )}
 
-        {/* Confirm Button */}
         {allAvailableTeachers.length > 0 && (
           <Button
             onClick={handleConfirmReschedule}
