@@ -4,11 +4,11 @@ export const rutaInicialPorRol = (rol: string): string => {
         admin: '/dashboard',
         profesor: '/dashboard',
         recepcion: '/dashboard',
-        // Agrega aquí otros roles si los tienes
     };
     return rolesMap[rol] || '/dashboard';
 };
 
+// Agregamos esta función que falta
 export const esAdmin = (rol: string): boolean => {
     return rol === 'admin';
 };

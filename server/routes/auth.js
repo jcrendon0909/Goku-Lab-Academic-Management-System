@@ -10,7 +10,10 @@ router.post('/login', async (req, res) => {
     try {
         const { usuario, password } = req.body;
 
-        const user = await Usuario.findOne({ usuario: String(usuario).toLowerCase().trim() });
+        // Búsqueda insensible a mayúsculas/minúsculas
+        const user = await Usuario.findOne({
+            usuario: { $regex: new RegExp(`^${usuario.trim()}$`, 'i') }
+        });
 
         if (!user) {
             return res.status(401).json({ error: "El usuario no existe en Goku Lab" });
@@ -18,7 +21,7 @@ router.post('/login', async (req, res) => {
 
         const passwordCorrecto = await bcrypt.compare(password, user.password);
         if (!passwordCorrecto) {
-            return res.status(401).json({ error: "Usuario o contrase�a incorrectos" });
+            return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
         }
 
         const token = jwt.sign(
