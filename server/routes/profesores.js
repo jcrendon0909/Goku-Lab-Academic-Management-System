@@ -38,11 +38,15 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const nombre = String(req.body?.nombre || "").trim();
-    const fechaNacimiento = req.body?.fechaNacimiento || null;
-    const salarioPorHora = parseFloat(req.body?.salarioPorHora) || 0;
+    const {
+      nombre,
+      fechaNacimiento,
+      salarioPorHora,
+      tipoPago,
+      salarioMensual
+    } = req.body;
 
-    if (!nombre) {
+    if (!nombre || !String(nombre).trim()) {
       return res.status(400).json({ error: "El nombre del maestro es obligatorio" });
     }
 
@@ -57,10 +61,12 @@ router.post("/", async (req, res) => {
 
     const profesor = await Profesor.create({
       idProfesor,
-      nombre,
+      nombre: String(nombre).trim(),
       estatus: "Activo",
       fechaNacimiento: fechaNacimiento || null,
-      salarioPorHora: salarioPorHora >= 0 ? salarioPorHora : 0,
+      salarioPorHora: salarioPorHora || 0,
+      tipoPago: tipoPago || 'por_hora',
+      salarioMensual: salarioMensual || 0
     });
 
     res.status(201).json(profesor);
@@ -99,6 +105,7 @@ router.patch("/:idProfesor", async (req, res) => {
     profesor.nombre = nombre;
     await profesor.save();
 
+    // Reflejar el nuevo nombre en los grupos asignados
     await Grupo.updateMany(
       { $or: [{ idProfesor }, { nombreProfesor: nombreAnterior }] },
       { $set: { idProfesor, nombreProfesor: nombre } }
@@ -143,17 +150,22 @@ router.patch("/:idProfesor/estatus", async (req, res) => {
   }
 });
 
-// ===== NUEVO ENDPOINT: actualizar datos extra =====
+// ===== ENDPOINT PARA ACTUALIZAR DATOS EXTRA (fecha, salarios, tipo) =====
 router.patch("/:idProfesor/datos-extra", async (req, res) => {
   try {
     const { idProfesor } = req.params;
-    const { fechaNacimiento, salarioPorHora } = req.body;
+    const { fechaNacimiento, salarioPorHora, tipoPago, salarioMensual } = req.body;
 
     const update = {};
     if (fechaNacimiento !== undefined) update.fechaNacimiento = fechaNacimiento || null;
-    if (salarioPorHora !== undefined) {
-      update.salarioPorHora = Math.max(0, parseFloat(salarioPorHora) || 0);
+    if (salarioPorHora !== undefined) update.salarioPorHora = Math.max(0, parseFloat(salarioPorHora) || 0);
+    if (tipoPago !== undefined) {
+      if (!['por_hora', 'fijo_mensual'].includes(tipoPago)) {
+        return res.status(400).json({ error: "tipoPago debe ser 'por_hora' o 'fijo_mensual'" });
+      }
+      update.tipoPago = tipoPago;
     }
+    if (salarioMensual !== undefined) update.salarioMensual = Math.max(0, parseFloat(salarioMensual) || 0);
 
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: "No se enviaron datos para actualizar" });

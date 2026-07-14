@@ -25,193 +25,207 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 export const loginService = async (usuario: string, password: string) => {
-    const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario, password })
-    });
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ usuario, password }),
+  });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al iniciar sesión');
-    }
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Error al iniciar sesión");
+  }
 
-    const data = await response.json();
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    return data;
+  const data = await response.json();
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("user", JSON.stringify(data.user));
+  return data;
 };
 
 export async function getCalendario() {
-    const res = await apiFetch("/calendario");
-    if (!res.ok) throw new Error("Error al obtener calendario");
-    return res.json();
+  const res = await apiFetch("/calendario");
+  if (!res.ok) throw new Error("Error al obtener calendario");
+  return res.json();
 }
 
 export async function getReagendaciones() {
-    const res = await apiFetch("/reagendaciones");
-    if (!res.ok) throw new Error("Error al obtener reagendaciones");
-    return res.json();
+  const res = await apiFetch("/reagendaciones");
+  if (!res.ok) throw new Error("Error al obtener reagendaciones");
+  return res.json();
 }
 
 export async function crearReagendacion(data: any) {
-    const res = await apiFetch("/reagendaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-    const responseData = await res.json();
-    if (!res.ok) {
-        const detalle = responseData.detalle ? ` (${responseData.detalle})` : "";
-        throw new Error((responseData.error || "Error al guardar reagendación") + detalle);
-    }
-    notifyDataChanged({ tipo: "reagendacion" });
-    return responseData;
+  const res = await apiFetch("/reagendaciones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const detalle = responseData.detalle ? ` (${responseData.detalle})` : "";
+    throw new Error((responseData.error || "Error al guardar reagendación") + detalle);
+  }
+  notifyDataChanged({ tipo: "reagendacion" });
+  return responseData;
 }
 
 export async function getProfesores() {
-    const res = await apiFetch("/profesores");
-    if (!res.ok) throw new Error("Error al obtener profesores");
-    return res.json();
+  const res = await apiFetch("/profesores");
+  if (!res.ok) throw new Error("Error al obtener profesores");
+  return res.json();
 }
 
-export async function crearProfesor(nombre: string) {
-    const res = await apiFetch("/profesores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al crear el maestro");
-    notifyDataChanged({ tipo: "profesor" });
-    return data;
+export async function crearProfesor(data: {
+  nombre: string;
+  fechaNacimiento?: string | null;
+  salarioPorHora?: number;
+  tipoPago?: 'por_hora' | 'fijo_mensual';
+  salarioMensual?: number;
+}) {
+  const res = await apiFetch("/profesores", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data), // 👈 Debe ser JSON.stringify
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return responseData;
 }
-
 export async function renombrarProfesor(idProfesor: string, nombre: string) {
-    const res = await apiFetch(`/profesores/${idProfesor}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al editar el maestro");
-    notifyDataChanged({ tipo: "profesor" });
-    return data;
+  const res = await apiFetch(`/profesores/${idProfesor}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombre }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al editar el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
 }
 
-export async function actualizarEstatusProfesor(idProfesor: string, estatus: "Activo" | "Inactivo") {
-    const res = await apiFetch(`/profesores/${idProfesor}/estatus`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estatus }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al actualizar el maestro");
-    notifyDataChanged({ tipo: "profesor" });
-    return data;
+export async function actualizarEstatusProfesor(
+  idProfesor: string,
+  estatus: "Activo" | "Inactivo"
+) {
+  const res = await apiFetch(`/profesores/${idProfesor}/estatus`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estatus }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al actualizar el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
 }
 
 export async function eliminarProfesor(idProfesor: string) {
-    const res = await apiFetch(`/profesores/${idProfesor}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al dar de baja al maestro");
-    notifyDataChanged({ tipo: "profesor" });
-    return data;
+  const res = await apiFetch(`/profesores/${idProfesor}`, { method: "DELETE" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al dar de baja al maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
 }
 
 export async function reasignarProfesorGrupo(grupoId: string, idProfesor: string) {
-    const res = await apiFetch(`/grupos/${grupoId}/profesor`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idProfesor }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al reasignar el profesor");
-    notifyDataChanged({ tipo: "grupo" });
-    return data;
+  const res = await apiFetch(`/grupos/${grupoId}/profesor`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idProfesor }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al reasignar el profesor");
+  notifyDataChanged({ tipo: "grupo" });
+  return data;
 }
 
 export async function getGrupos() {
-    const res = await apiFetch("/grupos");
-    if (!res.ok) throw new Error("Error al obtener grupos");
-    return res.json();
+  const res = await apiFetch("/grupos");
+  if (!res.ok) throw new Error("Error al obtener grupos");
+  return res.json();
 }
 
 export async function getCursos() {
-    const res = await apiFetch("/cursos");
-    if (!res.ok) throw new Error("Error al obtener cursos");
-    return res.json();
+  const res = await apiFetch("/cursos");
+  if (!res.ok) throw new Error("Error al obtener cursos");
+  return res.json();
 }
 
 export async function crearCurso(nombreCurso: string) {
-    const res = await apiFetch("/cursos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreCurso }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al crear el curso");
-    notifyDataChanged({ tipo: "curso" });
-    return data;
+  const res = await apiFetch("/cursos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombreCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al crear el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
 }
 
 export async function renombrarCurso(idCurso: string, nombreCurso: string) {
-    const res = await apiFetch(`/cursos/${idCurso}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreCurso }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al editar el curso");
-    notifyDataChanged({ tipo: "curso" });
-    return data;
+  const res = await apiFetch(`/cursos/${idCurso}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombreCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al editar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
 }
 
-export async function actualizarEstatusCurso(idCurso: string, estatus: "Activo" | "Inactivo") {
-    const res = await apiFetch(`/cursos/${idCurso}/estatus`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estatus }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al actualizar el curso");
-    notifyDataChanged({ tipo: "curso" });
-    return data;
+export async function actualizarEstatusCurso(
+  idCurso: string,
+  estatus: "Activo" | "Inactivo"
+) {
+  const res = await apiFetch(`/cursos/${idCurso}/estatus`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estatus }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al actualizar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
 }
 
 export async function eliminarCurso(idCurso: string) {
-    const res = await apiFetch(`/cursos/${idCurso}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al borrar el curso");
-    notifyDataChanged({ tipo: "curso" });
-    return data;
+  const res = await apiFetch(`/cursos/${idCurso}`, { method: "DELETE" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al borrar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
 }
 
 export async function reasignarCursoGrupo(grupoId: string, idCurso: string) {
-    const res = await apiFetch(`/grupos/${grupoId}/curso`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idCurso }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Error al reasignar el curso");
-    notifyDataChanged({ tipo: "grupo" });
-    return data;
+  const res = await apiFetch(`/grupos/${grupoId}/curso`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al reasignar el curso");
+  notifyDataChanged({ tipo: "grupo" });
+  return data;
 }
 
 export async function getAlumnos(busqueda: string = "") {
-    const path = busqueda ? `/alumnos?q=${encodeURIComponent(busqueda)}` : "/alumnos";
-    const res = await apiFetch(path);
-    if (!res.ok) throw new Error("Error al obtener alumnos");
-    return res.json();
+  const path = busqueda ? `/alumnos?q=${encodeURIComponent(busqueda)}` : "/alumnos";
+  const res = await apiFetch(path);
+  if (!res.ok) throw new Error("Error al obtener alumnos");
+  return res.json();
 }
 
-export async function actualizarAlumno(idAlumno: string, data: {
-  telefono?: string;
-  tutor?: string;
-  observaciones?: string;
-  estatus?: string;
-}) {
+export async function actualizarAlumno(
+  idAlumno: string,
+  data: {
+    telefono?: string;
+    tutor?: string;
+    observaciones?: string;
+    estatus?: string;
+  }
+) {
   const res = await apiFetch(`/alumnos/${idAlumno}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -228,7 +242,10 @@ export async function eliminarAlumno(idAlumno: string) {
   const responseData = await res.json();
   if (!res.ok) {
     const activas = responseData.detalle?.inscripcionesActivas;
-    const extra = activas != null ? ` Tiene ${activas} curso(s) activo(s): usa «Dar de baja» en cada curso primero.` : "";
+    const extra =
+      activas != null
+        ? ` Tiene ${activas} curso(s) activo(s): usa «Dar de baja» en cada curso primero.`
+        : "";
     throw new Error((responseData.error || "Error al eliminar alumno") + extra);
   }
   notifyDataChanged({ tipo: "eliminar-alumno" });
@@ -244,27 +261,27 @@ export async function desactivarAlumno(idAlumno: string) {
 }
 
 export async function crearAlumno(data: {
-    nombreAlumno: string;
-    telefono?: string;
-    tutor?: string;
-    observaciones?: string;
-    estatus?: string;
+  nombreAlumno: string;
+  telefono?: string;
+  tutor?: string;
+  observaciones?: string;
+  estatus?: string;
 }) {
-    const res = await apiFetch("/alumnos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al crear alumno");
-    notifyDataChanged({ tipo: "alumno" });
-    return responseData;
+  const res = await apiFetch("/alumnos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear alumno");
+  notifyDataChanged({ tipo: "alumno" });
+  return responseData;
 }
 
 export async function getInscripciones() {
-    const res = await apiFetch("/inscripciones");
-    if (!res.ok) throw new Error("Error al obtener inscripciones");
-    return res.json();
+  const res = await apiFetch("/inscripciones");
+  if (!res.ok) throw new Error("Error al obtener inscripciones");
+  return res.json();
 }
 
 export async function guardarNotasAlumno(data: { idAlumno: string; observaciones: string }) {
@@ -290,18 +307,22 @@ export async function crearInscripcion(data: {
   fechaInicioPago?: string;
   comentarios?: string;
 }) {
-    const res = await apiFetch("/inscripciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al crear inscripción");
-    notifyDataChanged({ tipo: "inscripcion" });
-    return responseData;
+  const res = await apiFetch("/inscripciones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear inscripción");
+  notifyDataChanged({ tipo: "inscripcion" });
+  return responseData;
 }
 
-export async function actualizarInscripcionAlumno(idAlumno: string, grupoId: string, data: { modalidad?: string; comentarios?: string }) {
+export async function actualizarInscripcionAlumno(
+  idAlumno: string,
+  grupoId: string,
+  data: { modalidad?: string; comentarios?: string }
+) {
   const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -314,15 +335,15 @@ export async function actualizarInscripcionAlumno(idAlumno: string, grupoId: str
 }
 
 export async function getInscripcionesPorGrupo(grupoId: string) {
-    const res = await apiFetch(`/inscripciones/grupo/${grupoId}`);
-    if (!res.ok) throw new Error("Error al obtener inscripciones del grupo");
-    return res.json();
+  const res = await apiFetch(`/inscripciones/grupo/${grupoId}`);
+  if (!res.ok) throw new Error("Error al obtener inscripciones del grupo");
+  return res.json();
 }
 
 export async function getInscripcionesPorAlumno(idAlumno: string) {
-    const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
-    if (!res.ok) throw new Error("Error al obtener inscripciones del alumno");
-    return res.json();
+  const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
+  if (!res.ok) throw new Error("Error al obtener inscripciones del alumno");
+  return res.json();
 }
 
 export async function crearGrupoConAlumno(data: {
@@ -362,65 +383,67 @@ export async function crearGrupoConAlumno(data: {
     comentarios?: string;
   };
 }) {
-    const res = await apiFetch("/grupos/crear-con-alumno", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al crear grupo con alumno");
-    notifyDataChanged({ tipo: "inscripcion" });
-    return responseData;
+  const res = await apiFetch("/grupos/crear-con-alumno", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear grupo con alumno");
+  notifyDataChanged({ tipo: "inscripcion" });
+  return responseData;
 }
 
 export async function actualizarComentarioGrupo(grupoId: string, comentario: string) {
-    const res = await apiFetch(`/grupos/${grupoId}/comentario`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comentario }),
-    });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al actualizar comentario del grupo");
-    notifyDataChanged({ tipo: "grupo" });
-    return responseData;
+  const res = await apiFetch(`/grupos/${grupoId}/comentario`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comentario }),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al actualizar comentario del grupo");
+  notifyDataChanged({ tipo: "grupo" });
+  return responseData;
 }
 
 export async function getPagosConEstatus() {
-    const res = await apiFetch("/pagos/lista-completa");
-    if (!res.ok) throw new Error("Error al obtener la lista de pagos");
-    return res.json();
+  const res = await apiFetch("/pagos/lista-completa");
+  if (!res.ok) throw new Error("Error al obtener la lista de pagos");
+  return res.json();
 }
 
 export async function registrarAbono(data: {
-    pagoId: string;
-    montoAbono: number;
-    nombreAlumno: string;
-    metodoAbono: string;
+  pagoId: string;
+  montoAbono: number;
+  nombreAlumno: string;
+  metodoAbono: string;
 }) {
-    const res = await apiFetch("/abonos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Error al registrar el abono");
-    }
-    const responseData = await res.json();
-    notifyDataChanged({ tipo: "pago" });
-    return responseData;
+  const res = await apiFetch("/abonos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Error al registrar el abono");
+  }
+  const responseData = await res.json();
+  notifyDataChanged({ tipo: "pago" });
+  return responseData;
 }
 
 export async function eliminarReagendacion(id: string) {
-    const res = await apiFetch(`/reagendaciones/${id}`, { method: "DELETE" });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al eliminar reagendación");
-    notifyDataChanged({ tipo: "reagendacion" });
-    return responseData;
+  const res = await apiFetch(`/reagendaciones/${id}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al eliminar reagendación");
+  notifyDataChanged({ tipo: "reagendacion" });
+  return responseData;
 }
 
 export async function eliminarReagendacionAlumno(idAlumno: string, idGrupoNuevo: string) {
-  const res = await apiFetch(`/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, { method: "DELETE" });
+  const res = await apiFetch(`/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
+    method: "DELETE",
+  });
   const responseData = await res.json();
   if (!res.ok) throw new Error(responseData.error || "Error al eliminar reagendación");
   notifyDataChanged({ tipo: "reagendacion" });
@@ -428,54 +451,63 @@ export async function eliminarReagendacionAlumno(idAlumno: string, idGrupoNuevo:
 }
 
 export async function bajaAlumnoDeGrupo(idAlumno: string, grupoId: string) {
-    const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}`, { method: "DELETE" });
-    const responseData = await res.json();
-    if (!res.ok) {
-        const detalle = responseData.detalle;
-        let mensaje = responseData.error || "Error al dar de baja al alumno";
-        if (responseData.detalle && typeof responseData.detalle === "string") {
-          mensaje = `${mensaje} (${responseData.detalle})`;
-        }
-        if (detalle?.saldoPendiente > 0) {
-            mensaje = `${mensaje} (saldo: $${Number(detalle.saldoPendiente).toFixed(2)})`;
-        }
-        throw new Error(mensaje);
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const detalle = responseData.detalle;
+    let mensaje = responseData.error || "Error al dar de baja al alumno";
+    if (responseData.detalle && typeof responseData.detalle === "string") {
+      mensaje = `${mensaje} (${responseData.detalle})`;
     }
-    notifyDataChanged({ tipo: "baja" });
-    return responseData;
+    if (detalle?.saldoPendiente > 0) {
+      mensaje = `${mensaje} (saldo: $${Number(detalle.saldoPendiente).toFixed(2)})`;
+    }
+    throw new Error(mensaje);
+  }
+  notifyDataChanged({ tipo: "baja" });
+  return responseData;
 }
 
 export async function eliminarHistorialCursoBaja(idAlumno: string, grupoId: string) {
-  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/historial`, { method: "DELETE" });
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/historial`, {
+    method: "DELETE",
+  });
   const responseData = await res.json();
   if (!res.ok) throw new Error(responseData.error || "Error al eliminar el curso del sistema");
   notifyDataChanged({ tipo: "eliminar-historial-curso" });
   return responseData;
 }
 
-export async function reactivarInscripcion(idAlumno: string, grupoId: string, data?: { fechaInicioPago?: string }) {
-    const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/reactivar`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data || {}),
-    });
-    const responseData = await res.json();
-    if (!res.ok) throw new Error(responseData.error || "Error al reactivar el curso");
-    notifyDataChanged({ tipo: "reactivar" });
-    return responseData;
+export async function reactivarInscripcion(
+  idAlumno: string,
+  grupoId: string,
+  data?: { fechaInicioPago?: string }
+) {
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/reactivar`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data || {}),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al reactivar el curso");
+  notifyDataChanged({ tipo: "reactivar" });
+  return responseData;
 }
 
 export async function eliminarGrupo(grupoId: string) {
-    const res = await apiFetch(`/grupos/${grupoId}`, { method: "DELETE" });
-    const responseData = await res.json();
-    if (!res.ok) {
-        const lista = Array.isArray(responseData.alumnos) && responseData.alumnos.length > 0
-            ? `\n${responseData.alumnos.map((a: { nombreAlumno?: string; idAlumno?: string }) => `• ${a.nombreAlumno || a.idAlumno}`).join("\n")}`
-            : "";
-        throw new Error((responseData.error || "Error al eliminar grupo") + lista);
-    }
-    notifyDataChanged({ tipo: "grupo" });
-    return responseData;
+  const res = await apiFetch(`/grupos/${grupoId}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const lista =
+      Array.isArray(responseData.alumnos) && responseData.alumnos.length > 0
+        ? `\n${responseData.alumnos
+            .map((a: { nombreAlumno?: string; idAlumno?: string }) => `• ${a.nombreAlumno || a.idAlumno}`)
+            .join("\n")}`
+        : "";
+    throw new Error((responseData.error || "Error al eliminar grupo") + lista);
+  }
+  notifyDataChanged({ tipo: "grupo" });
+  return responseData;
 }
 
 export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
@@ -495,13 +527,15 @@ export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
 // ============================================================
 
 /**
- * Actualiza la fecha de nacimiento y el salario por hora de un profesor
+ * Actualiza los datos extra de un profesor (fecha nacimiento, salarios y tipo de pago)
  */
 export async function actualizarDatosExtraProfesor(
   idProfesor: string,
   data: {
     fechaNacimiento?: Date | string | null;
     salarioPorHora?: number;
+    tipoPago?: "por_hora" | "fijo_mensual";
+    salarioMensual?: number;
   }
 ) {
   const res = await apiFetch(`/profesores/${idProfesor}/datos-extra`, {

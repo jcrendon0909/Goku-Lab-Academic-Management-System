@@ -53,7 +53,14 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       }
       const totalHorasMes = totalHorasSemana * 4;
 
-      const costo = totalHorasMes * (prof.salarioPorHora || 0);
+      // ===== CÁLCULO DEL COSTO SEGÚN TIPO DE PAGO =====
+      let costo = 0;
+      if (prof.tipoPago === 'fijo_mensual') {
+        costo = prof.salarioMensual || 0;
+      } else {
+        // Por defecto 'por_hora'
+        costo = totalHorasMes * (prof.salarioPorHora || 0);
+      }
 
       let ingresos = 0;
       for (const g of gruposDelProf) {
@@ -74,6 +81,8 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         totalHorasSemana,
         totalHorasMes,
         salarioPorHora: prof.salarioPorHora || 0,
+        tipoPago: prof.tipoPago || 'por_hora',
+        salarioMensual: prof.salarioMensual || 0,
         costo,
         ingresos,
         utilidad,
