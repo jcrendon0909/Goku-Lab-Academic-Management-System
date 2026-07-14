@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-
-import { getRentabilidadProfesores } from "../api"; // Espera, esta ya es correcta si api.ts está en src/
+// 👇 Ruta corregida: subimos a src y entramos a services
+import { getRentabilidadProfesores } from "../services/api";
 
 interface RentabilidadItem {
   idProfesor: string;
