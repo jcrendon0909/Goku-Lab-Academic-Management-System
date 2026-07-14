@@ -1,54 +1,65 @@
-import mongoose from "mongoose";
-import { connectDB } from "../server/db.js";
-import Pago from "../server/models/Pago.js";
-import Alumno from "../server/models/Alumno.js";
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { connectDB } from "./config/db.js";
 
-const run = async () => {
-  await connectDB();
+// Importación de rutas existentes
+import authRoutes from "./routes/auth.js";
+import alumnosRoutes from "./routes/alumnos.js";
+import profesoresRoutes from "./routes/profesores.js";
+import gruposRoutes from "./routes/grupos.js";
+import cursosRoutes from "./routes/cursos.js";
+import inscripcionesRoutes from "./routes/inscripciones.js";
+import pagosRoutes from "./routes/pagos.js";
+import abonosRoutes from "./routes/abonos.js";
+import reagendacionesRoutes from "./routes/reagendaciones.js";
+import calendarioRoutes from "./routes/calendario.js";
 
-  // 1. Actualizar todos los pagos: asignar anio, mesCorrespondiente y periodo
-  const pagos = await Pago.find({});
-  console.log(`📊 Procesando ${pagos.length} pagos...`);
-  for (const pago of pagos) {
-    const fecha = pago.fechaInicioPago || pago.createdAt || new Date();
-    const mes = fecha.toLocaleString("es", { month: "short" });
-    const mesCapitalizado = mes.charAt(0).toUpperCase() + mes.slice(1);
-    const anio = fecha.getFullYear();
+// ===== NUEVAS RUTAS =====
+import gastosRoutes from "./routes/gastos.js";
+import reportesRoutes from "./routes/reportes.js";
 
-    await Pago.updateOne(
-      { _id: pago._id },
-      {
-        $set: {
-          mesCorrespondiente: mesCapitalizado,
-          anio: anio,
-          periodo: "Mes"
-        }
-      }
-    );
-  }
-  console.log(`✅ ${pagos.length} pagos actualizados`);
+dotenv.config();
 
-  // 2. Actualizar alumnos: asignar origen y situacion_percibida si están vacíos
-  const alumnos = await Alumno.updateMany(
-    { origen: { $exists: false } },
-    { $set: { origen: "Naucalpan" } }
-  );
-  console.log(`✅ Alumnos actualizados con origen: ${alumnos.modifiedCount}`);
+const app = express();
+const PORT = process.env.PORT || 4000;
 
-  const alumnos2 = await Alumno.updateMany(
-    { situacion_percibida: { $exists: false } },
-    { $set: { situacion_percibida: "Estable" } }
-  );
-  console.log(`✅ Alumnos actualizados con situacion_percibida: ${alumnos2.modifiedCount}`);
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  process.exit(0);
-};
+// Conectar a MongoDB
+connectDB();
 
-run().catch(err => {
-  console.error("❌ Error:", err);
-  process.exit(1);
-}
-import reportesRoutes from './routes/reportes.js';
-// ...
-app.use('/api/reportes', reportesRoutes);
-);
+// ==== RUTAS ====
+app.use("/api/auth", authRoutes);
+app.use("/api/alumnos", alumnosRoutes);
+app.use("/api/profesores", profesoresRoutes);
+app.use("/api/grupos", gruposRoutes);
+app.use("/api/cursos", cursosRoutes);
+app.use("/api/inscripciones", inscripcionesRoutes);
+app.use("/api/pagos", pagosRoutes);
+app.use("/api/abonos", abonosRoutes);
+app.use("/api/reagendaciones", reagendacionesRoutes);
+app.use("/api/calendario", calendarioRoutes);
+
+// ===== NUEVAS RUTAS =====
+app.use("/api/gastos", gastosRoutes);
+app.use("/api/reportes", reportesRoutes);
+
+// Ruta de prueba (opcional)
+app.get("/", (req, res) => {
+  res.send("API de Goku Lab funcionando");
+});
+
+// Manejo de errores global (opcional)
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Error interno del servidor" });
+});
+
+// Iniciar servidor
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+});

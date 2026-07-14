@@ -22,16 +22,21 @@ const pagoSchema = new mongoose.Schema(
         activo: { type: Boolean, default: true, index: true },
         fechaBaja: { type: Date, default: null },
 
-        // 🆕 NUEVOS CAMPOS (opcionales para no romper)
-        mes_correspondiente: {
+        // ===== NUEVOS CAMPOS =====
+        mesCorrespondiente: {
             type: String,
             enum: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
-            default: null
+            description: "Mes al que corresponde el pago (para reportes)"
         },
         periodo: {
             type: String,
-            enum: ["Primera", "Segunda", "Tercera", "Cuarta"],
-            default: null
+            enum: ["Semana", "Quincena", "Mes"],
+            default: "Mes",
+            description: "Periodo de pago"
+        },
+        anio: {
+            type: Number,
+            description: "Año del pago (para filtros)"
         }
     },
     {
@@ -40,5 +45,17 @@ const pagoSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
+
+// 👇 MIDDLEWARE: se ejecuta antes de guardar
+pagoSchema.pre('save', function(next) {
+    if (this.isNew || this.isModified('fechaInicioPago')) {
+        const fecha = this.fechaInicioPago || new Date();
+        const mes = fecha.toLocaleString('es', { month: 'short' });
+        this.mesCorrespondiente = mes.charAt(0).toUpperCase() + mes.slice(1);
+        this.anio = fecha.getFullYear();
+        if (!this.periodo) this.periodo = "Mes";
+    }
+    next();
+});
 
 export default mongoose.model('Pago', pagoSchema, 'pago');

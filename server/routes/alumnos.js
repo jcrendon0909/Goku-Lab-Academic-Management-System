@@ -26,9 +26,7 @@ const filtroIdAlumno = (idAlumno) => {
 router.get("/", async (req, res) => {
   try {
     const { q } = req.query;
-
     let filtro = {};
-
     if (q) {
       filtro = {
         $or: [
@@ -40,9 +38,7 @@ router.get("/", async (req, res) => {
         ],
       };
     }
-
     const alumnosRaw = await Alumno.find(filtro).lean();
-
     const alumnosNormalizados = alumnosRaw.map((alumno) => ({
       ...alumno,
       idAlumno:
@@ -57,30 +53,23 @@ router.get("/", async (req, res) => {
         alumno.Alumno ||
         "",
     }));
-
     const mapaUnicos = new Map();
-
     for (const alumno of alumnosNormalizados) {
       const key = normalizar(alumno.nombreAlumno);
-
       if (!mapaUnicos.has(key)) {
         mapaUnicos.set(key, alumno);
         continue;
       }
-
       const existente = mapaUnicos.get(key);
       const existenteTieneId = Boolean(existente?.idAlumno);
       const actualTieneId = Boolean(alumno?.idAlumno);
-
       if (!existenteTieneId && actualTieneId) {
         mapaUnicos.set(key, alumno);
       }
     }
-
     const alumnosUnicos = Array.from(mapaUnicos.values()).filter(
       (alumno) => alumno.nombreAlumno
     );
-
     res.status(200).json(alumnosUnicos);
   } catch (error) {
     console.error("ERROR GET ALUMNOS:", error);
@@ -97,13 +86,10 @@ router.patch("/:idAlumno/nota", async (req, res) => {
     const observaciones = String(
       req.body?.observaciones ?? req.body?.nota ?? req.body?.comentarios ?? ""
     ).trim();
-
     if (!idAlumno || !String(idAlumno).trim()) {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
-
     const idTrimmed = String(idAlumno).trim();
-
     const actualizado = await Alumno.findOneAndUpdate(
       {
         $or: [
@@ -116,11 +102,9 @@ router.patch("/:idAlumno/nota", async (req, res) => {
       { $set: { observaciones } },
       { new: true }
     ).lean();
-
     if (!actualizado) {
       return res.status(404).json({ error: "No se encontró el alumno" });
     }
-
     res.status(200).json({
       ok: true,
       alumno: {
@@ -145,15 +129,12 @@ router.patch("/:idAlumno/nota", async (req, res) => {
   }
 });
 
-// 🔥 MODIFICADO: Agregar 'origen' y 'situacion_percibida' al PATCH general
 router.patch("/:idAlumno", async (req, res) => {
   try {
     const { idAlumno } = req.params;
-
     if (!idAlumno || !String(idAlumno).trim()) {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
-
     const idTrimmed = String(idAlumno).trim();
     const telefono = req.body?.telefono;
     const tutor = req.body?.tutor;
@@ -168,7 +149,9 @@ router.patch("/:idAlumno", async (req, res) => {
     if (req.body?.observaciones !== undefined) {
       update.observaciones = String(req.body?.observaciones || "").trim();
     }
-    if (origen !== undefined) update.origen = String(origen || "Naucalpan").trim();
+    if (origen !== undefined) {
+      update.origen = String(origen || "Naucalpan").trim();
+    }
     if (situacion_percibida !== undefined) {
       update.situacion_percibida = String(situacion_percibida || "Estable").trim();
     }
@@ -185,11 +168,9 @@ router.patch("/:idAlumno", async (req, res) => {
       { $set: update },
       { new: true }
     ).lean();
-
     if (!actualizado) {
       return res.status(404).json({ error: "No se encontró el alumno" });
     }
-
     res.status(200).json({
       ok: true,
       alumno: {
@@ -213,21 +194,16 @@ router.patch("/:idAlumno", async (req, res) => {
 });
 
 router.patch("/:idAlumno/desactivar", async (req, res) => {
-  // ... (código existente, sin cambios) ...
   try {
     const { idAlumno } = req.params;
-
     if (!idAlumno || !String(idAlumno).trim()) {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
-
     const idTrimmed = String(idAlumno).trim();
-
     const inscripcionesActivas = await Inscripcion.find({
       idAlumno: idTrimmed,
       estatus: { $ne: "Baja" },
     }).lean();
-
     for (const ins of inscripcionesActivas) {
       const validacion = await validarPagoAlCorrienteParaBaja({
         idAlumno: idTrimmed,
@@ -239,7 +215,6 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
           ins.fechaInscripcion ||
           ins.createdAt,
       });
-
       if (!validacion.ok) {
         const saldo = Number(validacion.saldoPendiente || 0);
         let mensaje =
@@ -248,7 +223,6 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
         if (saldo > 0) {
           mensaje = `No se puede desactivar. Saldo pendiente: $${saldo.toFixed(2)}`;
         }
-
         return res.status(409).json({
           error: mensaje,
           detalle: {
@@ -260,7 +234,6 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
         });
       }
     }
-
     const actualizado = await Alumno.findOneAndUpdate(
       {
         $or: [
@@ -273,11 +246,9 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
       { $set: { estatus: "Inactivo" } },
       { new: true }
     ).lean();
-
     if (!actualizado) {
       return res.status(404).json({ error: "No se encontró el alumno" });
     }
-
     res.status(200).json({ ok: true, alumno: actualizado });
   } catch (error) {
     console.error("ERROR DESACTIVAR ALUMNO:", error);
@@ -289,36 +260,29 @@ router.patch("/:idAlumno/desactivar", async (req, res) => {
 });
 
 router.delete("/:idAlumno", async (req, res) => {
-  // ... (código existente, sin cambios) ...
   try {
     const { idAlumno } = req.params;
     if (!idAlumno || !String(idAlumno).trim()) {
       return res.status(400).json({ error: "Falta idAlumno" });
     }
-
     const idTrimmed = String(idAlumno).trim();
-
     const activas = await Inscripcion.countDocuments({
       ...filtroIdAlumno(idTrimmed),
       estatus: { $ne: "Baja" },
     });
-
     if (activas > 0) {
       return res.status(409).json({
         error: "No se puede eliminar el alumno porque tiene cursos activos",
         detalle: { inscripcionesActivas: activas },
       });
     }
-
     const eliminado = await Alumno.findOneAndDelete({
       $or: filtroIdAlumno(idTrimmed).$or,
     }).lean();
-
     const inscripcionesResult = await Inscripcion.deleteMany(
       filtroIdAlumno(idTrimmed)
     );
     const pagosResult = await Pago.deleteMany(filtroIdAlumno(idTrimmed));
-
     if (
       !eliminado &&
       inscripcionesResult.deletedCount === 0 &&
@@ -328,7 +292,6 @@ router.delete("/:idAlumno", async (req, res) => {
         error: "No se encontró el alumno ni historial de inscripciones",
       });
     }
-
     res.status(200).json({
       ok: true,
       alumno: eliminado,
@@ -348,14 +311,13 @@ router.delete("/:idAlumno", async (req, res) => {
   }
 });
 
-// 🔥 MODIFICADO: Agregar 'origen' y 'situacion_percibida' al POST
 router.post("/", async (req, res) => {
   try {
-    const {
-      nombreAlumno,
-      telefono,
-      tutor,
-      observaciones,
+    const { 
+      nombreAlumno, 
+      telefono, 
+      tutor, 
+      observaciones, 
       estatus,
       origen,
       situacion_percibida

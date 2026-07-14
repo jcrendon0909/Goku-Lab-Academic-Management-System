@@ -5,6 +5,18 @@ const profesorSchema = new mongoose.Schema(
     idProfesor: { type: String, required: true, unique: true },
     nombre: { type: String, required: true },
     estatus: { type: String, default: "Activo" },
+    // ===== NUEVOS CAMPOS =====
+    fechaNacimiento: {
+      type: Date,
+      required: false,
+      default: null
+    },
+    salarioPorHora: {
+      type: Number,
+      required: false,
+      min: 0,
+      default: 0
+    }
   },
   {
     collection: "profesores",
@@ -12,5 +24,4 @@ const profesorSchema = new mongoose.Schema(
 );
 
 const Profesor = mongoose.model("Profesor", profesorSchema);
-
 export default Profesor;

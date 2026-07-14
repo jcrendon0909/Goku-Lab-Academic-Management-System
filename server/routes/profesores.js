@@ -6,8 +6,6 @@ import { generarId } from "../utils/generarId.js";
 
 const router = express.Router();
 
-// Genera el siguiente idProfesor evitando choques con IDs ya existentes.
-// (El contador podía estar desincronizado y generar un PROF### duplicado.)
 async function generarIdProfesorSeguro() {
   const profesores = await Profesor.find().select("idProfesor").lean();
   let maxActual = 0;
@@ -17,14 +15,11 @@ async function generarIdProfesorSeguro() {
       maxActual = Math.max(maxActual, parseInt(match[1], 10));
     }
   }
-
-  // Aseguramos que el contador esté al menos en el máximo existente
   await Counter.findOneAndUpdate(
     { nombre: "profesor" },
     { $max: { secuencia: maxActual } },
     { upsert: true }
   );
-
   return generarId("profesor");
 }
 
@@ -41,10 +36,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Inscribir (crear) un nuevo maestro
 router.post("/", async (req, res) => {
   try {
     const nombre = String(req.body?.nombre || "").trim();
+    const fechaNacimiento = req.body?.fechaNacimiento || null;
+    const salarioPorHora = parseFloat(req.body?.salarioPorHora) || 0;
 
     if (!nombre) {
       return res.status(400).json({ error: "El nombre del maestro es obligatorio" });
@@ -63,6 +59,8 @@ router.post("/", async (req, res) => {
       idProfesor,
       nombre,
       estatus: "Activo",
+      fechaNacimiento: fechaNacimiento || null,
+      salarioPorHora: salarioPorHora >= 0 ? salarioPorHora : 0,
     });
 
     res.status(201).json(profesor);
@@ -75,7 +73,6 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Editar el nombre de un maestro (se refleja en sus grupos)
 router.patch("/:idProfesor", async (req, res) => {
   try {
     const { idProfesor } = req.params;
@@ -102,7 +99,6 @@ router.patch("/:idProfesor", async (req, res) => {
     profesor.nombre = nombre;
     await profesor.save();
 
-    // Reflejar el nuevo nombre en los grupos asignados
     await Grupo.updateMany(
       { $or: [{ idProfesor }, { nombreProfesor: nombreAnterior }] },
       { $set: { idProfesor, nombreProfesor: nombre } }
@@ -118,7 +114,6 @@ router.patch("/:idProfesor", async (req, res) => {
   }
 });
 
-// Dar de alta / baja un maestro (cambiar estatus)
 router.patch("/:idProfesor/estatus", async (req, res) => {
   try {
     const { idProfesor } = req.params;
@@ -148,8 +143,42 @@ router.patch("/:idProfesor/estatus", async (req, res) => {
   }
 });
 
-// Dar de baja del sistema (eliminar) un maestro.
-// Si tenía grupos asignados, esos grupos quedan SIN profesor asignado.
+// ===== NUEVO ENDPOINT: actualizar datos extra =====
+router.patch("/:idProfesor/datos-extra", async (req, res) => {
+  try {
+    const { idProfesor } = req.params;
+    const { fechaNacimiento, salarioPorHora } = req.body;
+
+    const update = {};
+    if (fechaNacimiento !== undefined) update.fechaNacimiento = fechaNacimiento || null;
+    if (salarioPorHora !== undefined) {
+      update.salarioPorHora = Math.max(0, parseFloat(salarioPorHora) || 0);
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ error: "No se enviaron datos para actualizar" });
+    }
+
+    const profesor = await Profesor.findOneAndUpdate(
+      { idProfesor },
+      { $set: update },
+      { new: true }
+    );
+
+    if (!profesor) {
+      return res.status(404).json({ error: "Maestro no encontrado" });
+    }
+
+    res.status(200).json(profesor);
+  } catch (error) {
+    console.error("ERROR PATCH DATOS EXTRA PROFESOR:", error);
+    res.status(500).json({
+      error: "Error al actualizar datos extra del maestro",
+      detalle: error.message,
+    });
+  }
+});
+
 router.delete("/:idProfesor", async (req, res) => {
   try {
     const { idProfesor } = req.params;
@@ -159,7 +188,6 @@ router.delete("/:idProfesor", async (req, res) => {
       return res.status(404).json({ error: "Maestro no encontrado" });
     }
 
-    // Grupos que dependían de este maestro (por id o por nombre)
     const filtroGrupos = {
       $or: [{ idProfesor }, { nombreProfesor: profesor.nombre }],
     };
@@ -168,7 +196,6 @@ router.delete("/:idProfesor", async (req, res) => {
       .select("IdGrupo nombreCurso diaClase horaClase")
       .lean();
 
-    // Se dejan sin profesor asignado (no se borran los grupos)
     if (gruposAfectados.length > 0) {
       await Grupo.updateMany(filtroGrupos, {
         $set: { idProfesor: "", nombreProfesor: "" },
