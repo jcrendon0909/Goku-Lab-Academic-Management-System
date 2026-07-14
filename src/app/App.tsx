@@ -1,3 +1,4 @@
+// src/app/App.tsx
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Dashboard } from './components/Dashboard';
 import { ReschedulingFlow } from './components/ReschedulingFlow';
@@ -7,6 +8,7 @@ import { MaestrosPage } from './components/MaestrosPage';
 import { CursosPage } from './components/CursosPage';
 import { LoginPage } from './components/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+// 👇 Ruta corregida: subimos un nivel y entramos a pages
 import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
