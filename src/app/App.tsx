@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'; // o 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Dashboard } from './components/Dashboard';
 import { ReschedulingFlow } from './components/ReschedulingFlow';
 import { PagosPage } from './components/PagosPage';
@@ -7,12 +7,11 @@ import { MaestrosPage } from './components/MaestrosPage';
 import { CursosPage } from './components/CursosPage';
 import { LoginPage } from './components/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
-
-// Importamos los contextos que tenùas originalmente en tu App.tsx
+// ===== NUEVA IMPORTACI√ìN =====
+import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
 
-// 1. Configuraciùn de los caminos (Lo que habùas puesto)
 export const router = createBrowserRouter([
     {
         path: '/',
@@ -66,9 +65,17 @@ export const router = createBrowserRouter([
             </ProtectedRoute>
         ),
     },
+    // ===== NUEVA RUTA =====
+    {
+        path: '/reportes/rentabilidad',
+        element: (
+            <ProtectedRoute allowedRoles={['admin']}>
+                <RentabilidadProfesores />
+            </ProtectedRoute>
+        ),
+    },
 ]);
 
-// 2. ?? ùESTE ES EL COMPONENTE QUE LE RECLAMA MAIN.TSX A TU APLICACIùN! ??
 export default function App() {
     return (
         <ClassProvider>

@@ -667,3 +667,49 @@ export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
   notifyDataChanged({ tipo: "pago" });
   return responseData;
 };
+
+// ============================================================
+// NUEVAS FUNCIONES PARA EL MÓDULO DE RENTABILIDAD Y DATOS EXTRA
+// ============================================================
+
+/**
+ * Actualiza la fecha de nacimiento y el salario por hora de un profesor
+ */
+export async function actualizarDatosExtraProfesor(
+  idProfesor: string,
+  data: {
+    fechaNacimiento?: Date | string | null;
+    salarioPorHora?: number;
+  }
+) {
+  const res = await apiFetch(`/profesores/${idProfesor}/datos-extra`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  const responseData = await res.json();
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al actualizar datos extra del profesor");
+  }
+
+  notifyDataChanged({ tipo: "profesor" });
+  return responseData;
+}
+
+/**
+ * Obtiene la rentabilidad de todos los profesores activos,
+ * filtrada por mes y año (opcional).
+ */
+export async function getRentabilidadProfesores(filtros?: {
+  mes?: string;
+  anio?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filtros?.mes) params.append("mes", filtros.mes);
+  if (filtros?.anio) params.append("anio", filtros.anio);
+
+  const res = await apiFetch(`/reportes/rentabilidad-profesores?${params.toString()}`);
+  if (!res.ok) throw new Error("Error al obtener rentabilidad de profesores");
+  return res.json();
+}
