@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'; // ✅ CORREGIDO
 import { ArrowLeft, Clock, User, AlertCircle, MessageCircle, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
