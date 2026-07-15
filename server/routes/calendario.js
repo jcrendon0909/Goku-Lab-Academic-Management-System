@@ -89,15 +89,13 @@ const obtenerDiaDesdeFecha = (valor) => {
   return dias[fecha.getDay()];
 };
 
-// ✅ CAMBIO 9: Calcular hora de fin basada en duración
+// Calcular hora de fin basada en duración
 const calcularHoraFin = (horaInicio, duracion) => {
   if (!horaInicio || !duracion) return "";
   
-  // Parse horaInicio (HH:mm)
   const [horas, minutos] = String(horaInicio).split(":").map(Number);
   if (isNaN(horas) || isNaN(minutos)) return "";
   
-  // Parse duración (ej: "2 horas", "1.5 horas", "90 minutos")
   const duracionStr = String(duracion).toLowerCase().trim();
   let totalMinutos = 0;
   
@@ -143,8 +141,6 @@ router.get("/", async (req, res) => {
     const cursosMap = new Map();
     const cursosNombreMap = new Map();
     
-    // ✅ CAMBIO 5: Crear mapa de clases canceladas para búsqueda rápida
-    // Estructura: "${grupoId}|YYYY-MM-DD" → true
     const clasesCanceladasMap = new Map();
     for (const cancelacion of clasesCanceladasRaw) {
       const fechaStr = extraerFecha(cancelacion.fecha);
@@ -208,16 +204,13 @@ router.get("/", async (req, res) => {
       return profesor?.nombre || nombreProfesor || "";
     };
 
-    // Una clase "requiere atención" en su profesor cuando no hay profesor asignado
-    // o cuando el profesor del catálogo está Inactivo. Si el profesor tiene nombre
-    // pero no está en el catálogo, NO se marca (puede ser un dato heredado).
     const profesorEstaActivo = ({ idProfesor, nombreProfesor }) => {
       const sinProfesor =
         !String(nombreProfesor || "").trim() && !String(idProfesor || "").trim();
       if (sinProfesor) return false;
 
       const profesor = resolverProfesor({ idProfesor, nombreProfesor });
-      if (!profesor) return true; // tiene nombre pero no está catalogado
+      if (!profesor) return true;
       return String(profesor.estatus || "Activo").toLowerCase() === "activo";
     };
 
@@ -229,18 +222,17 @@ router.get("/", async (req, res) => {
       return null;
     };
 
-    // Igual que con profesores: se marca si no hay curso o si el curso está Inactivo.
     const cursoEstaActivo = ({ idCurso, nombreCurso }) => {
       const sinCurso =
         !String(nombreCurso || "").trim() && !String(idCurso || "").trim();
       if (sinCurso) return false;
 
       const curso = resolverCurso({ idCurso, nombreCurso });
-      if (!curso) return true; // tiene nombre pero no está catalogado
+      if (!curso) return true;
       return String(curso.estatus || "Activo").toLowerCase() === "activo";
     };
 
-    const clasesBase = grupos.map((grupo) => {
+    let clasesBase = grupos.map((grupo) => {
       const grupoKey = normalizar(
         grupo.IdGrupo || grupo.idGrupo || grupo.GrupoId
       );
@@ -272,7 +264,6 @@ router.get("/", async (req, res) => {
             ins.GrupoId || ins.grupoId || ins.idGrupo || ins.IdGrupo
           );
 
-          // La visibilidad por fecha la resuelve el calendario (por evento)
           return grupoInscripcion === grupoKey;
         })
         .map((a) => ({
@@ -286,10 +277,9 @@ router.get("/", async (req, res) => {
           reagendacion: null,
         }));
 
-      // ✅ CAMBIO 1: Usar normalización consistente de idGrupoOrigen
       const alumnosOrigen = reagendacionesRaw
         .filter((r) => {
-          const grupoOrigen = normalizar(r.idGrupoOrigen); // ✅ Solo usa idGrupoOrigen (normalizado)
+          const grupoOrigen = normalizar(r.idGrupoOrigen);
           return grupoOrigen === grupoKey;
         })
         .map((r) => {
@@ -323,7 +313,6 @@ router.get("/", async (req, res) => {
               tipo: "origen",
               reagendacionId: idReagendacion(r),
               comentario: r.comentario || r.comentarios || "",
-              // ✅ CAMBIO: Ahora fechas son Date objects, procesar directamente
               fechaHoraOriginal: r.fechaHoraOriginal ? new Date(r.fechaHoraOriginal).toISOString() : "",
               fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : "",
               horaClaseNueva:
@@ -357,7 +346,6 @@ router.get("/", async (req, res) => {
 
       const alumnos = Array.from(alumnosMap.values());
 
-      // ✅ CAMBIO 9: Calcular hora fin basada en duración
       const horaInicio = grupo.horaClase || grupo["horaClase "] || "";
       const duracion = grupo.duracionClase || "2 horas";
       const horaFin = calcularHoraFin(horaInicio, duracion);
@@ -368,7 +356,7 @@ router.get("/", async (req, res) => {
         nombreCurso: grupo.nombreCurso,
         diaClase: grupo.diaClase || "",
         horaClase: horaInicio,
-        horaFin: horaFin, // ✅ NUEVO: Hora de fin calculada
+        horaFin: horaFin,
         duracion: duracion,
         fechaCreacion: grupo.fechaCreacion || null,
         comentarioGrupo: grupo.comentario || grupo.comentarioGrupo || "",
@@ -387,11 +375,10 @@ router.get("/", async (req, res) => {
     const reagendacionesAgrupadas = {};
 
     for (const r of reagendacionesRaw) {
-      const idGrupoNuevo = r.idGrupoNuevo || ""; // ✅ Normalizado
+      const idGrupoNuevo = r.idGrupoNuevo || "";
 
       const grupoNuevo = gruposMap.get(normalizar(idGrupoNuevo));
       
-      // ✅ CAMBIO: Ahora r.fechaHoraNueva es un Date object
       const fechaNuevaObj = r.fechaHoraNueva ? new Date(r.fechaHoraNueva) : null;
       
       const idProfesorNuevo =
@@ -473,7 +460,7 @@ router.get("/", async (req, res) => {
       }
 
       const grupoOrigen = gruposMap.get(
-        normalizar(r.idGrupoOrigen || "") // ✅ Normalizado
+        normalizar(r.idGrupoOrigen || "")
       );
 
       const idProfesorOriginal =
@@ -485,7 +472,6 @@ router.get("/", async (req, res) => {
             grupoOrigen.profesorId)) ||
         "";
 
-      // ✅ CAMBIO: Parsear fechas que ahora son Date objects
       const grupoOrigenIns =
         r.idGrupoOrigen ||
         r.IdgrupoOrigen ||
@@ -524,12 +510,34 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const clasesReagendadas = Object.values(reagendacionesAgrupadas).map(
+    let clasesReagendadas = Object.values(reagendacionesAgrupadas).map(
       (grupo) => ({
         ...grupo,
         alumnosInscritos: grupo.alumnos.length,
       })
     );
+
+    // ============================================================
+    // 🔥 FILTRO POR PROFESOR (nuevo)
+    // ============================================================
+    const profesorId = req.query.profesor;
+    if (profesorId) {
+      // Filtrar clases base
+      clasesBase = clasesBase.filter(
+        (c) => 
+          c.idProfesor === profesorId || 
+          c.nombreProfesor === profesorId ||
+          c.nombreProfesor?.toLowerCase() === profesorId.toLowerCase()
+      );
+      
+      // Filtrar reagendaciones
+      clasesReagendadas = clasesReagendadas.filter(
+        (c) => 
+          c.idProfesor === profesorId || 
+          c.nombreProfesor === profesorId ||
+          c.nombreProfesor?.toLowerCase() === profesorId.toLowerCase()
+      );
+    }
 
     res.json({
       clasesBase,
