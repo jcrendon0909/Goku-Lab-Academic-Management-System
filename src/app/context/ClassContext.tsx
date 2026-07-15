@@ -1,65 +1,109 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { mockClasses, Class, Teacher } from '../data/mockData';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiFetch } from '../../services/api';
 
-interface RescheduleData {
-  newDate: string;
-  newTime: string;
-  newTeacher: Teacher;
-  studentName: string;
-  duration: number; // duración en horas
+interface Clase {
+  id: string;
+  title: string;
+  teacher: { id: string; name: string };
+  startTime: string;
+  endTime: string;
+  studentId?: string;
+  studentName?: string;
+  idGrupo?: string;
 }
 
 interface ClassContextType {
-  classes: Class[];
-  rescheduleClass: (classId: string, studentId: string, data: RescheduleData) => void;
+  classes: Clase[];
+  loading: boolean;
+  rescheduleClass: (classId: string, studentId: string, data: any) => Promise<void>;
+  refreshClasses: () => Promise<void>;
 }
 
 const ClassContext = createContext<ClassContextType | undefined>(undefined);
 
-export function ClassProvider({ children }: { children: ReactNode }) {
-  const [classes, setClasses] = useState<Class[]>(mockClasses);
+export const ClassProvider = ({ children }: { children: ReactNode }) => {
+  const [classes, setClasses] = useState<Clase[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const rescheduleClass = (classId: string, studentId: string, data: RescheduleData) => {
-    setClasses(prevClasses => {
-      return prevClasses.map(cls => {
-        if (cls.id === classId) {
-          // Parsear la nueva fecha y hora
-          const [year, month, day] = data.newDate.split('-').map(Number);
-          const [hours, minutes] = data.newTime.split(':').map(Number);
-          const newDate = new Date(year, month - 1, day, hours, minutes);
+  const loadClasses = async () => {
+    try {
+      setLoading(true);
+      // Obtener idProfesor del usuario logueado
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const idProfesor = user.idProfesor;
+      const url = idProfesor ? `/calendario?profesor=${idProfesor}` : '/calendario';
+      
+      const res = await apiFetch(url);
+      const data = await res.json();
+      
+      // Transformar la respuesta del backend al formato del frontend
+      const clasesBase = data.clasesBase || [];
+      const mapped = clasesBase.map((grupo: any) => ({
+        id: grupo.idGrupo,
+        title: grupo.nombreCurso,
+        teacher: { 
+          id: grupo.idProfesor || '', 
+          name: grupo.nombreProfesor || 'Sin profesor' 
+        },
+        startTime: grupo.horaClase || '',
+        endTime: grupo.horaFin || '',
+        studentId: grupo.alumnos?.[0]?.idAlumno || '',
+        studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+        idGrupo: grupo.idGrupo,
+      }));
+      setClasses(mapped);
+    } catch (error) {
+      console.error('Error cargando clases:', error);
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-          // Calcular endTime basado en la duración
-          const endHours = hours + Math.floor(data.duration);
-          const endMinutes = minutes + ((data.duration % 1) * 60);
-          const finalEndHours = endHours + Math.floor(endMinutes / 60);
-          const finalEndMinutes = endMinutes % 60;
+  useEffect(() => {
+    loadClasses();
+  }, []);
 
-          return {
-            ...cls,
-            date: newDate,
-            startTime: data.newTime,
-            endTime: `${finalEndHours.toString().padStart(2, '0')}:${finalEndMinutes.toString().padStart(2, '0')}`,
-            teacher: data.newTeacher,
-            status: 'rescheduled' as const,
-            rescheduledBy: data.studentName,
-          };
-        }
-        return cls;
+  const rescheduleClass = async (classId: string, studentId: string, data: any) => {
+    try {
+      const payload = {
+        idAlumno: studentId,
+        idGrupoOrigen: classId,
+        idGrupoNuevo: data.newTeacher?.id || classId, // En tu lógica, el nuevo grupo es el del profesor seleccionado
+        fechaHoraNueva: new Date(`${data.newDate}T${data.newTime}`).toISOString(),
+        comentario: `Reagendado por ${data.studentName}`,
+        tipoReagendacion: 'temporal',
+        // Otros campos según tu modelo
+      };
+
+      const res = await apiFetch('/reagendaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-    });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al reagendar');
+      }
+
+      // Recargar clases después de reagendar
+      await loadClasses();
+    } catch (error) {
+      console.error('Error en rescheduleClass:', error);
+      throw error;
+    }
   };
 
   return (
-    <ClassContext.Provider value={{ classes, rescheduleClass }}>
+    <ClassContext.Provider value={{ classes, loading, rescheduleClass, refreshClasses: loadClasses }}>
       {children}
     </ClassContext.Provider>
   );
-}
+};
 
-export function useClasses() {
+export const useClasses = () => {
   const context = useContext(ClassContext);
-  if (context === undefined) {
-    throw new Error('useClasses must be used within a ClassProvider');
-  }
+  if (!context) throw new Error('useClasses must be used within a ClassProvider');
   return context;
-}
+};

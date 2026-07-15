@@ -1,19 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, Clock, User, AlertCircle, MessageCircle, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
-import { teachers, Teacher } from '../data/mockData';
 import { useClasses } from '../context/ClassContext';
+import { getProfesores } from '../../services/api';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
+
+interface Teacher {
+  id: string;
+  nombre: string;
+  estatus: string;
+}
 
 export function ReschedulingFlow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { classes, rescheduleClass } = useClasses();
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loadingTeachers, setLoadingTeachers] = useState(true);
   
   const classId = searchParams.get('classId');
   const studentId = searchParams.get('studentId');
@@ -27,46 +35,56 @@ export function ReschedulingFlow() {
   const [selectedDuration, setSelectedDuration] = useState('2');
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // Combinar profesores disponibles + el profesor original de la clase
-  const originalTeacher = classData?.teacher;
-  let allAvailableTeachers = teachers.filter(t => t.available);
-  
-  if (originalTeacher && !allAvailableTeachers.find(t => t.id === originalTeacher.id)) {
-    allAvailableTeachers = [
-      { ...originalTeacher, available: true },
-      ...allAvailableTeachers
-    ];
-  }
+  // Cargar profesores reales desde el backend
+  useEffect(() => {
+    const loadTeachers = async () => {
+      try {
+        setLoadingTeachers(true);
+        const data = await getProfesores();
+        setTeachers(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Error cargando profesores:', error);
+        toast.error('No se pudieron cargar los profesores');
+      } finally {
+        setLoadingTeachers(false);
+      }
+    };
+    loadTeachers();
+  }, []);
 
-  const unavailableTeachers = teachers.filter(t => 
-    !t.available && (!originalTeacher || t.id !== originalTeacher.id)
-  );
+  // Profesores disponibles (activos)
+  const availableTeachers = teachers.filter(t => t.estatus === 'Activo');
+  const unavailableTeachers = teachers.filter(t => t.estatus !== 'Activo');
+
+  // El profesor original de la clase (si existe)
+  const originalTeacherId = classData?.teacher?.id;
 
   const handleSendWhatsApp = () => {
     toast.success('Mensaje grupal de WhatsApp enviado a todos los profesores');
   };
 
-  const handleConfirmReschedule = () => {
+  const handleConfirmReschedule = async () => {
     if (!selectedTeacher || !selectedDate || !selectedTime || !classId || !studentId || !studentName) {
       toast.error('Por favor completa todos los campos');
       return;
     }
 
     setIsConfirming(true);
-    
-    setTimeout(() => {
-      rescheduleClass(classId, studentId, {
+    try {
+      await rescheduleClass(classId, studentId, {
         newDate: selectedDate,
         newTime: selectedTime,
-        newTeacher: selectedTeacher,
+        newTeacher: { id: selectedTeacher.id, name: selectedTeacher.nombre },
         studentName: studentName,
         duration: parseFloat(selectedDuration),
       });
-      
-      setIsConfirming(false);
       toast.success('Clase reprogramada exitosamente');
       navigate('/dashboard');
-    }, 1500);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al reagendar');
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   if (!classData) {
@@ -75,7 +93,7 @@ export function ReschedulingFlow() {
         <div className="text-center">
           <p className="text-gray-600">Clase no encontrada</p>
           <Button onClick={() => navigate('/dashboard')} className="mt-4">
-            Volver al Dashboard
+            Volver al dashboard
           </Button>
         </div>
       </div>
@@ -84,18 +102,12 @@ export function ReschedulingFlow() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Volver al Dashboard
-            </Link>
-          </div>
+          <Link to="/dashboard" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Volver al dashboard
+          </Link>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Reprogramación de Clase</h1>
             <p className="text-cyan-600 mt-2 text-lg font-medium">
@@ -105,9 +117,8 @@ export function ReschedulingFlow() {
         </div>
       </header>
 
-      {/* Main Content - igual que antes */}
       <main className="max-w-4xl mx-auto px-6 py-6">
-        {/* Original Class Info */}
+        {/* Clase Original */}
         <Card className="p-6 mb-6 rounded-xl shadow-sm bg-gray-50">
           <h2 className="font-semibold text-gray-900 mb-4">Clase Original</h2>
           <div className="grid grid-cols-3 gap-4">
@@ -128,106 +139,116 @@ export function ReschedulingFlow() {
           </div>
         </Card>
 
-        {/* Teacher Selection */}
+        {/* Selección de Profesor */}
         <Card className="p-6 mb-6 rounded-xl shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <User className="h-5 w-5 text-gray-700" />
             <h2 className="font-semibold text-gray-900">Disponibilidad de Profesores</h2>
-            <Badge variant="outline" className="ml-auto rounded-lg bg-green-50 text-green-700 border-green-200">
-              {allAvailableTeachers.length} disponibles
-            </Badge>
-            <Badge variant="outline" className="rounded-lg bg-red-50 text-red-700 border-red-200">
-              {unavailableTeachers.length} no disponibles
-            </Badge>
+            {loadingTeachers ? (
+              <Badge variant="outline" className="ml-auto rounded-lg bg-gray-50 text-gray-500">
+                Cargando...
+              </Badge>
+            ) : (
+              <>
+                <Badge variant="outline" className="ml-auto rounded-lg bg-green-50 text-green-700 border-green-200">
+                  {availableTeachers.length} disponibles
+                </Badge>
+                <Badge variant="outline" className="rounded-lg bg-red-50 text-red-700 border-red-200">
+                  {unavailableTeachers.length} no disponibles
+                </Badge>
+              </>
+            )}
           </div>
 
-          <div className="space-y-3 mb-4">
-            {allAvailableTeachers.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                  Disponibles
-                </h3>
-                <div className="space-y-2">
-                  {allAvailableTeachers.map((teacher) => (
-                    <button
-                      key={teacher.id}
-                      onClick={() => setSelectedTeacher(teacher)}
-                      className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
-                        selectedTeacher?.id === teacher.id
-                          ? 'border-cyan-500 bg-cyan-50'
-                          : 'border-green-200 hover:border-cyan-300 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                            <User className="h-5 w-5 text-green-700" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900 flex items-center gap-2">
-                              {teacher.name}
-                              {teacher.id === originalTeacher?.id && (
-                                <Badge className="bg-blue-100 text-blue-700 text-xs">
-                                  Profesor Original
-                                </Badge>
-                              )}
+          {!loadingTeachers && (
+            <div className="space-y-3 mb-4">
+              {availableTeachers.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                    Disponibles
+                  </h3>
+                  <div className="space-y-2">
+                    {availableTeachers.map((teacher) => (
+                      <button
+                        key={teacher.id}
+                        onClick={() => setSelectedTeacher(teacher)}
+                        className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                          selectedTeacher?.id === teacher.id
+                            ? 'border-cyan-500 bg-cyan-50'
+                            : 'border-green-200 hover:border-cyan-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                              <User className="h-5 w-5 text-green-700" />
                             </div>
-                            <div className="text-sm text-gray-500">{teacher.email}</div>
+                            <div>
+                              <div className="font-medium text-gray-900 flex items-center gap-2">
+                                {teacher.nombre}
+                                {teacher.id === originalTeacherId && (
+                                  <Badge className="bg-blue-100 text-blue-700 text-xs">
+                                    Profesor Original
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-500">{teacher.id}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className="rounded-lg bg-green-100 text-green-700">
+                              Disponible
+                            </Badge>
+                            {selectedTeacher?.id === teacher.id && (
+                              <div className="h-6 w-6 rounded-full bg-cyan-500 flex items-center justify-center">
+                                <Check className="h-4 w-4 text-white" />
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="rounded-lg bg-green-100 text-green-700">
-                            Disponible
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {unavailableTeachers.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2 mt-4">
+                    <div className="h-2 w-2 rounded-full bg-red-500"></div>
+                    No Disponibles
+                  </h3>
+                  <div className="space-y-2">
+                    {unavailableTeachers.map((teacher) => (
+                      <div
+                        key={teacher.id}
+                        className="w-full p-4 rounded-lg border-2 border-red-200 bg-gray-50 opacity-75"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                              <User className="h-5 w-5 text-red-700" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">{teacher.nombre}</div>
+                              <div className="text-sm text-gray-500">{teacher.id}</div>
+                            </div>
+                          </div>
+                          <Badge className="rounded-lg bg-red-100 text-red-700">
+                            No disponible
                           </Badge>
-                          {selectedTeacher?.id === teacher.id && (
-                            <div className="h-6 w-6 rounded-full bg-cyan-500 flex items-center justify-center">
-                              <Check className="h-4 w-4 text-white" />
-                            </div>
-                          )}
                         </div>
                       </div>
-                    </button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {unavailableTeachers.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2 mt-4">
-                  <div className="h-2 w-2 rounded-full bg-red-500"></div>
-                  No Disponibles
-                </h3>
-                <div className="space-y-2">
-                  {unavailableTeachers.map((teacher) => (
-                    <div
-                      key={teacher.id}
-                      className="w-full p-4 rounded-lg border-2 border-red-200 bg-gray-50 opacity-75"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                            <User className="h-5 w-5 text-red-700" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{teacher.name}</div>
-                            <div className="text-sm text-gray-500">{teacher.email}</div>
-                          </div>
-                        </div>
-                        <Badge className="rounded-lg bg-red-100 text-red-700">
-                          No disponible
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <div className="pt-4 border-t border-gray-200">
-            {allAvailableTeachers.length === 0 && (
+            {availableTeachers.length === 0 && !loadingTeachers && (
               <Card className="p-4 bg-amber-50 border-amber-200 rounded-lg mb-4">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
@@ -250,7 +271,8 @@ export function ReschedulingFlow() {
           </div>
         </Card>
 
-        {allAvailableTeachers.length > 0 && (
+        {/* Selección de Fecha y Hora */}
+        {availableTeachers.length > 0 && (
           <Card className="p-6 mb-6 rounded-xl shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="h-5 w-5 text-gray-700" />
@@ -315,7 +337,7 @@ export function ReschedulingFlow() {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric'
-                    })} a las {selectedTime} con {selectedTeacher.name}
+                    })} a las {selectedTime} con {selectedTeacher.nombre}
                     <span className="font-medium"> • Duración: {selectedDuration === '0.5' ? '30 minutos' : selectedDuration === '1' ? '1 hora' : selectedDuration === '1.5' ? '1.5 horas' : `${selectedDuration} horas`}</span>
                   </div>
                 </div>
@@ -324,18 +346,8 @@ export function ReschedulingFlow() {
           </Card>
         )}
 
-        {allAvailableTeachers.length > 0 && (
-          <Card className="p-6 mb-6 rounded-xl shadow-sm bg-amber-50 border-amber-200">
-            <h3 className="font-medium text-amber-900 mb-2">Seguimiento de Reprogramación</h3>
-            <p className="text-sm text-amber-800">
-              Esta clase quedará marcada como "Reprogramado" con una etiqueta visual amarilla
-              que incluye el nombre del estudiante ({studentName}) para mantener la trazabilidad
-              completa del cambio.
-            </p>
-          </Card>
-        )}
-
-        {allAvailableTeachers.length > 0 && (
+        {/* Confirmación */}
+        {availableTeachers.length > 0 && (
           <Button
             onClick={handleConfirmReschedule}
             disabled={!selectedTeacher || !selectedDate || !selectedTime || isConfirming}
