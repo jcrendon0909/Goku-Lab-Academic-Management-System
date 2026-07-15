@@ -139,17 +139,17 @@ export function AdminUsuarios() {
   };
 
   const handleResetPassword = async (userId: string, usuario: string) => {
-    if (!confirm(`¿Generar enlace de restablecimiento para ${usuario}?`)) return;
-    try {
-      const token = await resetPasswordPorAdmin(userId);
-      const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
-      alert(`🔑 Enlace para ${usuario}:\n\n${resetLink}\n\n(Compártelo con el usuario)`);
-      toast.success('Token generado correctamente.');
-    } catch (error: any) {
-      toast.error(error.message || 'Error al generar token');
-    }
-  };
-
+  if (!confirm(`¿Generar enlace de restablecimiento para ${usuario}?`)) return;
+  try {
+    const token = await resetPasswordPorAdmin(userId);
+    const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
+    // Usamos prompt para que el texto se seleccione automáticamente y se pueda copiar
+    window.prompt(`🔑 Enlace para ${usuario}:`, resetLink);
+    toast.success('Token generado correctamente.');
+  } catch (error: any) {
+    toast.error(error.message || 'Error al generar token');
+  }
+};
   if (cargando) return <div className="p-8 text-center">Cargando usuarios y profesores...</div>;
 
   return (
