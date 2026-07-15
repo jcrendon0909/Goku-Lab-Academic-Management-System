@@ -612,6 +612,6 @@ export async function resetPasswordPorAdmin(idUsuario: string) {
     method: "POST",
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Error al enviar el correo de restablecimiento");
-  return data;
+  if (!res.ok) throw new Error(data.error || "Error al generar token");
+  return data.token; // Devuelve el token
 }

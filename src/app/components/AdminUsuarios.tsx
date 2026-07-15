@@ -22,7 +22,6 @@ export function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [cargandoProfesores, setCargandoProfesores] = useState(false);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
 
@@ -32,7 +31,6 @@ export function AdminUsuarios() {
   const [formRol, setFormRol] = useState<'admin' | 'profesor' | 'recepcion'>('profesor');
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
-  // Cargar usuarios y profesores
   const cargarDatos = async () => {
     try {
       setCargando(true);
@@ -140,13 +138,15 @@ export function AdminUsuarios() {
     }
   };
 
-  const handleResetPassword = async (userId: string) => {
-    if (!confirm('¿Enviar correo para restablecer la contraseña?')) return;
+  const handleResetPassword = async (userId: string, usuario: string) => {
+    if (!confirm(`¿Generar enlace de restablecimiento para ${usuario}?`)) return;
     try {
-      await resetPasswordPorAdmin(userId);
-      toast.success('Correo enviado. Revisa la bandeja de entrada.');
+      const token = await resetPasswordPorAdmin(userId);
+      const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
+      alert(`🔑 Enlace para ${usuario}:\n\n${resetLink}\n\n(Compártelo con el usuario)`);
+      toast.success('Token generado correctamente.');
     } catch (error: any) {
-      toast.error(error.message || 'Error al enviar correo');
+      toast.error(error.message || 'Error al generar token');
     }
   };
 
@@ -236,7 +236,7 @@ export function AdminUsuarios() {
                 >
                   <option value="">— Sin vincular —</option>
                   {profesores
-                    .filter(p => p.estatus === 'Activo')
+                    .filter(p => p.estatus?.toLowerCase().trim() === 'activo')
                     .map((p) => (
                       <option key={p.idProfesor} value={p.idProfesor}>
                         {p.idProfesor} - {p.nombre}
@@ -301,9 +301,9 @@ export function AdminUsuarios() {
                       <Edit2 className="h-4 w-4 inline" />
                     </button>
                     <button
-                      onClick={() => handleResetPassword(u._id)}
+                      onClick={() => handleResetPassword(u._id, u.usuario)}
                       className="text-blue-600 hover:text-blue-800"
-                      title="Enviar correo para restablecer contraseña"
+                      title="Generar enlace para restablecer contraseña"
                     >
                       <Key className="h-4 w-4 inline" />
                     </button>

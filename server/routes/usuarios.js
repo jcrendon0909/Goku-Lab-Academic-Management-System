@@ -2,7 +2,6 @@ import express from "express";
 import Usuario from "../models/Usuario.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { enviarCorreoReset } from "../utils/email.js";
 
 const router = express.Router();
 
@@ -46,7 +45,6 @@ router.post("/", async (req, res) => {
 
     await nuevoUsuario.save();
 
-    // Responder sin datos sensibles
     const usuarioRespuesta = nuevoUsuario.toObject();
     delete usuarioRespuesta.password;
     delete usuarioRespuesta.resetPasswordToken;
@@ -100,7 +98,7 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// POST /api/usuarios/:id/reset-password - Generar token y enviar correo (solo admin)
+// POST /api/usuarios/:id/reset-password - Generar token (sin correo)
 router.post("/:id/reset-password", async (req, res) => {
   try {
     const { id } = req.params;
@@ -109,21 +107,17 @@ router.post("/:id/reset-password", async (req, res) => {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
 
-    // Generar token aleatorio
     const token = crypto.randomBytes(32).toString("hex");
-    const expires = Date.now() + 3600000; // 1 hora
+    const expires = Date.now() + 3600000;
 
     usuario.resetPasswordToken = token;
     usuario.resetPasswordExpires = new Date(expires);
     await usuario.save();
 
-    // Enviar correo (usamos el campo 'usuario' como email, asumiendo que es un email)
-    // Si no es un email, deberías agregar un campo 'email' al modelo.
-    await enviarCorreoReset(usuario.usuario, token);
-
     res.json({
       ok: true,
-      mensaje: "Correo de recuperación enviado (revisa tu bandeja de entrada)",
+      token: token,
+      mensaje: "Token generado. Compártelo con el usuario para que restablezca su contraseña."
     });
   } catch (error) {
     console.error("Error POST /usuarios/:id/reset-password:", error);
