@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Edit2, Trash2, Key } from 'lucide-react';
 import { apiFetch, resetPasswordPorAdmin, getProfesores } from '../../services/api';
 import { toast } from 'sonner';
-console.log('📦 Profesores recibidos:', profesoresRes);
-console.log('🧪 Primer profesor:', profesoresRes?.[0]);
 
 interface Usuario {
   _id: string;
@@ -34,23 +32,22 @@ export function AdminUsuarios() {
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
   const cargarDatos = async () => {
-    try {
-      setCargando(true);
-      const [usuariosRes, profesoresRes] = await Promise.all([
-        apiFetch('/usuarios'),
-        getProfesores(),
-      ]);
-      const usuariosData = await usuariosRes.json();
-      if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
-      setUsuarios(usuariosData);
-      setProfesores(profesoresRes || []);
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setCargando(false);
-    }
-  };
-
+  try {
+    setCargando(true);
+    const [usuariosRes, profesoresRes] = await Promise.all([
+      apiFetch('/usuarios'),
+      getProfesores(),
+    ]);
+    const usuariosData = await usuariosRes.json();
+    if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
+    setUsuarios(usuariosData);
+    setProfesores(profesoresRes || []);
+  } catch (error: any) {
+    toast.error(error.message);
+  } finally {
+    setCargando(false);
+  }
+};
   useEffect(() => {
     cargarDatos();
   }, []);
@@ -240,7 +237,6 @@ export function AdminUsuarios() {
                   {profesores
   .filter(p => {
     const esActivo = p.estatus?.toLowerCase().trim() === 'activo';
-    console.log(`🧪 ${p.idProfesor}: estatus="${p.estatus}", esActivo=${esActivo}`);
     return esActivo;
   })
   .map((p) => (
