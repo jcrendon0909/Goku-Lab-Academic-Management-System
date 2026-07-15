@@ -42,7 +42,7 @@ export function AdminUsuarios() {
       if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
       setUsuarios(usuariosData);
       setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
-      console.log('✅ Profesores cargados en estado:', profesoresRes); // 👈 Confirmación
+      console.log('✅ Profesores cargados en estado:', profesoresRes.length);
     } catch (error: any) {
       console.error('❌ Error en cargarDatos:', error);
       toast.error(error.message);
@@ -231,22 +231,32 @@ export function AdminUsuarios() {
                 <label className="block text-sm font-medium text-gray-700">
                   Vincular con profesor
                 </label>
+                <p className="text-xs text-gray-500 mb-1">
+                  {profesores.length} profesor(es) disponible(s) en la lista.
+                </p>
                 <select
+                  key={profesores.length} // 👈 Forzar actualización cuando cambie la lista
                   value={formIdProfesor}
                   onChange={(e) => setFormIdProfesor(e.target.value)}
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
                 >
                   <option value="">— Sin vincular —</option>
-                  {/* Renderizado directo sin filtro */}
-                  {Array.isArray(profesores) && profesores.map((p) => (
-                    <option key={p.idProfesor} value={p.idProfesor}>
-                      {p.idProfesor} - {p.nombre} ({p.estatus || 'Activo'})
-                    </option>
-                  ))}
+                  {profesores.map((p) => {
+                    console.log('Renderizando opción:', p.idProfesor, p.nombre);
+                    return (
+                      <option key={p.idProfesor} value={p.idProfesor}>
+                        {p.idProfesor} - {p.nombre} ({p.estatus || 'Activo'})
+                      </option>
+                    );
+                  })}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {profesores.length} profesor(es) disponible(s) en la lista.
-                </p>
+                {/* Depuración visual si el dropdown está vacío */}
+                {profesores.length === 0 && (
+                  <p className="text-red-500 text-xs mt-1">⚠️ No hay profesores disponibles</p>
+                )}
+                {profesores.length > 0 && (
+                  <p className="text-green-500 text-xs mt-1">✅ {profesores.length} profesores cargados</p>
+                )}
               </div>
               <div className="col-span-2 flex gap-3 pt-2">
                 <button
