@@ -19,7 +19,7 @@ export function Dashboard() {
         muted 
         playsInline
         className="absolute inset-0 w-full h-full object-cover opacity-15"
-        poster="https://media.gokulab.mx/Galery/videos/poster.jpg"
+        poster="https://media.gokulab.mx/Galery/diseno-videojuegos1.jpg"
       >
         <source src="https://media.gokulab.mx/Galery/videos/gokulabfondo.mp4" type="video/mp4" />
         {/* Fallback con gradiente si el video no carga */}
