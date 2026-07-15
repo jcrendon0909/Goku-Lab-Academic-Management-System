@@ -12,20 +12,19 @@ export function Dashboard() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Video de fondo desde R2 - Opacidad muy baja (0.15) */}
+      {/* Video de fondo desde R2 - Opacidad muy baja */}
       <video 
         autoPlay 
         loop 
         muted 
         playsInline
         className="absolute inset-0 w-full h-full object-cover opacity-15"
-        poster="https://media.gokulab.mx/Galery/diseno-videojuegos1.jpg"
+        poster="https://media.gokulab.mx/Galery/videos/poster.jpg"
       >
         <source src="https://media.gokulab.mx/Galery/videos/gokulabfondo.mp4" type="video/mp4" />
-        {/* Fallback con gradiente si el video no carga */}
       </video>
       
-      {/* Overlay con gradiente de colores corporativos (muy sutil) */}
+      {/* Overlay con gradiente de colores corporativos */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#26AAA3]/10 via-[#67A934]/5 to-[#F8B50E]/5" />
       
       {/* Contenido principal */}
@@ -53,11 +52,11 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Mensaje de bienvenida */}
+          {/* Mensaje de bienvenida con color corporativo */}
           <div className="mb-8 flex items-center gap-3">
             <Star className="h-8 w-8 text-[#F8B50E] animate-pulse" />
             <div>
-              <p className="text-2xl font-semibold text-white drop-shadow-lg">
+              <p className="text-2xl font-semibold text-[#26AAA3] drop-shadow-lg">
                 ¡Hola, {user.nombreCompleto || 'Gokulabero'}! 🚀
               </p>
               <p className="text-white/80 flex items-center gap-2">
