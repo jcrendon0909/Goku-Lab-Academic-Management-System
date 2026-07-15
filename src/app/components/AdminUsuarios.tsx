@@ -31,30 +31,25 @@ export function AdminUsuarios() {
   const [formRol, setFormRol] = useState<'admin' | 'profesor' | 'recepcion'>('profesor');
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
-const cargarDatos = async () => {
-  try {
-    setCargando(true);
-    const [usuariosRes, profesoresRes] = await Promise.all([
-      apiFetch('/usuarios'),
-      getProfesores(),
-    ]);
-    const usuariosData = await usuariosRes.json();
-    if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
-    setUsuarios(usuariosData);
-    
-    // 👇 LOGS PARA DIAGNÓSTICO
-    console.log('🔍 Respuesta de getProfesores:', profesoresRes);
-    console.log('📋 Tipo:', typeof profesoresRes);
-    console.log('📏 Longitud:', profesoresRes?.length);
-    
-    setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
-  } catch (error: any) {
-    console.error('❌ Error en cargarDatos:', error);
-    toast.error(error.message);
-  } finally {
-    setCargando(false);
-  }
-};
+  const cargarDatos = async () => {
+    try {
+      setCargando(true);
+      const [usuariosRes, profesoresRes] = await Promise.all([
+        apiFetch('/usuarios'),
+        getProfesores(),
+      ]);
+      const usuariosData = await usuariosRes.json();
+      if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
+      setUsuarios(usuariosData);
+      setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
+      console.log('✅ Profesores cargados en estado:', profesoresRes); // 👈 Confirmación
+    } catch (error: any) {
+      console.error('❌ Error en cargarDatos:', error);
+      toast.error(error.message);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   useEffect(() => {
     cargarDatos();
@@ -150,7 +145,6 @@ const cargarDatos = async () => {
     try {
       const token = await resetPasswordPorAdmin(userId);
       const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
-      // Usamos prompt para que el texto se seleccione automáticamente y se pueda copiar
       window.prompt(`🔑 Enlace para ${usuario}:`, resetLink);
       toast.success('Token generado correctamente.');
     } catch (error: any) {
@@ -235,7 +229,7 @@ const cargarDatos = async () => {
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  Vincular con profesor (opcional)
+                  Vincular con profesor
                 </label>
                 <select
                   value={formIdProfesor}
@@ -243,18 +237,15 @@ const cargarDatos = async () => {
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
                 >
                   <option value="">— Sin vincular —</option>
-                  {profesores && profesores.length > 0 ? (
-                    profesores.map((p) => (
-                      <option key={p.idProfesor} value={p.idProfesor}>
-                        {p.idProfesor} - {p.nombre} ({p.estatus || 'Sin estatus'})
-                      </option>
-                    ))
-                  ) : (
-                    <option value="" disabled>No hay profesores disponibles</option>
-                  )}
+                  {/* Renderizado directo sin filtro */}
+                  {Array.isArray(profesores) && profesores.map((p) => (
+                    <option key={p.idProfesor} value={p.idProfesor}>
+                      {p.idProfesor} - {p.nombre} ({p.estatus || 'Activo'})
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Se muestran todos los profesores, independientemente de su estatus.
+                  {profesores.length} profesor(es) disponible(s) en la lista.
                 </p>
               </div>
               <div className="col-span-2 flex gap-3 pt-2">
