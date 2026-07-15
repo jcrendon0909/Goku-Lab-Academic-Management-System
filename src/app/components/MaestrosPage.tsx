@@ -6,8 +6,7 @@ import {
   actualizarEstatusProfesor,
   eliminarProfesor,
 } from "../../services/api";
-import { toast } from "sonner";
-import { CheckCircle, XCircle, User, UserPlus } from "lucide-react";
+import { apiFetch } from "../../services/api";
 
 interface Profesor {
   idProfesor: string;
@@ -17,26 +16,24 @@ interface Profesor {
   salarioPorHora?: number;
   tipoPago?: "por_hora" | "fijo_mensual";
   salarioMensual?: number;
-  // No tenemos campo usuario en el profesor, pero lo consultaremos aparte
 }
 
 export function MaestrosPage() {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
-  const [usuariosMap, setUsuariosMap] = useState<Record<string, string>>({}); // idProfesor -> usuario
+  const [usuarios, setUsuarios] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados para el formulario de creación
   const [nombre, setNombre] = useState("");
   const [fechaNacimiento, setFechaNacimiento] = useState("");
   const [tipoPago, setTipoPago] = useState<"por_hora" | "fijo_mensual">("por_hora");
   const [salarioPorHora, setSalarioPorHora] = useState(0);
   const [salarioMensual, setSalarioMensual] = useState(0);
+
   const [crearUsuario, setCrearUsuario] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
 
-  // Estados para edición
   const [editando, setEditando] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editFechaNacimiento, setEditFechaNacimiento] = useState("");
@@ -45,34 +42,36 @@ export function MaestrosPage() {
   const [editSalarioMensual, setEditSalarioMensual] = useState(0);
 
   useEffect(() => {
-    cargarDatos();
+    cargarProfesores();
+    cargarUsuarios();
   }, []);
 
-  const cargarDatos = async () => {
+  const cargarProfesores = async () => {
     try {
       setLoading(true);
-      const [profesoresData, usuariosData] = await Promise.all([
-        getProfesores(),
-        // Obtener usuarios para mapear idProfesor -> usuario
-        fetch("/api/usuarios", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
-          .then(res => res.json())
-          .catch(() => [])
-      ]);
-      setProfesores(profesoresData || []);
-      // Construir mapa de idProfesor -> usuario
-      const map: Record<string, string> = {};
-      (usuariosData || []).forEach((u: any) => {
-        if (u.idProfesor) {
-          map[u.idProfesor] = u.usuario;
-        }
-      });
-      setUsuariosMap(map);
+      const data = await getProfesores();
+      setProfesores(data);
     } catch (err) {
-      setError("Error al cargar datos");
+      setError("Error al cargar maestros");
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const cargarUsuarios = async () => {
+    try {
+      const res = await apiFetch("/usuarios");
+      const data = await res.json();
+      if (res.ok) setUsuarios(data);
+    } catch (error) {
+      console.error("Error al cargar usuarios:", error);
+    }
+  };
+
+  const obtenerUsuarioDeProfesor = (idProfesor: string) => {
+    const usuarioEncontrado = usuarios.find((u) => u.idProfesor === idProfesor);
+    return usuarioEncontrado ? usuarioEncontrado.usuario : null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,8 +88,6 @@ export function MaestrosPage() {
         password: crearUsuario ? password : undefined,
       };
       await crearProfesor(payload);
-      toast.success("Profesor creado correctamente");
-      // Limpiar formulario
       setNombre("");
       setFechaNacimiento("");
       setTipoPago("por_hora");
@@ -99,9 +96,10 @@ export function MaestrosPage() {
       setCrearUsuario(false);
       setUsuario("");
       setPassword("");
-      cargarDatos();
-    } catch (err: any) {
-      setError(err.message || "Error al crear profesor");
+      await cargarProfesores();
+      await cargarUsuarios();
+    } catch (err) {
+      setError("Error al crear maestro");
       console.error(err);
     }
   };
@@ -117,9 +115,7 @@ export function MaestrosPage() {
 
   const guardarEdicion = async (idProfesor: string) => {
     try {
-      // Actualizar nombre (endpoint existente)
       await renombrarProfesor(idProfesor, editNombre);
-      // Actualizar datos extra
       const { actualizarDatosExtraProfesor } = await import("../../services/api");
       await actualizarDatosExtraProfesor(idProfesor, {
         fechaNacimiento: editFechaNacimiento || null,
@@ -127,11 +123,11 @@ export function MaestrosPage() {
         tipoPago: editTipoPago,
         salarioMensual: editTipoPago === "fijo_mensual" ? editSalarioMensual : 0,
       });
-      toast.success("Datos actualizados");
       setEditando(null);
-      cargarDatos();
-    } catch (err: any) {
-      setError(err.message || "Error al actualizar");
+      await cargarProfesores();
+      await cargarUsuarios();
+    } catch (err) {
+      setError("Error al actualizar maestro");
       console.error(err);
     }
   };
@@ -140,37 +136,36 @@ export function MaestrosPage() {
     try {
       const nuevoEstatus = estatusActual === "Activo" ? "Inactivo" : "Activo";
       await actualizarEstatusProfesor(idProfesor, nuevoEstatus);
-      toast.success(`Profesor ${nuevoEstatus.toLowerCase()}`);
-      cargarDatos();
-    } catch (err: any) {
-      setError(err.message || "Error al cambiar estatus");
+      await cargarProfesores();
+      await cargarUsuarios();
+    } catch (err) {
+      setError("Error al cambiar estatus");
       console.error(err);
     }
   };
 
   const eliminar = async (idProfesor: string) => {
-    if (!confirm("¿Seguro que deseas eliminar este profesor?")) return;
+    if (!confirm("¿Seguro que deseas eliminar este maestro?")) return;
     try {
       await eliminarProfesor(idProfesor);
-      toast.success("Profesor eliminado");
-      cargarDatos();
-    } catch (err: any) {
-      setError(err.message || "Error al eliminar");
+      await cargarProfesores();
+      await cargarUsuarios();
+    } catch (err) {
+      setError("Error al eliminar maestro");
       console.error(err);
     }
   };
 
-  if (loading) return <div className="p-4 text-center">Cargando...</div>;
+  if (loading) return <div className="p-4">Cargando...</div>;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Gestión de Profesores</h1>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Gestión de Maestros</h1>
 
       {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4">{error}</div>}
 
-      {/* Formulario de creación */}
       <form onSubmit={handleSubmit} className="mb-8 p-4 border rounded bg-gray-50">
-        <h2 className="text-lg font-semibold mb-2">Nuevo Profesor</h2>
+        <h2 className="text-lg font-semibold mb-2">Nuevo Maestro</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
             type="text"
@@ -215,8 +210,8 @@ export function MaestrosPage() {
           )}
         </div>
 
-        {/* Sección para crear usuario */}
         <div className="mt-4 border-t pt-4">
+          <h3 className="text-md font-semibold mb-2">Crear usuario para este profesor (opcional)</h3>
           <div className="flex items-center gap-2 mb-2">
             <input
               type="checkbox"
@@ -224,7 +219,7 @@ export function MaestrosPage() {
               onChange={(e) => setCrearUsuario(e.target.checked)}
               className="h-4 w-4"
             />
-            <label className="font-medium">Crear usuario para este profesor</label>
+            <label>Crear usuario</label>
           </div>
           {crearUsuario && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -252,11 +247,10 @@ export function MaestrosPage() {
           type="submit"
           className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full md:w-auto"
         >
-          Crear Profesor
+          Crear Maestro
         </button>
       </form>
 
-      {/* Lista de profesores */}
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border">
           <thead>
@@ -272,136 +266,115 @@ export function MaestrosPage() {
             </tr>
           </thead>
           <tbody>
-            {profesores.map((prof) => (
-              <tr key={prof.idProfesor} className="border-t">
-                {editando === prof.idProfesor ? (
-                  // Fila de edición (solo datos profesionales)
-                  <>
-                    <td className="p-2 border">{prof.idProfesor}</td>
-                    <td className="p-2 border">
-                      <input
-                        type="text"
-                        value={editNombre}
-                        onChange={(e) => setEditNombre(e.target.value)}
-                        className="border p-1 rounded w-full"
-                      />
-                    </td>
-                    <td className="p-2 border">
-                      <input
-                        type="date"
-                        value={editFechaNacimiento}
-                        onChange={(e) => setEditFechaNacimiento(e.target.value)}
-                        className="border p-1 rounded w-full"
-                      />
-                    </td>
-                    <td className="p-2 border">
-                      <select
-                        value={editTipoPago}
-                        onChange={(e) => setEditTipoPago(e.target.value as "por_hora" | "fijo_mensual")}
-                        className="border p-1 rounded w-full"
-                      >
-                        <option value="por_hora">Por hora</option>
-                        <option value="fijo_mensual">Fijo mensual</option>
-                      </select>
-                    </td>
-                    <td className="p-2 border">
-                      {editTipoPago === "por_hora" ? (
+            {profesores.map((prof) => {
+              const usuarioProf = obtenerUsuarioDeProfesor(prof.idProfesor);
+              return (
+                <tr key={prof.idProfesor} className="border-t">
+                  {editando === prof.idProfesor ? (
+                    // Fila de edición
+                    <>
+                      <td className="p-2 border">{prof.idProfesor}</td>
+                      <td className="p-2 border">
                         <input
-                          type="number"
-                          step="0.01"
-                          value={editSalarioPorHora}
-                          onChange={(e) => setEditSalarioPorHora(parseFloat(e.target.value) || 0)}
+                          type="text"
+                          value={editNombre}
+                          onChange={(e) => setEditNombre(e.target.value)}
                           className="border p-1 rounded w-full"
                         />
-                      ) : (
+                      </td>
+                      <td className="p-2 border">
                         <input
-                          type="number"
-                          step="0.01"
-                          value={editSalarioMensual}
-                          onChange={(e) => setEditSalarioMensual(parseFloat(e.target.value) || 0)}
+                          type="date"
+                          value={editFechaNacimiento}
+                          onChange={(e) => setEditFechaNacimiento(e.target.value)}
                           className="border p-1 rounded w-full"
                         />
-                      )}
-                    </td>
-                    <td className="p-2 border text-center">
-                      {usuariosMap[prof.idProfesor] ? (
-                        <span className="text-green-600 flex items-center justify-center gap-1">
-                          <CheckCircle className="h-4 w-4" /> {usuariosMap[prof.idProfesor]}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 flex items-center justify-center gap-1">
-                          <XCircle className="h-4 w-4" /> Sin usuario
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 border">{prof.estatus}</td>
-                    <td className="p-2 border">
-                      <button
-                        onClick={() => guardarEdicion(prof.idProfesor)}
-                        className="bg-green-600 text-white px-2 py-1 rounded mr-1"
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        onClick={() => setEditando(null)}
-                        className="bg-gray-400 text-white px-2 py-1 rounded"
-                      >
-                        Cancelar
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  // Fila normal
-                  <>
-                    <td className="p-2 border">{prof.idProfesor}</td>
-                    <td className="p-2 border">{prof.nombre}</td>
-                    <td className="p-2 border">
-                      {prof.fechaNacimiento ? new Date(prof.fechaNacimiento).toLocaleDateString() : "-"}
-                    </td>
-                    <td className="p-2 border">
-                      {prof.tipoPago === "fijo_mensual" ? "Fijo Mensual" : "Por Hora"}
-                    </td>
-                    <td className="p-2 border">
-                      {prof.tipoPago === "fijo_mensual" ? `$${prof.salarioMensual}` : `$${prof.salarioPorHora}/h`}
-                    </td>
-                    <td className="p-2 border text-center">
-                      {usuariosMap[prof.idProfesor] ? (
-                        <span className="text-green-600 flex items-center justify-center gap-1">
-                          <User className="h-4 w-4" /> {usuariosMap[prof.idProfesor]}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 flex items-center justify-center gap-1">
-                          <XCircle className="h-4 w-4" /> Sin usuario
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 border">{prof.estatus}</td>
-                    <td className="p-2 border">
-                      <button
-                        onClick={() => iniciarEdicion(prof)}
-                        className="bg-blue-600 text-white px-2 py-1 rounded mr-1"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => toggleEstatus(prof.idProfesor, prof.estatus)}
-                        className={`px-2 py-1 rounded mr-1 ${
-                          prof.estatus === "Activo" ? "bg-yellow-600" : "bg-green-600"
-                        } text-white`}
-                      >
-                        {prof.estatus === "Activo" ? "Desactivar" : "Activar"}
-                      </button>
-                      <button
-                        onClick={() => eliminar(prof.idProfesor)}
-                        className="bg-red-600 text-white px-2 py-1 rounded"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
+                      </td>
+                      <td className="p-2 border">
+                        <select
+                          value={editTipoPago}
+                          onChange={(e) => setEditTipoPago(e.target.value as "por_hora" | "fijo_mensual")}
+                          className="border p-1 rounded w-full"
+                        >
+                          <option value="por_hora">Por hora</option>
+                          <option value="fijo_mensual">Fijo mensual</option>
+                        </select>
+                      </td>
+                      <td className="p-2 border">
+                        {editTipoPago === "por_hora" ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editSalarioPorHora}
+                            onChange={(e) => setEditSalarioPorHora(parseFloat(e.target.value) || 0)}
+                            className="border p-1 rounded w-full"
+                          />
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editSalarioMensual}
+                            onChange={(e) => setEditSalarioMensual(parseFloat(e.target.value) || 0)}
+                            className="border p-1 rounded w-full"
+                          />
+                        )}
+                      </td>
+                      <td className="p-2 border">{usuarioProf || 'Sin usuario'}</td>
+                      <td className="p-2 border">{prof.estatus}</td>
+                      <td className="p-2 border">
+                        <button
+                          onClick={() => guardarEdicion(prof.idProfesor)}
+                          className="bg-green-600 text-white px-2 py-1 rounded mr-1"
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => setEditando(null)}
+                          className="bg-gray-400 text-white px-2 py-1 rounded"
+                        >
+                          Cancelar
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    // Fila normal
+                    <>
+                      <td className="p-2 border">{prof.idProfesor}</td>
+                      <td className="p-2 border">{prof.nombre}</td>
+                      <td className="p-2 border">{prof.fechaNacimiento ? new Date(prof.fechaNacimiento).toLocaleDateString() : "-"}</td>
+                      <td className="p-2 border">{prof.tipoPago === "fijo_mensual" ? "Fijo Mensual" : "Por Hora"}</td>
+                      <td className="p-2 border">
+                        {prof.tipoPago === "fijo_mensual" ? `$${prof.salarioMensual}` : `$${prof.salarioPorHora}/h`}
+                      </td>
+                      <td className="p-2 border">{usuarioProf || 'Sin usuario'}</td>
+                      <td className="p-2 border">{prof.estatus}</td>
+                      <td className="p-2 border">
+                        <button
+                          onClick={() => iniciarEdicion(prof)}
+                          className="bg-blue-600 text-white px-2 py-1 rounded mr-1"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => toggleEstatus(prof.idProfesor, prof.estatus)}
+                          className={`px-2 py-1 rounded mr-1 ${
+                            prof.estatus === "Activo" ? "bg-yellow-600" : "bg-green-600"
+                          } text-white`}
+                        >
+                          {prof.estatus === "Activo" ? "Desactivar" : "Activar"}
+                        </button>
+                        <button
+                          onClick={() => eliminar(prof.idProfesor)}
+                          className="bg-red-600 text-white px-2 py-1 rounded"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
