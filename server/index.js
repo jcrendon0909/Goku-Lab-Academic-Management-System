@@ -18,7 +18,7 @@ import calendarioRoutes from "./routes/calendario.js";
 // ===== NUEVAS RUTAS =====
 import gastosRoutes from "./routes/gastos.js";
 import reportesRoutes from "./routes/reportes.js";
-import usuariosRoutes from './routes/usuarios.js';
+import usuariosRoutes from "./routes/usuarios.js"; // 👈 BIEN UBICADA
 
 dotenv.config();
 
@@ -48,14 +48,14 @@ app.use("/api/calendario", calendarioRoutes);
 // ===== NUEVAS RUTAS =====
 app.use("/api/gastos", gastosRoutes);
 app.use("/api/reportes", reportesRoutes);
-app.use("/api/usuarios", usuariosRoutes); // 👈 AHORA SÍ ESTÁ MONTADA
+app.use("/api/usuarios", usuariosRoutes); // 👈 BIEN UBICADA
 
-// Ruta de prueba (opcional)
+// Ruta de prueba
 app.get("/", (req, res) => {
   res.send("API de Goku Lab funcionando");
 });
 
-// Manejo de errores global (opcional)
+// Manejo de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Error interno del servidor" });
