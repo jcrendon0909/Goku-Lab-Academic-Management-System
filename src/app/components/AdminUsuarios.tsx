@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Edit2, Trash2, Key } from 'lucide-react';
 import { apiFetch, resetPasswordPorAdmin, getProfesores } from '../../services/api';
 import { toast } from 'sonner';
+console.log('📦 Profesores recibidos:', profesoresRes);
+console.log('🧪 Primer profesor:', profesoresRes?.[0]);
 
 interface Usuario {
   _id: string;
@@ -236,12 +238,16 @@ export function AdminUsuarios() {
                 >
                   <option value="">— Sin vincular —</option>
                   {profesores
-                    .filter(p => p.estatus?.toLowerCase().trim() === 'activo')
-                    .map((p) => (
-                      <option key={p.idProfesor} value={p.idProfesor}>
-                        {p.idProfesor} - {p.nombre}
-                      </option>
-                    ))}
+  .filter(p => {
+    const esActivo = p.estatus?.toLowerCase().trim() === 'activo';
+    console.log(`🧪 ${p.idProfesor}: estatus="${p.estatus}", esActivo=${esActivo}`);
+    return esActivo;
+  })
+  .map((p) => (
+    <option key={p.idProfesor} value={p.idProfesor}>
+      {p.idProfesor} - {p.nombre}
+    </option>
+  ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   Solo se muestran profesores activos. Si el profesor no aparece, créalo primero en el módulo de Maestros.
