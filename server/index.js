@@ -34,21 +34,20 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // ==== RUTAS ====
-app.use("/api/auth", authRoutes);
-app.use("/api/alumnos", alumnosRoutes);
-app.use("/api/profesores", profesoresRoutes);
-app.use("/api/grupos", gruposRoutes);
-app.use("/api/cursos", cursosRoutes);
-app.use("/api/inscripciones", inscripcionesRoutes);
-app.use("/api/pagos", pagosRoutes);
-app.use("/api/abonos", abonosRoutes);
-app.use("/api/reagendaciones", reagendacionesRoutes);
-app.use("/api/calendario", calendarioRoutes);
-
-// ===== NUEVAS RUTAS =====
-app.use("/api/gastos", gastosRoutes);
-app.use("/api/reportes", reportesRoutes);
-app.use("/api/usuarios", usuariosRoutes); // 👈 BIEN UBICADA
+// ==== RUTAS (sin prefijo /api) ====
+app.use('/auth', authRoutes);
+app.use('/alumnos', alumnosRoutes);
+app.use('/profesores', profesoresRoutes);
+app.use('/grupos', gruposRoutes);
+app.use('/cursos', cursosRoutes);
+app.use('/inscripciones', inscripcionesRoutes);
+app.use('/pagos', pagosRoutes);
+app.use('/abonos', abonosRoutes);
+app.use('/reagendaciones', reagendacionesRoutes);
+app.use('/calendario', calendarioRoutes);
+app.use('/gastos', gastosRoutes);
+app.use('/reportes', reportesRoutes);
+app.use('/usuarios', usuariosRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
