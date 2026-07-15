@@ -6,6 +6,8 @@ import {
   actualizarEstatusProfesor,
   eliminarProfesor,
 } from "../../services/api";
+import { toast } from "sonner";
+import { CheckCircle, XCircle, User, UserPlus } from "lucide-react";
 
 interface Profesor {
   idProfesor: string;
@@ -15,23 +17,26 @@ interface Profesor {
   salarioPorHora?: number;
   tipoPago?: "por_hora" | "fijo_mensual";
   salarioMensual?: number;
+  // No tenemos campo usuario en el profesor, pero lo consultaremos aparte
 }
 
 export function MaestrosPage() {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
+  const [usuariosMap, setUsuariosMap] = useState<Record<string, string>>({}); // idProfesor -> usuario
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Estados para el formulario de creación
   const [nombre, setNombre] = useState("");
   const [fechaNacimiento, setFechaNacimiento] = useState("");
   const [tipoPago, setTipoPago] = useState<"por_hora" | "fijo_mensual">("por_hora");
   const [salarioPorHora, setSalarioPorHora] = useState(0);
   const [salarioMensual, setSalarioMensual] = useState(0);
-
   const [crearUsuario, setCrearUsuario] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
 
+  // Estados para edición
   const [editando, setEditando] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editFechaNacimiento, setEditFechaNacimiento] = useState("");
@@ -40,16 +45,30 @@ export function MaestrosPage() {
   const [editSalarioMensual, setEditSalarioMensual] = useState(0);
 
   useEffect(() => {
-    cargarProfesores();
+    cargarDatos();
   }, []);
 
-  const cargarProfesores = async () => {
+  const cargarDatos = async () => {
     try {
       setLoading(true);
-      const data = await getProfesores();
-      setProfesores(data);
+      const [profesoresData, usuariosData] = await Promise.all([
+        getProfesores(),
+        // Obtener usuarios para mapear idProfesor -> usuario
+        fetch("/api/usuarios", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+          .then(res => res.json())
+          .catch(() => [])
+      ]);
+      setProfesores(profesoresData || []);
+      // Construir mapa de idProfesor -> usuario
+      const map: Record<string, string> = {};
+      (usuariosData || []).forEach((u: any) => {
+        if (u.idProfesor) {
+          map[u.idProfesor] = u.usuario;
+        }
+      });
+      setUsuariosMap(map);
     } catch (err) {
-      setError("Error al cargar maestros");
+      setError("Error al cargar datos");
       console.error(err);
     } finally {
       setLoading(false);
@@ -70,6 +89,8 @@ export function MaestrosPage() {
         password: crearUsuario ? password : undefined,
       };
       await crearProfesor(payload);
+      toast.success("Profesor creado correctamente");
+      // Limpiar formulario
       setNombre("");
       setFechaNacimiento("");
       setTipoPago("por_hora");
@@ -78,9 +99,9 @@ export function MaestrosPage() {
       setCrearUsuario(false);
       setUsuario("");
       setPassword("");
-      await cargarProfesores();
-    } catch (err) {
-      setError("Error al crear maestro");
+      cargarDatos();
+    } catch (err: any) {
+      setError(err.message || "Error al crear profesor");
       console.error(err);
     }
   };
@@ -96,7 +117,9 @@ export function MaestrosPage() {
 
   const guardarEdicion = async (idProfesor: string) => {
     try {
+      // Actualizar nombre (endpoint existente)
       await renombrarProfesor(idProfesor, editNombre);
+      // Actualizar datos extra
       const { actualizarDatosExtraProfesor } = await import("../../services/api");
       await actualizarDatosExtraProfesor(idProfesor, {
         fechaNacimiento: editFechaNacimiento || null,
@@ -104,10 +127,11 @@ export function MaestrosPage() {
         tipoPago: editTipoPago,
         salarioMensual: editTipoPago === "fijo_mensual" ? editSalarioMensual : 0,
       });
+      toast.success("Datos actualizados");
       setEditando(null);
-      await cargarProfesores();
-    } catch (err) {
-      setError("Error al actualizar maestro");
+      cargarDatos();
+    } catch (err: any) {
+      setError(err.message || "Error al actualizar");
       console.error(err);
     }
   };
@@ -116,34 +140,37 @@ export function MaestrosPage() {
     try {
       const nuevoEstatus = estatusActual === "Activo" ? "Inactivo" : "Activo";
       await actualizarEstatusProfesor(idProfesor, nuevoEstatus);
-      await cargarProfesores();
-    } catch (err) {
-      setError("Error al cambiar estatus");
+      toast.success(`Profesor ${nuevoEstatus.toLowerCase()}`);
+      cargarDatos();
+    } catch (err: any) {
+      setError(err.message || "Error al cambiar estatus");
       console.error(err);
     }
   };
 
   const eliminar = async (idProfesor: string) => {
-    if (!confirm("¿Seguro que deseas eliminar este maestro?")) return;
+    if (!confirm("¿Seguro que deseas eliminar este profesor?")) return;
     try {
       await eliminarProfesor(idProfesor);
-      await cargarProfesores();
-    } catch (err) {
-      setError("Error al eliminar maestro");
+      toast.success("Profesor eliminado");
+      cargarDatos();
+    } catch (err: any) {
+      setError(err.message || "Error al eliminar");
       console.error(err);
     }
   };
 
-  if (loading) return <div className="p-4">Cargando...</div>;
+  if (loading) return <div className="p-4 text-center">Cargando...</div>;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Gestión de Maestros</h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Gestión de Profesores</h1>
 
       {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4">{error}</div>}
 
+      {/* Formulario de creación */}
       <form onSubmit={handleSubmit} className="mb-8 p-4 border rounded bg-gray-50">
-        <h2 className="text-lg font-semibold mb-2">Nuevo Maestro</h2>
+        <h2 className="text-lg font-semibold mb-2">Nuevo Profesor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
             type="text"
@@ -188,8 +215,8 @@ export function MaestrosPage() {
           )}
         </div>
 
+        {/* Sección para crear usuario */}
         <div className="mt-4 border-t pt-4">
-          <h3 className="text-md font-semibold mb-2">Crear usuario para este profesor (opcional)</h3>
           <div className="flex items-center gap-2 mb-2">
             <input
               type="checkbox"
@@ -197,7 +224,7 @@ export function MaestrosPage() {
               onChange={(e) => setCrearUsuario(e.target.checked)}
               className="h-4 w-4"
             />
-            <label>Crear usuario</label>
+            <label className="font-medium">Crear usuario para este profesor</label>
           </div>
           {crearUsuario && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -225,10 +252,11 @@ export function MaestrosPage() {
           type="submit"
           className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full md:w-auto"
         >
-          Crear Maestro
+          Crear Profesor
         </button>
       </form>
 
+      {/* Lista de profesores */}
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border">
           <thead>
@@ -238,6 +266,7 @@ export function MaestrosPage() {
               <th className="p-2 border">Fecha Nac.</th>
               <th className="p-2 border">Tipo Pago</th>
               <th className="p-2 border">Salario</th>
+              <th className="p-2 border">Usuario</th>
               <th className="p-2 border">Estatus</th>
               <th className="p-2 border">Acciones</th>
             </tr>
@@ -246,6 +275,7 @@ export function MaestrosPage() {
             {profesores.map((prof) => (
               <tr key={prof.idProfesor} className="border-t">
                 {editando === prof.idProfesor ? (
+                  // Fila de edición (solo datos profesionales)
                   <>
                     <td className="p-2 border">{prof.idProfesor}</td>
                     <td className="p-2 border">
@@ -293,6 +323,17 @@ export function MaestrosPage() {
                         />
                       )}
                     </td>
+                    <td className="p-2 border text-center">
+                      {usuariosMap[prof.idProfesor] ? (
+                        <span className="text-green-600 flex items-center justify-center gap-1">
+                          <CheckCircle className="h-4 w-4" /> {usuariosMap[prof.idProfesor]}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 flex items-center justify-center gap-1">
+                          <XCircle className="h-4 w-4" /> Sin usuario
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2 border">{prof.estatus}</td>
                     <td className="p-2 border">
                       <button
@@ -310,13 +351,29 @@ export function MaestrosPage() {
                     </td>
                   </>
                 ) : (
+                  // Fila normal
                   <>
                     <td className="p-2 border">{prof.idProfesor}</td>
                     <td className="p-2 border">{prof.nombre}</td>
-                    <td className="p-2 border">{prof.fechaNacimiento ? new Date(prof.fechaNacimiento).toLocaleDateString() : "-"}</td>
-                    <td className="p-2 border">{prof.tipoPago === "fijo_mensual" ? "Fijo Mensual" : "Por Hora"}</td>
+                    <td className="p-2 border">
+                      {prof.fechaNacimiento ? new Date(prof.fechaNacimiento).toLocaleDateString() : "-"}
+                    </td>
+                    <td className="p-2 border">
+                      {prof.tipoPago === "fijo_mensual" ? "Fijo Mensual" : "Por Hora"}
+                    </td>
                     <td className="p-2 border">
                       {prof.tipoPago === "fijo_mensual" ? `$${prof.salarioMensual}` : `$${prof.salarioPorHora}/h`}
+                    </td>
+                    <td className="p-2 border text-center">
+                      {usuariosMap[prof.idProfesor] ? (
+                        <span className="text-green-600 flex items-center justify-center gap-1">
+                          <User className="h-4 w-4" /> {usuariosMap[prof.idProfesor]}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 flex items-center justify-center gap-1">
+                          <XCircle className="h-4 w-4" /> Sin usuario
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 border">{prof.estatus}</td>
                     <td className="p-2 border">

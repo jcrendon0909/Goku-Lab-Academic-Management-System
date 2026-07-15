@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Edit2, Trash2, Key } from 'lucide-react';
-import { apiFetch } from '../../services/api';
-import { resetPasswordPorAdmin } from '../../services/api';
+import { apiFetch, resetPasswordPorAdmin, getProfesores } from '../../services/api';
 import { toast } from 'sonner';
 
 interface Usuario {
@@ -13,24 +12,38 @@ interface Usuario {
   idProfesor?: string;
 }
 
+interface Profesor {
+  idProfesor: string;
+  nombre: string;
+  estatus: string;
+}
+
 export function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [cargandoProfesores, setCargandoProfesores] = useState(false);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
 
   const [formUsuario, setFormUsuario] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formNombre, setFormNombre] = useState('');
-  const [formRol, setFormRol] = useState<'admin' | 'profesor'>('profesor');
+  const [formRol, setFormRol] = useState<'admin' | 'profesor' | 'recepcion'>('profesor');
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
-  const cargarUsuarios = async () => {
+  // Cargar usuarios y profesores
+  const cargarDatos = async () => {
     try {
-      const res = await apiFetch('/usuarios');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al cargar usuarios');
-      setUsuarios(data);
+      setCargando(true);
+      const [usuariosRes, profesoresRes] = await Promise.all([
+        apiFetch('/usuarios'),
+        getProfesores(),
+      ]);
+      const usuariosData = await usuariosRes.json();
+      if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
+      setUsuarios(usuariosData);
+      setProfesores(profesoresRes || []);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -39,8 +52,17 @@ export function AdminUsuarios() {
   };
 
   useEffect(() => {
-    cargarUsuarios();
+    cargarDatos();
   }, []);
+
+  const resetForm = () => {
+    setFormUsuario('');
+    setFormPassword('');
+    setFormNombre('');
+    setFormRol('profesor');
+    setFormIdProfesor('');
+    setEditando(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,19 +86,46 @@ export function AdminUsuarios() {
       toast.success('Usuario creado correctamente');
       setMostrarFormulario(false);
       resetForm();
-      cargarUsuarios();
+      cargarDatos();
     } catch (error: any) {
       toast.error(error.message);
     }
   };
 
-  const resetForm = () => {
-    setFormUsuario('');
-    setFormPassword('');
-    setFormNombre('');
-    setFormRol('profesor');
-    setFormIdProfesor('');
-    setEditando(null);
+  const handleEdit = (usuario: Usuario) => {
+    setEditando(usuario);
+    setFormUsuario(usuario.usuario);
+    setFormNombre(usuario.nombreCompleto);
+    setFormRol(usuario.rol);
+    setFormIdProfesor(usuario.idProfesor || '');
+    setMostrarFormulario(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editando) return;
+    try {
+      const payload = {
+        nombreCompleto: formNombre,
+        rol: formRol,
+        idProfesor: formIdProfesor || '',
+      };
+
+      const res = await apiFetch(`/usuarios/${editando._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar usuario');
+      
+      toast.success('Usuario actualizado correctamente');
+      setMostrarFormulario(false);
+      resetForm();
+      cargarDatos();
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   const handleEliminar = async (id: string) => {
@@ -85,7 +134,7 @@ export function AdminUsuarios() {
       const res = await apiFetch(`/usuarios/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error al eliminar');
       toast.success('Usuario eliminado');
-      cargarUsuarios();
+      cargarDatos();
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -101,7 +150,7 @@ export function AdminUsuarios() {
     }
   };
 
-  if (cargando) return <div className="p-8 text-center">Cargando...</div>;
+  if (cargando) return <div className="p-8 text-center">Cargando usuarios y profesores...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -130,7 +179,7 @@ export function AdminUsuarios() {
             <h2 className="text-lg font-semibold mb-4">
               {editando ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
             </h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={editando ? handleUpdate : handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Usuario</label>
                 <input
@@ -139,18 +188,21 @@ export function AdminUsuarios() {
                   onChange={(e) => setFormUsuario(e.target.value)}
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
                   required
+                  disabled={!!editando}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Contraseña</label>
-                <input
-                  type="password"
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
-                  required={!editando}
-                />
-              </div>
+              {!editando && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Contraseña</label>
+                  <input
+                    type="password"
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+                    required={!editando}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
                 <input
@@ -165,24 +217,35 @@ export function AdminUsuarios() {
                 <label className="block text-sm font-medium text-gray-700">Rol</label>
                 <select
                   value={formRol}
-                  onChange={(e) => setFormRol(e.target.value as 'admin' | 'profesor')}
+                  onChange={(e) => setFormRol(e.target.value as 'admin' | 'profesor' | 'recepcion')}
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
                 >
                   <option value="admin">Administrador</option>
                   <option value="profesor">Profesor</option>
+                  <option value="recepcion">Recepción</option>
                 </select>
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  ID Profesor (opcional, solo si el usuario es profesor)
+                  Vincular con profesor (opcional)
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formIdProfesor}
                   onChange={(e) => setFormIdProfesor(e.target.value)}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Ej: PROF001"
-                />
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
+                >
+                  <option value="">— Sin vincular —</option>
+                  {profesores
+                    .filter(p => p.estatus === 'Activo')
+                    .map((p) => (
+                      <option key={p.idProfesor} value={p.idProfesor}>
+                        {p.idProfesor} - {p.nombre}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Solo se muestran profesores activos. Si el profesor no aparece, créalo primero en el módulo de Maestros.
+                </p>
               </div>
               <div className="col-span-2 flex gap-3 pt-2">
                 <button
@@ -221,7 +284,9 @@ export function AdminUsuarios() {
                   <td className="px-6 py-4 text-sm text-gray-900">{u.nombreCompleto}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      u.rol === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                      u.rol === 'admin' ? 'bg-purple-100 text-purple-800' :
+                      u.rol === 'profesor' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'
                     }`}>
                       {u.rol}
                     </span>
@@ -229,15 +294,9 @@ export function AdminUsuarios() {
                   <td className="px-6 py-4 text-sm text-gray-500">{u.idProfesor || '—'}</td>
                   <td className="px-6 py-4 text-sm text-right space-x-2">
                     <button
-                      onClick={() => {
-                        setEditando(u);
-                        setFormUsuario(u.usuario);
-                        setFormNombre(u.nombreCompleto);
-                        setFormRol(u.rol);
-                        setFormIdProfesor(u.idProfesor || '');
-                        setMostrarFormulario(true);
-                      }}
+                      onClick={() => handleEdit(u)}
                       className="text-indigo-600 hover:text-indigo-900"
+                      title="Editar usuario"
                     >
                       <Edit2 className="h-4 w-4 inline" />
                     </button>
@@ -251,6 +310,7 @@ export function AdminUsuarios() {
                     <button
                       onClick={() => handleEliminar(u._id)}
                       className="text-red-600 hover:text-red-900"
+                      title="Eliminar usuario"
                     >
                       <Trash2 className="h-4 w-4 inline" />
                     </button>
