@@ -234,15 +234,16 @@ export function AdminUsuarios() {
                 <p className="text-xs text-gray-500 mb-1">
                   {profesores.length} profesor(es) disponible(s) en la lista.
                 </p>
+                {/* 👇 FORZAR RENDERIZACIÓN CON KEY BASADO EN LA LONGITUD */}
                 <select
-                  key={profesores.length} // 👈 Forzar actualización cuando cambie la lista
+                  key={`select-${profesores.length}`}
                   value={formIdProfesor}
                   onChange={(e) => setFormIdProfesor(e.target.value)}
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
                 >
                   <option value="">— Sin vincular —</option>
                   {profesores.map((p) => {
-                    console.log('Renderizando opción:', p.idProfesor, p.nombre);
+                    console.log('Renderizando opción:', p.idProfesor, p.nombre); // Log temporal
                     return (
                       <option key={p.idProfesor} value={p.idProfesor}>
                         {p.idProfesor} - {p.nombre} ({p.estatus || 'Activo'})
@@ -250,7 +251,6 @@ export function AdminUsuarios() {
                     );
                   })}
                 </select>
-                {/* Depuración visual si el dropdown está vacío */}
                 {profesores.length === 0 && (
                   <p className="text-red-500 text-xs mt-1">⚠️ No hay profesores disponibles</p>
                 )}
