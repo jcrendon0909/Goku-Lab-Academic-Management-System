@@ -34,7 +34,12 @@ router.post('/login', async (req, res) => {
 
         res.json({
             token,
-            user: { usuario: user.usuario, nombreCompleto: user.nombreCompleto, rol: user.rol }
+            user: {
+                usuario: user.usuario,
+                nombreCompleto: user.nombreCompleto,
+                rol: user.rol,
+                idProfesor: user.idProfesor || null // 👈 NUEVO
+            }
         });
 
     } catch (error) {
