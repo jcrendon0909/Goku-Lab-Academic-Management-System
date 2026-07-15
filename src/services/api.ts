@@ -613,5 +613,5 @@ export async function resetPasswordPorAdmin(idUsuario: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Error al generar token");
-  return data.token; // Devuelve el token
+  return data.token; // Devuelve el token para mostrarlo en el frontend
 }

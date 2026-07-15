@@ -32,22 +32,24 @@ export function AdminUsuarios() {
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
   const cargarDatos = async () => {
-  try {
-    setCargando(true);
-    const [usuariosRes, profesoresRes] = await Promise.all([
-      apiFetch('/usuarios'),
-      getProfesores(),
-    ]);
-    const usuariosData = await usuariosRes.json();
-    if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
-    setUsuarios(usuariosData);
-    setProfesores(profesoresRes || []);
-  } catch (error: any) {
-    toast.error(error.message);
-  } finally {
-    setCargando(false);
-  }
-};
+    try {
+      setCargando(true);
+      const [usuariosRes, profesoresRes] = await Promise.all([
+        apiFetch('/usuarios'),
+        getProfesores(),
+      ]);
+      const usuariosData = await usuariosRes.json();
+      if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
+      setUsuarios(usuariosData);
+      // Aseguramos que profesoresRes sea un array
+      setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
   useEffect(() => {
     cargarDatos();
   }, []);
@@ -138,17 +140,18 @@ export function AdminUsuarios() {
   };
 
   const handleResetPassword = async (userId: string, usuario: string) => {
-  if (!confirm(`¿Generar enlace de restablecimiento para ${usuario}?`)) return;
-  try {
-    const token = await resetPasswordPorAdmin(userId);
-    const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
-    // Usamos prompt para que el texto se seleccione automáticamente y se pueda copiar
-    window.prompt(`🔑 Enlace para ${usuario}:`, resetLink);
-    toast.success('Token generado correctamente.');
-  } catch (error: any) {
-    toast.error(error.message || 'Error al generar token');
-  }
-};
+    if (!confirm(`¿Generar enlace de restablecimiento para ${usuario}?`)) return;
+    try {
+      const token = await resetPasswordPorAdmin(userId);
+      const resetLink = `https://horarios.gokulab.mx/reset-password?token=${token}`;
+      // Usamos prompt para que el texto se seleccione automáticamente y se pueda copiar
+      window.prompt(`🔑 Enlace para ${usuario}:`, resetLink);
+      toast.success('Token generado correctamente.');
+    } catch (error: any) {
+      toast.error(error.message || 'Error al generar token');
+    }
+  };
+
   if (cargando) return <div className="p-8 text-center">Cargando usuarios y profesores...</div>;
 
   return (
@@ -234,19 +237,18 @@ export function AdminUsuarios() {
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
                 >
                   <option value="">— Sin vincular —</option>
-                  {profesores
-  .filter(p => {
-    const esActivo = p.estatus?.toLowerCase().trim() === 'activo';
-    return esActivo;
-  })
-  .map((p) => (
-    <option key={p.idProfesor} value={p.idProfesor}>
-      {p.idProfesor} - {p.nombre}
-    </option>
-  ))}
+                  {profesores && profesores.length > 0 ? (
+                    profesores.map((p) => (
+                      <option key={p.idProfesor} value={p.idProfesor}>
+                        {p.idProfesor} - {p.nombre} ({p.estatus || 'Sin estatus'})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No hay profesores disponibles</option>
+                  )}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Solo se muestran profesores activos. Si el profesor no aparece, créalo primero en el módulo de Maestros.
+                  Se muestran todos los profesores, independientemente de su estatus.
                 </p>
               </div>
               <div className="col-span-2 flex gap-3 pt-2">
