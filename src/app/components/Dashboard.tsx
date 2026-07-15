@@ -30,7 +30,7 @@ export function Dashboard() {
       {/* Contenido principal */}
       <div className="relative z-10 min-h-screen p-6 md:p-8">
         <div className="max-w-7xl mx-auto">
-          {/* Header con logo */}
+          {/* Header con logo y textos en azul corporativo */}
           <div className="flex items-center gap-4 mb-8">
             <img 
               src="https://media.gokulab.mx/logo.jpg" 
@@ -39,12 +39,12 @@ export function Dashboard() {
             />
             <div>
               <h1 
-                className="text-4xl font-bold text-white drop-shadow-lg"
+                className="text-4xl font-bold text-[#26AAA3] drop-shadow-lg"
                 style={{ fontFamily: "'Poppins', sans-serif" }}
               >
                 GōkuLab
               </h1>
-              <p className="text-white/90 text-sm flex items-center gap-2">
+              <p className="text-[#26AAA3]/90 text-sm flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-[#F8B50E]" />
                 Juega, Aprende y Emprende
                 <Sparkles className="h-4 w-4 text-[#F8B50E]" />
@@ -52,14 +52,14 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Mensaje de bienvenida con color corporativo */}
+          {/* Mensaje de bienvenida */}
           <div className="mb-8 flex items-center gap-3">
             <Star className="h-8 w-8 text-[#F8B50E] animate-pulse" />
             <div>
               <p className="text-2xl font-semibold text-[#26AAA3] drop-shadow-lg">
                 ¡Hola, {user.nombreCompleto || 'Gokulabero'}! 🚀
               </p>
-              <p className="text-white/80 flex items-center gap-2">
+              <p className="text-[#26AAA3]/80 flex items-center gap-2">
                 <Zap className="h-4 w-4 text-[#26AAA3]" />
                 {isAdmin ? 'Administra tu academia con poder Goku' : 'Explora tu calendario y clases'}
               </p>
@@ -153,16 +153,20 @@ export function Dashboard() {
             />
           </div>
 
-          {/* Mensaje para profesores */}
+          {/* Mensaje para profesores con textos en azul corporativo */}
           {!isAdmin && (
-            <div className="mt-8 text-center text-white bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+            <div className="mt-8 text-center bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
               <Rocket className="h-12 w-12 mx-auto mb-3 text-[#F8B50E]" />
-              <p className="text-lg font-medium">Bienvenido, profesor.</p>
-              <p className="text-sm text-white/80">Aquí puedes gestionar tus reagendaciones y ver tu calendario de clases.</p>
-              <p className="text-xs text-white/60 mt-2 flex items-center justify-center gap-1">
-                <Star className="h-3 w-3" />
+              <p className="text-lg font-medium text-[#26AAA3]">
+                Bienvenido, profesor.
+              </p>
+              <p className="text-sm text-[#26AAA3]/80">
+                Aquí puedes gestionar tus reagendaciones y ver tu calendario de clases.
+              </p>
+              <p className="text-xs text-[#26AAA3]/60 mt-2 flex items-center justify-center gap-1">
+                <Star className="h-3 w-3 text-[#F8B50E]" />
                 <span>GōkuLab - Juega, Aprende y Emprende</span>
-                <Star className="h-3 w-3" />
+                <Star className="h-3 w-3 text-[#F8B50E]" />
               </p>
             </div>
           )}
