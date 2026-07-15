@@ -31,24 +31,30 @@ export function AdminUsuarios() {
   const [formRol, setFormRol] = useState<'admin' | 'profesor' | 'recepcion'>('profesor');
   const [formIdProfesor, setFormIdProfesor] = useState('');
 
-  const cargarDatos = async () => {
-    try {
-      setCargando(true);
-      const [usuariosRes, profesoresRes] = await Promise.all([
-        apiFetch('/usuarios'),
-        getProfesores(),
-      ]);
-      const usuariosData = await usuariosRes.json();
-      if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
-      setUsuarios(usuariosData);
-      // Aseguramos que profesoresRes sea un array
-      setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setCargando(false);
-    }
-  };
+const cargarDatos = async () => {
+  try {
+    setCargando(true);
+    const [usuariosRes, profesoresRes] = await Promise.all([
+      apiFetch('/usuarios'),
+      getProfesores(),
+    ]);
+    const usuariosData = await usuariosRes.json();
+    if (!usuariosRes.ok) throw new Error(usuariosData.error || 'Error al cargar usuarios');
+    setUsuarios(usuariosData);
+    
+    // 👇 LOGS PARA DIAGNÓSTICO
+    console.log('🔍 Respuesta de getProfesores:', profesoresRes);
+    console.log('📋 Tipo:', typeof profesoresRes);
+    console.log('📏 Longitud:', profesoresRes?.length);
+    
+    setProfesores(Array.isArray(profesoresRes) ? profesoresRes : []);
+  } catch (error: any) {
+    console.error('❌ Error en cargarDatos:', error);
+    toast.error(error.message);
+  } finally {
+    setCargando(false);
+  }
+};
 
   useEffect(() => {
     cargarDatos();
