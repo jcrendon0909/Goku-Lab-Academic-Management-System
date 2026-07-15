@@ -22,14 +22,16 @@ export function MaestrosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados para el formulario de creación
   const [nombre, setNombre] = useState("");
   const [fechaNacimiento, setFechaNacimiento] = useState("");
   const [tipoPago, setTipoPago] = useState<"por_hora" | "fijo_mensual">("por_hora");
   const [salarioPorHora, setSalarioPorHora] = useState(0);
   const [salarioMensual, setSalarioMensual] = useState(0);
 
-  // Estados para edición
+  const [crearUsuario, setCrearUsuario] = useState(false);
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+
   const [editando, setEditando] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editFechaNacimiento, setEditFechaNacimiento] = useState("");
@@ -63,6 +65,9 @@ export function MaestrosPage() {
         salarioPorHora: tipoPago === "por_hora" ? salarioPorHora : 0,
         tipoPago: tipoPago,
         salarioMensual: tipoPago === "fijo_mensual" ? salarioMensual : 0,
+        crearUsuario: crearUsuario,
+        usuario: crearUsuario ? usuario : undefined,
+        password: crearUsuario ? password : undefined,
       };
       await crearProfesor(payload);
       setNombre("");
@@ -70,6 +75,9 @@ export function MaestrosPage() {
       setTipoPago("por_hora");
       setSalarioPorHora(0);
       setSalarioMensual(0);
+      setCrearUsuario(false);
+      setUsuario("");
+      setPassword("");
       await cargarProfesores();
     } catch (err) {
       setError("Error al crear maestro");
@@ -88,12 +96,7 @@ export function MaestrosPage() {
 
   const guardarEdicion = async (idProfesor: string) => {
     try {
-      // Actualizar nombre y estatus (endpoint existente)
       await renombrarProfesor(idProfesor, editNombre);
-
-      // Actualizar datos extra (nuevos campos)
-      // Nota: necesitas la función actualizarDatosExtraProfesor
-      // Si no la tienes, la agregué en api.ts antes
       const { actualizarDatosExtraProfesor } = await import("../../services/api");
       await actualizarDatosExtraProfesor(idProfesor, {
         fechaNacimiento: editFechaNacimiento || null,
@@ -101,7 +104,6 @@ export function MaestrosPage() {
         tipoPago: editTipoPago,
         salarioMensual: editTipoPago === "fijo_mensual" ? editSalarioMensual : 0,
       });
-
       setEditando(null);
       await cargarProfesores();
     } catch (err) {
@@ -140,7 +142,6 @@ export function MaestrosPage() {
 
       {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4">{error}</div>}
 
-      {/* Formulario de creación */}
       <form onSubmit={handleSubmit} className="mb-8 p-4 border rounded bg-gray-50">
         <h2 className="text-lg font-semibold mb-2">Nuevo Maestro</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -185,16 +186,49 @@ export function MaestrosPage() {
               className="border p-2 rounded"
             />
           )}
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 col-span-2"
-          >
-            Crear Maestro
-          </button>
         </div>
+
+        <div className="mt-4 border-t pt-4">
+          <h3 className="text-md font-semibold mb-2">Crear usuario para este profesor (opcional)</h3>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="checkbox"
+              checked={crearUsuario}
+              onChange={(e) => setCrearUsuario(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <label>Crear usuario</label>
+          </div>
+          {crearUsuario && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Usuario (ej. nombre.apellido)"
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
+                className="border p-2 rounded"
+                required={crearUsuario}
+              />
+              <input
+                type="password"
+                placeholder="Contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="border p-2 rounded"
+                required={crearUsuario}
+              />
+            </div>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full md:w-auto"
+        >
+          Crear Maestro
+        </button>
       </form>
 
-      {/* Lista de maestros */}
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border">
           <thead>
@@ -212,7 +246,6 @@ export function MaestrosPage() {
             {profesores.map((prof) => (
               <tr key={prof.idProfesor} className="border-t">
                 {editando === prof.idProfesor ? (
-                  // Fila de edición
                   <>
                     <td className="p-2 border">{prof.idProfesor}</td>
                     <td className="p-2 border">
@@ -277,7 +310,6 @@ export function MaestrosPage() {
                     </td>
                   </>
                 ) : (
-                  // Fila normal
                   <>
                     <td className="p-2 border">{prof.idProfesor}</td>
                     <td className="p-2 border">{prof.nombre}</td>

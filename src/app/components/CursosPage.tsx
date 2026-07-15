@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Plus, CheckCircle2, XCircle, Trash2, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Navbar } from '../components/Navbar';
 import {
     getCursos,
     crearCurso,
@@ -161,9 +160,7 @@ export function CursosPage() {
     const totalInactivos = cursos.length - totalActivos;
 
     return (
-        <div className="min-h-screen bg-[linear-gradient(135deg,#e9f8ff_0%,#f8fcff_45%,#e7f7ff_100%)]">
-            <Navbar />
-
+        <div className="min-h-screen bg-[linear-gradient(135deg,#e9f8ff_0%,#f8fcff_45%,#e7f7ff_100%)] pt-12"> {/* 👈 Ajuste de padding */}
             <main className="mx-auto w-full max-w-5xl px-6 py-8">
                 <header className="mb-8 flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500 text-white shadow-md">

@@ -80,17 +80,22 @@ export async function crearProfesor(data: {
   salarioPorHora?: number;
   tipoPago?: 'por_hora' | 'fijo_mensual';
   salarioMensual?: number;
+  // Nuevos campos para creación de usuario
+  crearUsuario?: boolean;
+  usuario?: string;
+  password?: string;
 }) {
   const res = await apiFetch("/profesores", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data), // 👈 Debe ser JSON.stringify
+    body: JSON.stringify(data),
   });
   const responseData = await res.json();
   if (!res.ok) throw new Error(responseData.error || "Error al crear el maestro");
   notifyDataChanged({ tipo: "profesor" });
   return responseData;
 }
+
 export async function renombrarProfesor(idProfesor: string, nombre: string) {
   const res = await apiFetch(`/profesores/${idProfesor}`, {
     method: "PATCH",
@@ -565,4 +570,48 @@ export async function getRentabilidadProfesores(filtros?: {
   const res = await apiFetch(`/reportes/rentabilidad-profesores?${params.toString()}`);
   if (!res.ok) throw new Error("Error al obtener rentabilidad de profesores");
   return res.json();
+}
+
+// ============================================================
+// NUEVAS FUNCIONES PARA RECUPERACIÓN DE CONTRASEÑA
+// ============================================================
+
+/**
+ * Solicita un token para restablecer la contraseña (desde la página de login)
+ */
+export async function solicitarResetPassword(usuario: string) {
+  const res = await apiFetch("/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ usuario }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al solicitar el restablecimiento");
+  return data;
+}
+
+/**
+ * Envía la nueva contraseña junto con el token recibido por correo
+ */
+export async function resetPassword(token: string, nuevaPassword: string) {
+  const res = await apiFetch("/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, nuevaPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al restablecer la contraseña");
+  return data;
+}
+
+/**
+ * (Admin) Envía un correo de restablecimiento a un usuario específico
+ */
+export async function resetPasswordPorAdmin(idUsuario: string) {
+  const res = await apiFetch(`/usuarios/${idUsuario}/reset-password`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al enviar el correo de restablecimiento");
+  return data;
 }

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Navbar } from "./Navbar";
 import {
   bajaAlumnoDeGrupo,
   eliminarHistorialCursoBaja,
@@ -469,26 +468,23 @@ export function AlumnosPage() {
 
   if (cargando) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="p-10 text-center">Cargando alumnos inscritos...</div>
+      <div className="min-h-screen bg-gray-50 p-10 text-center">
+        Cargando alumnos inscritos...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="p-10 text-center text-red-600">Error: {error}</div>
+      <div className="min-h-screen bg-gray-50 p-10 text-center text-red-600">
+        Error: {error}
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+      {/* HEADER DE LA PÁGINA - SIN NAVBAR */}
       <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
         <div className="mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
           <div className="min-w-0">
@@ -994,4 +990,3 @@ export function AlumnosPage() {
     </div>
   );
 }
-

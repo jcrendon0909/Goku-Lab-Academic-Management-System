@@ -1,5 +1,4 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
-import { Navbar } from '../components/Navbar';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
@@ -487,9 +486,7 @@ export function PagosPage() {
         }, 0);
 
     return (
-        <div className="bg-gray-50 min-h-screen w-full">
-            <Navbar />
-
+        <div className="bg-gray-50 min-h-screen w-full pt-12"> {/* 👈 Ajuste de padding */}
             <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
                 <div className="absolute right-10 top-0 h-24 w-24 rounded-full border-[18px] border-white/40" />
                 <div className="relative mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">

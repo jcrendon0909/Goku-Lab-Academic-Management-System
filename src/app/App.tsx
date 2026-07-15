@@ -1,4 +1,3 @@
-// src/app/App.tsx
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -9,9 +8,10 @@ import { MaestrosPage } from './components/MaestrosPage';
 import { CursosPage } from './components/CursosPage';
 import { LoginPage } from './components/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import RentabilidadProfesores from '../pages/RentabilidadProfesores';
-import { CalendarioProfesor } from './components/CalendarioProfesor';
 import { AdminUsuarios } from './components/AdminUsuarios';
+import { CalendarioProfesor } from './components/CalendarioProfesor';
+import RentabilidadProfesores from '../pages/RentabilidadProfesores';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
 
@@ -21,7 +21,10 @@ export const router = createBrowserRouter([
     Component: LoginPage,
   },
   {
-    // Todas las rutas protegidas comparten el Layout (con Header)
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
+  {
     element: (
       <ProtectedRoute>
         <Layout />

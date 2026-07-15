@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, UserPlus, Edit2, Trash2, Shield, User } from 'lucide-react';
+import { ArrowLeft, UserPlus, Edit2, Trash2, Key } from 'lucide-react';
 import { apiFetch } from '../../services/api';
+import { resetPasswordPorAdmin } from '../../services/api';
 import { toast } from 'sonner';
 
 interface Usuario {
@@ -9,7 +10,7 @@ interface Usuario {
   usuario: string;
   nombreCompleto: string;
   rol: 'admin' | 'profesor' | 'recepcion';
-  idProfesor?: string; // opcional, para vincular con profesor
+  idProfesor?: string;
 }
 
 export function AdminUsuarios() {
@@ -18,7 +19,6 @@ export function AdminUsuarios() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
 
-  // Estado del formulario
   const [formUsuario, setFormUsuario] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [formNombre, setFormNombre] = useState('');
@@ -91,6 +91,16 @@ export function AdminUsuarios() {
     }
   };
 
+  const handleResetPassword = async (userId: string) => {
+    if (!confirm('¿Enviar correo para restablecer la contraseña?')) return;
+    try {
+      await resetPasswordPorAdmin(userId);
+      toast.success('Correo enviado. Revisa la bandeja de entrada.');
+    } catch (error: any) {
+      toast.error(error.message || 'Error al enviar correo');
+    }
+  };
+
   if (cargando) return <div className="p-8 text-center">Cargando...</div>;
 
   return (
@@ -115,7 +125,6 @@ export function AdminUsuarios() {
           </button>
         </div>
 
-        {/* Formulario de creación/edición */}
         {mostrarFormulario && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4">
@@ -194,7 +203,6 @@ export function AdminUsuarios() {
           </div>
         )}
 
-        {/* Lista de usuarios */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -232,6 +240,13 @@ export function AdminUsuarios() {
                       className="text-indigo-600 hover:text-indigo-900"
                     >
                       <Edit2 className="h-4 w-4 inline" />
+                    </button>
+                    <button
+                      onClick={() => handleResetPassword(u._id)}
+                      className="text-blue-600 hover:text-blue-800"
+                      title="Enviar correo para restablecer contraseña"
+                    >
+                      <Key className="h-4 w-4 inline" />
                     </button>
                     <button
                       onClick={() => handleEliminar(u._id)}

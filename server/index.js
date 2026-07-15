@@ -18,7 +18,10 @@ import calendarioRoutes from "./routes/calendario.js";
 // ===== NUEVAS RUTAS =====
 import gastosRoutes from "./routes/gastos.js";
 import reportesRoutes from "./routes/reportes.js";
-
+import usuariosRoutes from './routes/usuarios.js';
+// ...
+app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/auth', authRoutes);
 dotenv.config();
 
 const app = express();
