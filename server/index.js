@@ -19,9 +19,7 @@ import calendarioRoutes from "./routes/calendario.js";
 import gastosRoutes from "./routes/gastos.js";
 import reportesRoutes from "./routes/reportes.js";
 import usuariosRoutes from './routes/usuarios.js';
-// ...
-app.use('/api/usuarios', usuariosRoutes);
-app.use('/api/auth', authRoutes);
+
 dotenv.config();
 
 const app = express();
@@ -50,6 +48,7 @@ app.use("/api/calendario", calendarioRoutes);
 // ===== NUEVAS RUTAS =====
 app.use("/api/gastos", gastosRoutes);
 app.use("/api/reportes", reportesRoutes);
+app.use("/api/usuarios", usuariosRoutes); // 👈 AHORA SÍ ESTÁ MONTADA
 
 // Ruta de prueba (opcional)
 app.get("/", (req, res) => {
