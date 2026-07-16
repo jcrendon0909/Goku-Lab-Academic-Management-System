@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { Link } from 'react-router-dom';
+import { ClassDetailsDialog } from './ClassDetailsDialog';
+import { toast } from 'sonner';
 
 interface Clase {
   id: string;
@@ -16,6 +18,10 @@ interface Clase {
   studentName?: string;
   idProfesor?: string;
   idGrupo?: string;
+  teacher?: { id: string; name: string; email?: string; available?: boolean };
+  students?: any[];
+  comentarioGrupo?: string;
+  // ... otros campos que necesite el diálogo
 }
 
 export function CalendarioProfesor() {
@@ -23,6 +29,8 @@ export function CalendarioProfesor() {
   const [clases, setClases] = useState<Clase[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [claseSeleccionada, setClaseSeleccionada] = useState<any>(null);
+  const [dialogAbierto, setDialogAbierto] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const idProfesor = user.idProfesor;
 
@@ -39,20 +47,16 @@ export function CalendarioProfesor() {
         }
 
         const data = await res.json();
-        console.log('📅 Datos del calendario:', data); // Para depuración
+        console.log('📅 Datos del calendario:', data);
 
-        // Procesar la respuesta del backend
         let eventos: Clase[] = [];
 
         if (Array.isArray(data)) {
-          // Si la respuesta es un array (caso antiguo o mock)
           eventos = data;
         } else if (data && typeof data === 'object') {
-          // Estructura actual: { clasesBase, reagendaciones, clasesCanceladas }
           const clasesBase = data.clasesBase || [];
           const reagendaciones = data.reagendaciones || [];
 
-          // Mapear clases base
           const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
             id: grupo.idGrupo || `base-${Math.random()}`,
             titulo: grupo.nombreCurso || 'Clase',
@@ -65,27 +69,54 @@ export function CalendarioProfesor() {
             idGrupo: grupo.idGrupo,
             studentId: grupo.alumnos?.[0]?.idAlumno || '',
             studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
+            students: grupo.alumnos || [],
+            comentarioGrupo: grupo.comentarioGrupo || '',
+            // Añadir otros campos necesarios para el diálogo
+            date: new Date(grupo.diaClase || Date.now()),
+            startTime: grupo.horaClase,
+            endTime: grupo.horaFin,
+            title: grupo.nombreCurso,
+            cursoActivo: grupo.cursoActivo,
+            idCurso: grupo.idCurso,
+            profesorActivo: grupo.profesorActivo,
+            capacidadMaxima: grupo.capacidadMaxima,
+            alumnosInscritos: grupo.alumnosInscritos,
+            estatus: grupo.estatus,
+            tipoReagendacionClase: null,
           }));
 
-          // Mapear reagendaciones
           const reagendacionesMapeadas = reagendaciones.map((grupo: any) => ({
             id: grupo.reagendacionId || `reag-${Math.random()}`,
             titulo: grupo.nombreCurso || 'Clase reagendada',
             profesor: grupo.nombreProfesor || 'Sin profesor',
             fecha: grupo.diaClase || '',
             horaInicio: grupo.horaClase || '',
-            horaFin: '', // Las reagendaciones no tienen hora fin definida en la respuesta
+            horaFin: '',
             reagendada: true,
             idProfesor: grupo.idProfesor || '',
             idGrupo: grupo.idGrupo,
             studentId: grupo.alumnos?.[0]?.idAlumno || '',
             studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: true },
+            students: grupo.alumnos || [],
+            comentarioGrupo: grupo.comentarioGrupo || '',
+            date: new Date(grupo.diaClase || Date.now()),
+            startTime: grupo.horaClase,
+            endTime: '',
+            title: grupo.nombreCurso,
+            cursoActivo: true,
+            idCurso: grupo.idCurso,
+            profesorActivo: true,
+            capacidadMaxima: grupo.capacidadMaxima,
+            alumnosInscritos: grupo.alumnosInscritos,
+            estatus: grupo.estatus,
+            tipoReagendacionClase: 'destino', // Marcar como reagendada
           }));
 
           eventos = [...clasesBaseMapeadas, ...reagendacionesMapeadas];
         }
 
-        // Si el usuario tiene idProfesor, filtrar por él
         if (idProfesor && eventos.length > 0) {
           eventos = eventos.filter(
             (e) => e.idProfesor === idProfesor || e.profesor === user.nombreCompleto
@@ -96,31 +127,7 @@ export function CalendarioProfesor() {
       } catch (error) {
         console.error('Error al cargar calendario:', error);
         setError('No se pudo cargar el calendario. Intenta de nuevo.');
-        // Datos de ejemplo en caso de error
-        setClases([
-          {
-            id: '1',
-            titulo: 'Matemáticas',
-            profesor: 'Juan Pérez',
-            fecha: '2026-07-15',
-            horaInicio: '10:00',
-            horaFin: '12:00',
-            reagendada: false,
-            studentId: 's1',
-            studentName: 'Ana García'
-          },
-          {
-            id: '2',
-            titulo: 'Programación',
-            profesor: 'María Gómez',
-            fecha: '2026-07-16',
-            horaInicio: '14:00',
-            horaFin: '16:00',
-            reagendada: true,
-            studentId: 's2',
-            studentName: 'Carlos Ruiz'
-          },
-        ]);
+        setClases([]);
       } finally {
         setCargando(false);
       }
@@ -129,8 +136,77 @@ export function CalendarioProfesor() {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
-  const handleReagendar = (claseId: string, studentId: string, studentName: string) => {
-    navigate(`/reschedule?classId=${claseId}&studentId=${studentId}&studentName=${encodeURIComponent(studentName)}`);
+  // Manejadores para las acciones del diálogo
+  const handleReagendar = (student: any) => {
+    // Abrir el flujo de reagendación con los datos del estudiante y la clase
+    navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
+  };
+
+  const handleInscribirAlumno = (classData: any) => {
+    // Abrir el formulario de inscripción (puedes implementar un modal o redirigir)
+    toast.info('Función de inscripción pendiente de implementar');
+    // Puedes abrir el formulario de inscripción con los datos de la clase
+    // navigate(`/alumnos/inscribir?grupoId=${classData.id}`);
+  };
+
+  const handleEliminarGrupo = (classData: any) => {
+    // Confirmar y eliminar grupo
+    if (window.confirm(`¿Eliminar el grupo ${classData.titulo}?`)) {
+      // Llamar a la API para eliminar
+      toast.info('Eliminación de grupo pendiente de implementar');
+    }
+  };
+
+  const handleGuardarComentarioGrupo = async (classData: any, comentario: string) => {
+    try {
+      const res = await apiFetch(`/grupos/${classData.id}/comentario`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comentario }),
+      });
+      if (!res.ok) throw new Error('Error al guardar comentario');
+      toast.success('Comentario guardado');
+      // Recargar clases para actualizar
+      cargarClases();
+    } catch (error) {
+      toast.error('Error al guardar comentario');
+    }
+  };
+
+  const handleEliminarReagendacion = (classData: any) => {
+    // Llamar a la API para eliminar la reagendación
+    toast.info('Eliminación de reagendación pendiente de implementar');
+  };
+
+  const handleBajaAlumno = (student: any, classData: any) => {
+    // Llamar a la API para dar de baja al alumno del grupo
+    toast.info('Baja de alumno pendiente de implementar');
+  };
+
+  const handleEliminarReagendacionAlumno = (student: any, classData: any) => {
+    // Llamar a la API para eliminar la reagendación del alumno
+    toast.info('Eliminación de reagendación de alumno pendiente de implementar');
+  };
+
+  const handleActualizarInscripcion = async (student: any, classData: any, datos: { modalidad?: string; comentarios?: string }) => {
+    try {
+      const res = await apiFetch(`/inscripciones/${student.idAlumno}/${classData.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+      });
+      if (!res.ok) throw new Error('Error al actualizar inscripción');
+      toast.success('Inscripción actualizada');
+      // Recargar clases
+      cargarClases();
+    } catch (error) {
+      toast.error('Error al actualizar inscripción');
+    }
+  };
+
+  const cargarClases = () => {
+    // Re-ejecutar la carga de clases (se puede refactorizar para reutilizar)
+    window.location.reload(); // O mejor, llamar a la función de carga directamente
   };
 
   if (cargando) {
@@ -189,7 +265,11 @@ export function CalendarioProfesor() {
             {clases.map((clase) => (
               <div
                 key={clase.id}
-                className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 ${
+                onClick={() => {
+                  setClaseSeleccionada(clase);
+                  setDialogAbierto(true);
+                }}
+                className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
                   clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
                 }`}
               >
@@ -221,18 +301,33 @@ export function CalendarioProfesor() {
                 </div>
 
                 {clase.studentId && clase.studentName && (
-                  <button
-                    onClick={() => handleReagendar(clase.id, clase.studentId!, clase.studentName!)}
-                    className="mt-3 w-full bg-[#26AAA3] text-white py-2 rounded-lg text-sm hover:bg-[#1f8c86] transition-colors"
-                  >
-                    Reagendar esta clase
-                  </button>
+                  <div className="mt-2 text-xs text-gray-500">
+                    Alumno: {clase.studentName}
+                  </div>
                 )}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Diálogo de detalles de clase */}
+      {claseSeleccionada && (
+        <ClassDetailsDialog
+          classData={claseSeleccionada}
+          isOpen={dialogAbierto}
+          puedeEditar={user.rol === 'admin'} // Solo admin puede editar
+          onClose={() => setDialogAbierto(false)}
+          onReagendar={handleReagendar}
+          onInscribirAlumno={handleInscribirAlumno}
+          onEliminarGrupo={handleEliminarGrupo}
+          onGuardarComentarioGrupo={handleGuardarComentarioGrupo}
+          onEliminarReagendacion={handleEliminarReagendacion}
+          onBajaAlumno={handleBajaAlumno}
+          onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}
+          onActualizarInscripcion={handleActualizarInscripcion}
+        />
+      )}
     </div>
   );
 }
