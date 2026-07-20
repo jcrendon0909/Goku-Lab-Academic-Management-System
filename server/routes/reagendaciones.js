@@ -11,6 +11,7 @@ const generarId = async (prefijo) => {
   return `${prefijo}${num}`;
 };
 
+// GET - Obtener todas las reagendaciones
 router.get("/", async (req, res) => {
   try {
     const reagendaciones = await Reagendacion.find().lean();
@@ -21,6 +22,7 @@ router.get("/", async (req, res) => {
   }
 });
 
+// POST - Crear nueva reagendación
 router.post("/", async (req, res) => {
   try {
     console.log("📥 POST /reagendaciones - Payload recibido:", req.body);
@@ -95,7 +97,7 @@ router.post("/", async (req, res) => {
       tipoReagendacion: tipoReagendacion || "temporal",
       comentario: comentario || `Reagendado por ${nombreAlumno}`,
       duracion: grupoOrigen.duracionClase || "2 horas",
-      modalidad: modalidad || "Presencial",
+      modalidad: modalidad || "Presencial", // ✅ SE GUARDA CORRECTAMENTE
       motivo: "Reagendado desde sistema",
       estatus: "reagendado",
     });
@@ -111,15 +113,61 @@ router.post("/", async (req, res) => {
   }
 });
 
+// ✅ NUEVO ENDPOINT: PUT - Actualizar modalidad de una reagendación existente
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { modalidad } = req.body;
+
+    console.log(`📥 PUT /reagendaciones/${id} - Actualizando modalidad a: "${modalidad}"`);
+
+    // Validar que la modalidad sea válida
+    if (!modalidad || !["Presencial", "Virtual"].includes(modalidad)) {
+      return res.status(400).json({ 
+        error: "Modalidad inválida. Debe ser 'Presencial' o 'Virtual'" 
+      });
+    }
+
+    // Buscar la reagendación por _id o ReagendacionId
+    const reagendacion = await Reagendacion.findOneAndUpdate(
+      { $or: [{ _id: id }, { ReagendacionId: id }] },
+      { modalidad },
+      { new: true, runValidators: true }
+    );
+
+    if (!reagendacion) {
+      console.error(`❌ Reagendación no encontrada con ID: ${id}`);
+      return res.status(404).json({ error: "Reagendación no encontrada" });
+    }
+
+    console.log("✅ Reagendación actualizada:", reagendacion);
+    res.json({ 
+      ok: true, 
+      mensaje: "Modalidad actualizada exitosamente", 
+      data: reagendacion 
+    });
+  } catch (error) {
+    console.error("❌ Error en PUT /reagendaciones/:id:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Eliminar reagendación
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`📥 DELETE /reagendaciones/${id}`);
+
     const reagendacion = await Reagendacion.findOneAndDelete({
       $or: [{ _id: id }, { ReagendacionId: id }],
     });
+
     if (!reagendacion) {
+      console.error(`❌ Reagendación no encontrada con ID: ${id}`);
       return res.status(404).json({ error: "Reagendación no encontrada" });
     }
+
+    console.log("✅ Reagendación eliminada:", reagendacion);
     res.json({ ok: true, mensaje: "Reagendación eliminada" });
   } catch (error) {
     console.error("Error DELETE /reagendaciones/:id:", error);

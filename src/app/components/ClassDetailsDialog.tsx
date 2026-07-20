@@ -50,7 +50,7 @@ export function ClassDetailsDialog({
   const [comentarioGrupo, setComentarioGrupo] = useState('');
   const [guardandoComentario, setGuardandoComentario] = useState(false);
   const [comentariosPorAlumno, setComentariosPorAlumno] = useState<Record<string, string>>({});
-  const [modalidadesPorAlumno, setModalidadesPorAlumno] = useState<Record<string, string>>({}); // 👈 NUEVO
+  const [modalidadesPorAlumno, setModalidadesPorAlumno] = useState<Record<string, string>>({});
   const [guardandoComentarioAlumno, setGuardandoComentarioAlumno] = useState<string | null>(null);
   const [cambiandoModalidadAlumno, setCambiandoModalidadAlumno] = useState<string | null>(null);
   const [showAllData, setShowAllData] = useState(false);
@@ -62,17 +62,23 @@ export function ClassDetailsDialog({
     if (isOpen && classData) {
       setComentarioGrupo(classData?.comentarioGrupo || '');
       
-      // Inicializar comentarios y modalidades por alumno
       const comentariosIniciales: Record<string, string> = {};
       const modalidadesIniciales: Record<string, string> = {};
+      
       for (const student of classData?.students || []) {
         if (student?.idAlumno) {
           comentariosIniciales[student.idAlumno] = student.comentarios || '';
-          modalidadesIniciales[student.idAlumno] = student.modalidad || 'Presencial';
+          
+          // Si es destino de reagendación y tenemos modalidad de la reagendación, usarla
+          let modalidad = student.modalidad || 'Presencial';
+          if (classData?.tipoReagendacionClase === 'destino' && classData?.modalidadReagendacion) {
+            modalidad = classData.modalidadReagendacion;
+          }
+          modalidadesIniciales[student.idAlumno] = modalidad;
         }
       }
       setComentariosPorAlumno(comentariosIniciales);
-      setModalidadesPorAlumno(modalidadesIniciales); // 👈 NUEVO
+      setModalidadesPorAlumno(modalidadesIniciales);
     }
   }, [isOpen, classData]);
 
@@ -104,24 +110,56 @@ export function ClassDetailsDialog({
     }
   };
 
+  // ✅ Función para actualizar la modalidad en la reagendación (destino)
+  const actualizarReagendacionModalidad = async (modalidad: string) => {
+    // Obtenemos el ID de la reagendación desde classData
+    const reagendacionId = classData?.reagendacionId;
+    if (!reagendacionId) {
+      throw new Error('No se encontró el ID de la reagendación');
+    }
+
+    const response = await fetch(`/api/reagendaciones/${reagendacionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modalidad }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error al actualizar la modalidad');
+    }
+
+    return await response.json();
+  };
+
   const handleCambiarModalidad = async (student: any, modalidad: 'Presencial' | 'Virtual') => {
-    // Obtener la modalidad actual desde el estado local
     const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
     if (modalidadActual === modalidad) return;
-    
+
     try {
       setCambiandoModalidadAlumno(student.idAlumno);
-      await onActualizarInscripcion(student, classData, { modalidad });
-      
-      // 👇 Actualizar el estado local inmediatamente para reflejar el cambio en la UI
+
+      // Determinar si es destino de reagendación
+      const esDestino = classData?.tipoReagendacionClase === 'destino';
+
+      if (esDestino) {
+        // ✅ Actualizar la reagendación (destino)
+        await actualizarReagendacionModalidad(modalidad);
+      } else {
+        // ✅ Actualizar la inscripción (origen)
+        await onActualizarInscripcion(student, classData, { modalidad });
+      }
+
+      // ✅ Actualizar el estado local siempre
       setModalidadesPorAlumno(prev => ({
         ...prev,
         [student.idAlumno]: modalidad,
       }));
-      
+
       toast.success('Modalidad actualizada');
-    } catch (error) {
-      toast.error('Error al cambiar modalidad');
+    } catch (error: any) {
+      console.error('Error al cambiar modalidad:', error);
+      toast.error(error.message || 'Error al cambiar modalidad');
     } finally {
       setCambiandoModalidadAlumno(null);
     }
@@ -131,7 +169,7 @@ export function ClassDetailsDialog({
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
 
-  // 👇 Función auxiliar para formatear fecha/hora de la reagendación
+  // Función auxiliar para formatear fecha/hora de la reagendación
   const formatearFechaHoraReagendacion = (fechaHoraNueva: string) => {
     const fecha = new Date(fechaHoraNueva);
     if (isNaN(fecha.getTime())) return null;
@@ -180,7 +218,7 @@ export function ClassDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
-          {/* Información general - CORREGIDO para mostrar nueva fecha/hora en reagendaciones destino */}
+          {/* Información general */}
           <Card className="p-4 bg-gray-50 rounded-lg border-none">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-3">
@@ -305,7 +343,6 @@ export function ClassDetailsDialog({
               <div className="space-y-3">
                 {classData.students.map((student: any, index: number) => {
                   const comentarioEditado = comentariosPorAlumno[student.idAlumno] ?? '';
-                  // 👇 Obtener modalidad desde el estado local, con fallback al valor original
                   const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
                   const esReagendado = student.reagendacion?.tipo === 'destino';
 
@@ -464,7 +501,7 @@ export function ClassDetailsDialog({
             </div>
           )}
 
-          {/* 👇 NUEVA SECCIÓN: BOTÓN PARA VER TODOS LOS DATOS TÉCNICOS */}
+          {/* Botón para ver todos los datos técnicos */}
           <div className="pt-4 border-t border-gray-200">
             <button
               onClick={() => setShowAllData(!showAllData)}
