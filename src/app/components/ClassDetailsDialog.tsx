@@ -506,7 +506,18 @@ export function ClassDetailsDialog({
                       <div className="flex justify-between">
                         <span className="text-gray-500">Profesor original:</span>
                         <span className="font-medium text-gray-800">
-                          {classData?.profesorOriginal || classData?.students?.[0]?.reagendacion?.idProfesorOriginal || 'No asignado'}
+                          {(() => {
+                            const nombreOriginal = classData?.profesorOriginal || 
+                              classData?.students?.[0]?.reagendacion?.idProfesorOriginal || 
+                              'No asignado';
+                            // Si es un ID que empieza con "PROF" y tenemos el nombre del profesor actual, lo usamos
+                            if (typeof nombreOriginal === 'string' && 
+                                nombreOriginal.startsWith('PROF') && 
+                                classData?.teacher?.name) {
+                              return classData.teacher.name;
+                            }
+                            return nombreOriginal;
+                          })()}
                         </span>
                       </div>
                       <div className="flex justify-between">
