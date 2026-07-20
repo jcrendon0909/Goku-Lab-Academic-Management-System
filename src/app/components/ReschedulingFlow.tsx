@@ -70,6 +70,16 @@ export function ReschedulingFlow() {
 
     setIsConfirming(true);
     try {
+      console.log('📤 Enviando reagendación:', {
+        classId,
+        studentId,
+        studentName,
+        newDate: selectedDate,
+        newTime: selectedTime,
+        newTeacher: selectedTeacher,
+        duration: parseFloat(selectedDuration),
+      });
+      
       await rescheduleClass(classId, studentId, {
         newDate: selectedDate,
         newTime: selectedTime,
@@ -80,6 +90,7 @@ export function ReschedulingFlow() {
       toast.success('Clase reprogramada exitosamente');
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('❌ Error al reagendar:', error);
       toast.error(error.message || 'Error al reagendar');
     } finally {
       setIsConfirming(false);

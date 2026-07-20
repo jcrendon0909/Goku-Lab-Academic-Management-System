@@ -37,21 +37,30 @@ router.post("/", async (req, res) => {
       modalidad,
     } = req.body;
 
+    console.log('📥 Payload recibido:', req.body);
+
     // Validaciones básicas
     if (!idAlumno || !idGrupoOrigen || !fechaHoraNueva) {
+      console.error('❌ Faltan campos obligatorios');
       return res.status(400).json({ error: "Faltan campos obligatorios" });
     }
 
-    // Obtener el grupo origen usando el campo string 'IdGrupo' (con mayúscula)
+    // Obtener el grupo origen usando el campo string 'IdGrupo'
+    console.log(`🔍 Buscando grupo con IdGrupo: "${idGrupoOrigen}"`);
     const grupoOrigen = await Grupo.findOne({ IdGrupo: idGrupoOrigen }).lean();
+    console.log('✅ Grupo origen encontrado:', grupoOrigen);
+
     if (!grupoOrigen) {
-      return res.status(404).json({ error: "Grupo origen no encontrado" });
+      console.error(`❌ Grupo no encontrado para IdGrupo: "${idGrupoOrigen}"`);
+      return res.status(404).json({ error: `Grupo origen no encontrado: ${idGrupoOrigen}` });
     }
 
     // Obtener el grupo destino (si existe y es diferente)
     let grupoNuevo = null;
     if (idGrupoNuevo && idGrupoNuevo !== idGrupoOrigen) {
+      console.log(`🔍 Buscando grupo destino con IdGrupo: "${idGrupoNuevo}"`);
       grupoNuevo = await Grupo.findOne({ IdGrupo: idGrupoNuevo }).lean();
+      console.log('✅ Grupo destino encontrado:', grupoNuevo);
     }
 
     // Obtener nombres de curso y profesor
@@ -65,7 +74,6 @@ router.post("/", async (req, res) => {
       profesorNuevoId = grupoNuevo.idProfesor || "";
       profesorNuevoNombre = grupoNuevo.nombreProfesor || "Sin profesor";
     } else {
-      // Si no hay grupo nuevo, el profesor nuevo es el mismo que el original
       profesorNuevoId = profesorOriginalId;
       profesorNuevoNombre = profesorOriginalNombre;
     }
@@ -103,12 +111,12 @@ router.post("/", async (req, res) => {
     });
 
     await nuevaReagendacion.save();
+    console.log('✅ Reagendación guardada:', nuevaReagendacion);
 
-    // Responder con el objeto creado
     res.status(201).json(nuevaReagendacion);
   } catch (error) {
-    console.error("Error POST /reagendaciones:", error);
-    res.status(500).json({ error: error.message });
+    console.error("❌ Error POST /reagendaciones:", error);
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 
