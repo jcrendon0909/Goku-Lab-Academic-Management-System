@@ -91,9 +91,15 @@ export const initWhatsApp = () => {
     client = new Client({ puppeteer: puppeteerConfig });
 
     client.on('qr', (qr) => {
-      console.log('📱 Escanea el siguiente código QR:');
-      qrcode.generate(qr, { small: true });
-    });
+  console.log('📱 Escanea el siguiente código QR:');
+  // Genera la imagen QR en la terminal (puede ser ilegible en Render)
+  qrcode.generate(qr, { small: true });
+  
+  // 🔥 NUEVO: Muestra el QR como texto para copiarlo y pegarlo en un generador
+  console.log('\n🔗 CÓDIGO QR EN TEXTO (copia esto y pégalo en https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=TU_CODIGO):\n');
+  console.log(qr);
+  console.log('\n⏳ Esperando conexión...');
+});
 
     client.on('authenticated', () => {
       console.log('✅ WhatsApp autenticado. Sesión guardada automáticamente.');
