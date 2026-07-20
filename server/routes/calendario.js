@@ -446,8 +446,8 @@ router.get("/", async (req, res) => {
             "",
           estatus: "Reagendado",
           esVirtual: !grupoNuevo,
-          // 🔥 NUEVOS CAMPOS PARA LA REAGENDACIÓN
-          modalidadReagendacion: r.modalidad || "Presencial",
+          // 🔥 CAMBIO: usar 'modalidad' en lugar de 'modalidadReagendacion'
+          modalidad: r.modalidad || "Presencial",
           duracion: r.duracion || "2 horas",
           fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : null,
         };
@@ -491,11 +491,11 @@ router.get("/", async (req, res) => {
           ) === normalizar(grupoOrigenIns)
       );
 
-      // 🔥 MODIFICACIÓN: Usar la modalidad de la reagendación (r.modalidad) en lugar de la de la inscripción
+      // 🔥 MODIFICACIÓN: Usar la modalidad de la reagendación (r.modalidad)
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
-        modalidad: r.modalidad || "Presencial", // <-- priorizar la de la reagendación
+        modalidad: r.modalidad || "Presencial", // priorizar la de la reagendación
         comentarios: insOrigen?.comentarios || "",
         grupoIdInscripcion: grupoOrigenIns,
         reagendacion: {
@@ -520,13 +520,14 @@ router.get("/", async (req, res) => {
       (grupo) => ({
         ...grupo,
         alumnosInscritos: grupo.alumnos.length,
-        // 🔥 NUEVO: Identificar que es una clase destino
         tipoReagendacionClase: "destino",
+        // 🔥 Asegurar que modalidad esté presente
+        modalidad: grupo.modalidad || "Presencial",
       })
     );
 
     // ============================================================
-    // 🔥 FILTRO POR PROFESOR (nuevo)
+    // 🔥 FILTRO POR PROFESOR
     // ============================================================
     const profesorId = req.query.profesor;
     if (profesorId) {
