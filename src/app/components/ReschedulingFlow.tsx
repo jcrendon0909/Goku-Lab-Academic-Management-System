@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'; // ✅ CORREGIDO
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, User, AlertCircle, MessageCircle, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -98,6 +98,19 @@ export function ReschedulingFlow() {
       </div>
     );
   }
+
+  // 👇 Función auxiliar para mostrar la fecha sin desfase horario
+  const formatearFechaLocal = (fechaStr: string) => {
+    // Interpretar la fecha como UTC (sin conversión a local)
+    const fecha = new Date(fechaStr + 'T00:00:00Z');
+    return fecha.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC'
+    });
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -331,12 +344,7 @@ export function ReschedulingFlow() {
                   <Check className="h-5 w-5 text-green-600 mt-0.5" />
                   <div className="text-sm text-green-900">
                     <span className="font-medium">Nueva clase programada: </span>
-                    {new Date(selectedDate).toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })} a las {selectedTime} con {selectedTeacher.nombre}
+                    {formatearFechaLocal(selectedDate)} a las {selectedTime} con {selectedTeacher.nombre}
                     <span className="font-medium"> • Duración: {selectedDuration === '0.5' ? '30 minutos' : selectedDuration === '1' ? '1 hora' : selectedDuration === '1.5' ? '1.5 horas' : `${selectedDuration} horas`}</span>
                   </div>
                 </div>

@@ -5,7 +5,7 @@ import Inscripcion from "../models/Inscripcion.js";
 
 const router = express.Router();
 
-// Función auxiliar para generar ID (si no tienes una, usa esta)
+// Función auxiliar para generar ID
 const generarId = async (prefijo) => {
   const count = await Reagendacion.countDocuments();
   const num = String(count + 1).padStart(3, "0");
@@ -42,8 +42,8 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Faltan campos obligatorios" });
     }
 
-    // Obtener el grupo origen para obtener el curso y profesor original
-    const grupoOrigen = await Grupo.findById(idGrupoOrigen).lean();
+    // Obtener el grupo origen usando el campo string 'IdGrupo' (con mayúscula)
+    const grupoOrigen = await Grupo.findOne({ IdGrupo: idGrupoOrigen }).lean();
     if (!grupoOrigen) {
       return res.status(404).json({ error: "Grupo origen no encontrado" });
     }
@@ -51,7 +51,7 @@ router.post("/", async (req, res) => {
     // Obtener el grupo destino (si existe y es diferente)
     let grupoNuevo = null;
     if (idGrupoNuevo && idGrupoNuevo !== idGrupoOrigen) {
-      grupoNuevo = await Grupo.findById(idGrupoNuevo).lean();
+      grupoNuevo = await Grupo.findOne({ IdGrupo: idGrupoNuevo }).lean();
     }
 
     // Obtener nombres de curso y profesor
