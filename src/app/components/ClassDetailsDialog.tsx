@@ -11,7 +11,7 @@ import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Calendar, Clock, User, Users, RotateCcw, StickyNote, BookOpen, Pencil, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatMexicoTimeRange } from '../../utils/dateUtils'; // 👈 NUEVA IMPORTACIÓN
+import { formatMexicoTimeRange } from '../../utils/dateUtils';
 
 interface ClassDetailsDialogProps {
   classData: any;
@@ -50,9 +50,10 @@ export function ClassDetailsDialog({
   const [comentarioGrupo, setComentarioGrupo] = useState('');
   const [guardandoComentario, setGuardandoComentario] = useState(false);
   const [comentariosPorAlumno, setComentariosPorAlumno] = useState<Record<string, string>>({});
+  const [modalidadesPorAlumno, setModalidadesPorAlumno] = useState<Record<string, string>>({}); // 👈 NUEVO
   const [guardandoComentarioAlumno, setGuardandoComentarioAlumno] = useState<string | null>(null);
   const [cambiandoModalidadAlumno, setCambiandoModalidadAlumno] = useState<string | null>(null);
-  const [showAllData, setShowAllData] = useState(false); // 👈 NUEVO ESTADO
+  const [showAllData, setShowAllData] = useState(false);
 
   const esReagendada = Boolean(classData?.tipoReagendacionClase);
   const profesorRequiereAtencion = !classData?.teacher?.name || classData?.profesorActivo === false;
@@ -60,13 +61,18 @@ export function ClassDetailsDialog({
   useEffect(() => {
     if (isOpen && classData) {
       setComentarioGrupo(classData?.comentarioGrupo || '');
-      const inicial: Record<string, string> = {};
+      
+      // Inicializar comentarios y modalidades por alumno
+      const comentariosIniciales: Record<string, string> = {};
+      const modalidadesIniciales: Record<string, string> = {};
       for (const student of classData?.students || []) {
         if (student?.idAlumno) {
-          inicial[student.idAlumno] = student.comentarios || '';
+          comentariosIniciales[student.idAlumno] = student.comentarios || '';
+          modalidadesIniciales[student.idAlumno] = student.modalidad || 'Presencial';
         }
       }
-      setComentariosPorAlumno(inicial);
+      setComentariosPorAlumno(comentariosIniciales);
+      setModalidadesPorAlumno(modalidadesIniciales); // 👈 NUEVO
     }
   }, [isOpen, classData]);
 
@@ -99,10 +105,20 @@ export function ClassDetailsDialog({
   };
 
   const handleCambiarModalidad = async (student: any, modalidad: 'Presencial' | 'Virtual') => {
-    if (student.modalidad === modalidad) return;
+    // Obtener la modalidad actual desde el estado local
+    const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
+    if (modalidadActual === modalidad) return;
+    
     try {
       setCambiandoModalidadAlumno(student.idAlumno);
       await onActualizarInscripcion(student, classData, { modalidad });
+      
+      // 👇 Actualizar el estado local inmediatamente para reflejar el cambio en la UI
+      setModalidadesPorAlumno(prev => ({
+        ...prev,
+        [student.idAlumno]: modalidad,
+      }));
+      
       toast.success('Modalidad actualizada');
     } catch (error) {
       toast.error('Error al cambiar modalidad');
@@ -185,7 +201,7 @@ export function ClassDetailsDialog({
                   <div className="text-xs text-gray-500">Horario</div>
                   <div className="text-sm font-medium text-gray-900">
                     {esDestinoReagendado && fechaInfo
-                      ? `${formatMexicoTimeRange(classData.fechaHoraNueva, classData.duracion)}` // 👈 CORREGIDO
+                      ? `${formatMexicoTimeRange(classData.fechaHoraNueva, classData.duracion)}`
                       : `${classData?.startTime} - ${classData?.endTime}`
                     }
                   </div>
@@ -289,7 +305,8 @@ export function ClassDetailsDialog({
               <div className="space-y-3">
                 {classData.students.map((student: any, index: number) => {
                   const comentarioEditado = comentariosPorAlumno[student.idAlumno] ?? '';
-                  const modalidadActual = student.modalidad || 'Presencial';
+                  // 👇 Obtener modalidad desde el estado local, con fallback al valor original
+                  const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
                   const esReagendado = student.reagendacion?.tipo === 'destino';
 
                   return (
