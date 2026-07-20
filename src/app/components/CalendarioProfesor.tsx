@@ -5,7 +5,6 @@ import { apiFetch } from '../../services/api';
 import { Link } from 'react-router-dom';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { toast } from 'sonner';
-import { Badge } from './ui/badge'; // 👈 NUEVA IMPORTACIÓN
 
 interface Clase {
   id: string;
@@ -31,7 +30,6 @@ interface Clase {
   estatus?: string;
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
-  modalidadReagendacion?: string; // 👈 NUEVO CAMPO OPCIONAL (para destino)
 }
 
 export function CalendarioProfesor() {
@@ -94,12 +92,9 @@ export function CalendarioProfesor() {
           estatus: grupo.estatus,
           tipoReagendacionClase: null,
           fechaHoraNueva: null,
-          modalidadReagendacion: null, // 👈 PARA BASE NO APLICA
         }));
 
-        // ===== MAPEO DE REAGENDACIONES (CORREGIDO) =====
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
-          // Extraer la primera reagendación del grupo para obtener la nueva fecha/hora
           const primeraReagendacion = grupo.alumnos?.[0]?.reagendacion;
           let fechaHoraNueva = null;
           let diaClase = grupo.diaClase || '';
@@ -110,16 +105,13 @@ export function CalendarioProfesor() {
             const fecha = new Date(primeraReagendacion.fechaHoraNueva);
             if (!isNaN(fecha.getTime())) {
               fechaHoraNueva = fecha;
-              // Obtener el día de la semana
               const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
               diaClase = dias[fecha.getDay()] || grupo.diaClase || '';
-              // Formatear la hora (UTC a local)
               const horas = String(fecha.getHours()).padStart(2, '0');
               const minutos = String(fecha.getMinutes()).padStart(2, '0');
               horaInicio = `${horas}:${minutos}`;
-              // Calcular hora de fin usando la duración del grupo (si existe)
               const duracion = grupo.duracion || '2 horas';
-              let minutosDuracion = 120; // Default
+              let minutosDuracion = 120;
               const match = String(duracion).match(/(\d+(?:\.\d+)?)/);
               if (match) {
                 minutosDuracion = parseFloat(match[1]) * 60;
@@ -128,9 +120,6 @@ export function CalendarioProfesor() {
               horaFin = `${String(fechaFin.getHours()).padStart(2, '0')}:${String(fechaFin.getMinutes()).padStart(2, '0')}`;
             }
           }
-
-          // 🔥 OBTENER MODALIDAD DE LA REAGENDACIÓN (desde el primer alumno)
-          const modalidadReagendacion = grupo.alumnos?.[0]?.modalidad || 'Presencial';
 
           return {
             id: grupo.reagendacionId || `reag-${Math.random()}`,
@@ -160,7 +149,6 @@ export function CalendarioProfesor() {
             estatus: grupo.estatus,
             tipoReagendacionClase: 'destino',
             fechaHoraNueva: fechaHoraNueva,
-            modalidadReagendacion: modalidadReagendacion, // 👈 GUARDAMOS LA MODALIDAD
           };
         });
 
@@ -187,7 +175,6 @@ export function CalendarioProfesor() {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
-  // Manejadores para las acciones del diálogo
   const handleReagendar = (student: any) => {
     navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
   };
@@ -198,7 +185,6 @@ export function CalendarioProfesor() {
 
   const handleEliminarGrupo = (classData: any) => {
     if (window.confirm(`¿Eliminar el grupo ${classData.titulo}?`)) {
-      // Llamar a la API para eliminar grupo (pendiente de implementar)
       toast.info('Eliminación de grupo pendiente de implementar');
     }
   };
@@ -233,12 +219,10 @@ export function CalendarioProfesor() {
   };
 
   const handleBajaAlumno = (student: any, classData: any) => {
-    // Llamar a la API para dar de baja al alumno del grupo
     toast.info('Baja de alumno pendiente de implementar');
   };
 
   const handleEliminarReagendacionAlumno = (student: any, classData: any) => {
-    // Llamar a la API para eliminar la reagendación del alumno
     toast.info('Eliminación de reagendación de alumno pendiente de implementar');
   };
 
@@ -310,79 +294,55 @@ export function CalendarioProfesor() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {clases.map((clase) => {
-              // 🔥 DETERMINAR MODALIDAD A MOSTRAR
-              let modalidad = 'Presencial'; // Default
-              if (clase.tipoReagendacionClase === 'destino' && clase.modalidadReagendacion) {
-                modalidad = clase.modalidadReagendacion;
-              } else if (clase.students && clase.students.length > 0) {
-                modalidad = clase.students[0]?.modalidad || 'Presencial';
-              }
-
-              return (
-                <div
-                  key={clase.id}
-                  onClick={() => {
-                    setClaseSeleccionada(clase);
-                    setDialogAbierto(true);
-                  }}
-                  className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
-                    clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-[#26AAA3]" />
-                        {clase.titulo}
-                      </h3>
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                        <User className="h-3 w-3" />
-                        {clase.profesor}
-                      </p>
-                    </div>
-                    {clase.reagendada && (
-                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                        Reagendada
-                      </span>
-                    )}
+            {clases.map((clase) => (
+              <div
+                key={clase.id}
+                onClick={() => {
+                  setClaseSeleccionada(clase);
+                  setDialogAbierto(true);
+                }}
+                className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
+                  clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-[#26AAA3]" />
+                      {clase.titulo}
+                    </h3>
+                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                      <User className="h-3 w-3" />
+                      {clase.profesor}
+                    </p>
                   </div>
-
-                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
+                  {clase.reagendada && (
+                    <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                      Reagendada
                     </span>
-                    <span className="text-gray-300">|</span>
-                    <span>{clase.diaClase || 'Fecha por definir'}</span>
-                  </div>
-
-                  {clase.studentId && clase.studentName && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
-                        Alumno: {clase.studentName}
-                      </span>
-                      {modalidad && (
-                        <Badge 
-                          className={`text-xs px-2 py-0.5 rounded-full ${
-                            modalidad === 'Virtual' 
-                              ? 'bg-purple-600 text-white hover:bg-purple-700' 
-                              : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          }`}
-                        >
-                          {modalidad}
-                        </Badge>
-                      )}
-                    </div>
                   )}
                 </div>
-              );
-            })}
+
+                <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span>{clase.diaClase || 'Fecha por definir'}</span>
+                </div>
+
+                {clase.studentId && clase.studentName && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Alumno: {clase.studentName}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Diálogo de detalles de clase */}
       {claseSeleccionada && (
         <ClassDetailsDialog
           classData={claseSeleccionada}
