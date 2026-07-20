@@ -30,7 +30,6 @@ interface Clase {
   estatus?: string;
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
-  modalidad?: string;
 }
 
 export function CalendarioProfesor() {
@@ -42,26 +41,6 @@ export function CalendarioProfesor() {
   const [dialogAbierto, setDialogAbierto] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const idProfesor = user.idProfesor;
-
-  // 🔥 FUNCIÓN AUXILIAR PARA EXTRAER MODALIDAD DE CUALQUIER PARTE DEL OBJETO
-  const extraerModalidad = (grupo: any): string => {
-    // 1. Buscar en nivel superior
-    if (grupo.modalidad) return grupo.modalidad;
-    if (grupo.modalidadReagendacion) return grupo.modalidadReagendacion;
-    
-    // 2. Buscar en el primer alumno
-    if (grupo.alumnos && grupo.alumnos.length > 0) {
-      const alumno = grupo.alumnos[0];
-      if (alumno.modalidad) return alumno.modalidad;
-      if (alumno.reagendacion?.modalidad) return alumno.reagendacion.modalidad;
-    }
-    
-    // 3. Buscar en la reagendación anidada (por si está ahí)
-    if (grupo.reagendacion?.modalidad) return grupo.reagendacion.modalidad;
-    
-    // 4. Por defecto
-    return 'Presencial';
-  };
 
   const cargarClases = async () => {
     try {
@@ -85,53 +64,37 @@ export function CalendarioProfesor() {
         const clasesBase = data.clasesBase || [];
         const reagendaciones = data.reagendaciones || [];
 
-        // 🔥 MAPEO DE CLASES BASE
-        const clasesBaseMapeadas = clasesBase.map((grupo: any) => {
-          const modalidad = extraerModalidad(grupo);
-          return {
-            id: grupo.idGrupo || `base-${Math.random()}`,
-            titulo: grupo.nombreCurso || 'Clase',
-            profesor: grupo.nombreProfesor || 'Sin profesor',
-            fecha: grupo.diaClase || '',
-            diaClase: grupo.diaClase || '',
-            horaInicio: grupo.horaClase || '',
-            horaFin: grupo.horaFin || '',
-            reagendada: false,
-            idProfesor: grupo.idProfesor || '',
-            idGrupo: grupo.idGrupo,
-            studentId: grupo.alumnos?.[0]?.idAlumno || '',
-            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
-            students: grupo.alumnos || [],
-            comentarioGrupo: grupo.comentarioGrupo || '',
-            date: new Date(),
-            startTime: grupo.horaClase,
-            endTime: grupo.horaFin,
-            title: grupo.nombreCurso,
-            cursoActivo: grupo.cursoActivo,
-            idCurso: grupo.idCurso,
-            profesorActivo: grupo.profesorActivo,
-            capacidadMaxima: grupo.capacidadMaxima,
-            alumnosInscritos: grupo.alumnosInscritos,
-            estatus: grupo.estatus,
-            tipoReagendacionClase: null,
-            fechaHoraNueva: null,
-            modalidad: modalidad,
-          };
-        });
+        const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
+          id: grupo.idGrupo || `base-${Math.random()}`,
+          titulo: grupo.nombreCurso || 'Clase',
+          profesor: grupo.nombreProfesor || 'Sin profesor',
+          fecha: grupo.diaClase || '',
+          diaClase: grupo.diaClase || '',
+          horaInicio: grupo.horaClase || '',
+          horaFin: grupo.horaFin || '',
+          reagendada: false,
+          idProfesor: grupo.idProfesor || '',
+          idGrupo: grupo.idGrupo,
+          studentId: grupo.alumnos?.[0]?.idAlumno || '',
+          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
+          students: grupo.alumnos || [],
+          comentarioGrupo: grupo.comentarioGrupo || '',
+          date: new Date(),
+          startTime: grupo.horaClase,
+          endTime: grupo.horaFin,
+          title: grupo.nombreCurso,
+          cursoActivo: grupo.cursoActivo,
+          idCurso: grupo.idCurso,
+          profesorActivo: grupo.profesorActivo,
+          capacidadMaxima: grupo.capacidadMaxima,
+          alumnosInscritos: grupo.alumnosInscritos,
+          estatus: grupo.estatus,
+          tipoReagendacionClase: null,
+          fechaHoraNueva: null,
+        }));
 
-        // 🔥 MAPEO DE REAGENDACIONES
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
-          // Log para depurar dónde está la modalidad
-          console.log('🔍 Depurando grupo reagendado:', {
-            grupoId: grupo.idGrupo,
-            modalidadDirecta: grupo.modalidad,
-            modalidadReagendacion: grupo.modalidadReagendacion,
-            primerAlumnoModalidad: grupo.alumnos?.[0]?.modalidad,
-            primerAlumnoReagendacionModalidad: grupo.alumnos?.[0]?.reagendacion?.modalidad,
-            grupoCompleto: grupo
-          });
-
           const primeraReagendacion = grupo.alumnos?.[0]?.reagendacion;
           let fechaHoraNueva = null;
           let diaClase = grupo.diaClase || '';
@@ -157,9 +120,6 @@ export function CalendarioProfesor() {
               horaFin = `${String(fechaFin.getHours()).padStart(2, '0')}:${String(fechaFin.getMinutes()).padStart(2, '0')}`;
             }
           }
-
-          // 🔥 EXTRAER MODALIDAD USANDO LA FUNCIÓN AUXILIAR
-          const modalidad = extraerModalidad(grupo);
 
           return {
             id: grupo.reagendacionId || `reag-${Math.random()}`,
@@ -189,7 +149,6 @@ export function CalendarioProfesor() {
             estatus: grupo.estatus,
             tipoReagendacionClase: 'destino',
             fechaHoraNueva: fechaHoraNueva,
-            modalidad: modalidad,
           };
         });
 
@@ -335,68 +294,51 @@ export function CalendarioProfesor() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {clases.map((clase) => {
-              const modalidad = clase.modalidad || 'Presencial';
-
-              return (
-                <div
-                  key={clase.id}
-                  onClick={() => {
-                    setClaseSeleccionada(clase);
-                    setDialogAbierto(true);
-                  }}
-                  className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
-                    clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-[#26AAA3]" />
-                        {clase.titulo}
-                      </h3>
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                        <User className="h-3 w-3" />
-                        {clase.profesor}
-                      </p>
-                    </div>
-                    {clase.reagendada && (
-                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                        Reagendada
-                      </span>
-                    )}
+            {clases.map((clase) => (
+              <div
+                key={clase.id}
+                onClick={() => {
+                  setClaseSeleccionada(clase);
+                  setDialogAbierto(true);
+                }}
+                className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
+                  clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-[#26AAA3]" />
+                      {clase.titulo}
+                    </h3>
+                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                      <User className="h-3 w-3" />
+                      {clase.profesor}
+                    </p>
                   </div>
-
-                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
+                  {clase.reagendada && (
+                    <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                      Reagendada
                     </span>
-                    <span className="text-gray-300">|</span>
-                    <span>{clase.diaClase || 'Fecha por definir'}</span>
-                  </div>
-
-                  {clase.studentId && clase.studentName && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
-                        Alumno: {clase.studentName}
-                      </span>
-                      {modalidad && (
-                        <span 
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            modalidad === 'Virtual' 
-                              ? 'bg-purple-600 text-white' 
-                              : 'bg-emerald-600 text-white'
-                          }`}
-                        >
-                          {modalidad}
-                        </span>
-                      )}
-                    </div>
                   )}
                 </div>
-              );
-            })}
+
+                <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span>{clase.diaClase || 'Fecha por definir'}</span>
+                </div>
+
+                {clase.studentId && clase.studentName && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Alumno: {clase.studentName}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
