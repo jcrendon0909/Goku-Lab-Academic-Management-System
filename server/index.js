@@ -18,7 +18,12 @@ import calendarioRoutes from "./routes/calendario.js";
 // ===== NUEVAS RUTAS =====
 import gastosRoutes from "./routes/gastos.js";
 import reportesRoutes from "./routes/reportes.js";
-import usuariosRoutes from "./routes/usuarios.js"; // 👈 BIEN UBICADA
+import usuariosRoutes from "./routes/usuarios.js";
+
+// ===== WHATSAPP Y CRON =====
+import cron from "node-cron";
+import { initWhatsApp, sendWhatsAppMessage, isWhatsAppReady } from "./utils/whatsapp.js";
+import Pago from "./models/Pago.js";
 
 dotenv.config();
 
@@ -34,7 +39,6 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // ==== RUTAS ====
-// ==== RUTAS (sin prefijo /api) ====
 app.use('/auth', authRoutes);
 app.use('/alumnos', alumnosRoutes);
 app.use('/profesores', profesoresRoutes);
@@ -54,13 +58,126 @@ app.get("/", (req, res) => {
   res.send("API de Goku Lab funcionando");
 });
 
+// ============================================================
+// Ruta de prueba para WhatsApp (MODIFICADA)
+// ============================================================
+app.get("/test-whatsapp", async (req, res) => {
+  try {
+    // Intentar enviar directamente, sin esperar a isReady
+    const result = await sendWhatsAppMessage("525555052424", "Hola, esto es una prueba desde Goku Lab.");
+    res.json({ ok: true, mensaje: "Mensaje enviado" });
+  } catch (error) {
+    console.error("❌ Error en /test-whatsapp:", error.message);
+    // Si el error es "Cliente no listo", devolver 503
+    if (error.message.includes("Cliente no listo")) {
+      return res.status(503).json({ error: "WhatsApp no está listo. Espera a que se autentique." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Manejo de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Error interno del servidor" });
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-});
+// ============================================================
+// INICIALIZAR WHATSAPP (de forma explícita y con logs)
+// ============================================================
+const startWhatsApp = async () => {
+  console.log('⏳ Iniciando cliente de WhatsApp...');
+  try {
+    await initWhatsApp();
+    console.log("✅ WhatsApp Business listo para usar.");
+  } catch (error) {
+    console.error("❌ No se pudo iniciar WhatsApp:", error.message);
+    // No detenemos el servidor, solo mostramos el error
+  }
+};
+
+// ============================================================
+// ARRANQUE DEL SERVIDOR
+// ============================================================
+const startServer = async () => {
+  try {
+    // Conectar a MongoDB (ya está conectado arriba, pero lo dejamos)
+    console.log('✅ MongoDB conectado');
+    
+    // Iniciar WhatsApp (NO BLOQUEA el servidor)
+    startWhatsApp();
+
+    // ============================================================
+    // CRON JOB PARA RECORDATORIOS
+    // ============================================================
+    cron.schedule('0 8 * * *', async () => {
+      console.log('⏰ Ejecutando recordatorios de pago por WhatsApp...');
+      
+      if (!isWhatsAppReady()) {
+        console.warn('⚠️ WhatsApp no está listo. Reintentando conectar...');
+        try {
+          await initWhatsApp();
+        } catch (e) {
+          console.error('❌ No se pudo reconectar WhatsApp.');
+          return;
+        }
+      }
+
+      try {
+        const hoy = new Date().getDate();
+        const pagosPendientes = await Pago.find({
+          diaPago: hoy,
+          estatus: 'pendiente'
+        }).populate('idAlumno');
+
+        console.log(`📋 Encontrados ${pagosPendientes.length} pagos pendientes.`);
+
+        for (const pago of pagosPendientes) {
+          const alumno = pago.idAlumno;
+          if (alumno && alumno.telefono) {
+            const mensaje = `
+Hola ${alumno.nombreAlumno || 'estudiante'},
+
+Te recordamos que tu pago mensual de $${pago.montoMensualidad || '0'} está pendiente.
+
+Fecha de corte: ${pago.diaPago} de cada mes.
+
+Realiza tu pago a través de los medios disponibles en Goku Lab.
+
+¡Gracias por confiar en nosotros!
+
+- Goku Lab Team
+            `.trim();
+
+            try {
+              await sendWhatsAppMessage(alumno.telefono, mensaje);
+              console.log(`📩 Recordatorio enviado a ${alumno.nombreAlumno} (${alumno.telefono})`);
+            } catch (error) {
+              console.error(`❌ Falló envío a ${alumno.nombreAlumno}:`, error.message);
+            }
+          } else {
+            console.warn(`⚠️ Alumno sin teléfono para el pago ${pago._id}`);
+          }
+        }
+
+        console.log('✅ Proceso de recordatorios finalizado.');
+      } catch (error) {
+        console.error('❌ Error en cron de recordatorios:', error);
+      }
+    });
+
+    console.log("⏰ Cron job de recordatorios programado para las 8:00 AM.");
+
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    });
+
+  } catch (error) {
+    console.error("❌ Error al iniciar el servidor:", error);
+    process.exit(1);
+  }
+};
+
+// Ejecutar inicio
+startServer();

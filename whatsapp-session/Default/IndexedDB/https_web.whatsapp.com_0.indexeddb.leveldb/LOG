@@ -1,0 +1,30 @@
+2026/07/20-16:30:09.789 74aa6 Reusing MANIFEST /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/07/20-16:30:09.790 74aa6 Recovering log #316
+2026/07/20-16:30:09.800 74aa6 Reusing old log /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000316.log 
+2026/07/20-16:30:13.602 74ab1 Level-0 table #332: started
+2026/07/20-16:30:13.624 74ab1 Level-0 table #332: 1170389 bytes OK
+2026/07/20-16:30:13.626 74ab1 Delete type=0 #316
+2026/07/20-16:31:12.295 74aa6 Compacting 1@1 + 10@2 files
+2026/07/20-16:31:12.345 74aa6 Generated table #333@1: 61113 keys, 2225587 bytes
+2026/07/20-16:31:12.364 74aa6 Generated table #334@1: 10108 keys, 2156013 bytes
+2026/07/20-16:31:12.380 74aa6 Generated table #335@1: 1413 keys, 2137514 bytes
+2026/07/20-16:31:12.396 74aa6 Generated table #336@1: 1680 keys, 2137941 bytes
+2026/07/20-16:31:12.427 74aa6 Generated table #337@1: 22862 keys, 2227884 bytes
+2026/07/20-16:31:12.451 74aa6 Generated table #338@1: 16904 keys, 2158910 bytes
+2026/07/20-16:31:12.481 74aa6 Generated table #339@1: 43795 keys, 2176657 bytes
+2026/07/20-16:31:12.516 74aa6 Generated table #340@1: 92327 keys, 2239386 bytes
+2026/07/20-16:31:12.553 74aa6 Generated table #341@1: 92397 keys, 2240222 bytes
+2026/07/20-16:31:12.572 74aa6 Generated table #342@1: 52148 keys, 1322530 bytes
+2026/07/20-16:31:12.572 74aa6 Compacted 1@1 + 10@2 files => 21022644 bytes
+2026/07/20-16:31:12.574 74aa6 compacted to: files[ 0 1 12 0 0 0 0 ]
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #328
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #329
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #321
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #320
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #322
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #323
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #327
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #326
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #332
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #324
+2026/07/20-16:31:12.575 74aa6 Delete type=2 #325
