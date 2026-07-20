@@ -30,7 +30,7 @@ interface Clase {
   estatus?: string;
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
-  modalidadReagendacion?: string; // Nuevo campo para destino
+  modalidad?: string; // 🔥 Campo unificado para mostrar la modalidad
 }
 
 export function CalendarioProfesor() {
@@ -65,38 +65,46 @@ export function CalendarioProfesor() {
         const clasesBase = data.clasesBase || [];
         const reagendaciones = data.reagendaciones || [];
 
-        const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
-          id: grupo.idGrupo || `base-${Math.random()}`,
-          titulo: grupo.nombreCurso || 'Clase',
-          profesor: grupo.nombreProfesor || 'Sin profesor',
-          fecha: grupo.diaClase || '',
-          diaClase: grupo.diaClase || '',
-          horaInicio: grupo.horaClase || '',
-          horaFin: grupo.horaFin || '',
-          reagendada: false,
-          idProfesor: grupo.idProfesor || '',
-          idGrupo: grupo.idGrupo,
-          studentId: grupo.alumnos?.[0]?.idAlumno || '',
-          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
-          students: grupo.alumnos || [],
-          comentarioGrupo: grupo.comentarioGrupo || '',
-          date: new Date(),
-          startTime: grupo.horaClase,
-          endTime: grupo.horaFin,
-          title: grupo.nombreCurso,
-          cursoActivo: grupo.cursoActivo,
-          idCurso: grupo.idCurso,
-          profesorActivo: grupo.profesorActivo,
-          capacidadMaxima: grupo.capacidadMaxima,
-          alumnosInscritos: grupo.alumnosInscritos,
-          estatus: grupo.estatus,
-          tipoReagendacionClase: null,
-          fechaHoraNueva: null,
-          modalidadReagendacion: null,
-        }));
+        // 🔥 MAPEO DE CLASES BASE (con modalidad)
+        const clasesBaseMapeadas = clasesBase.map((grupo: any) => {
+          // Obtener modalidad del primer alumno (si existe)
+          const modalidad = grupo.alumnos?.[0]?.modalidad || 'Presencial';
+          
+          return {
+            id: grupo.idGrupo || `base-${Math.random()}`,
+            titulo: grupo.nombreCurso || 'Clase',
+            profesor: grupo.nombreProfesor || 'Sin profesor',
+            fecha: grupo.diaClase || '',
+            diaClase: grupo.diaClase || '',
+            horaInicio: grupo.horaClase || '',
+            horaFin: grupo.horaFin || '',
+            reagendada: false,
+            idProfesor: grupo.idProfesor || '',
+            idGrupo: grupo.idGrupo,
+            studentId: grupo.alumnos?.[0]?.idAlumno || '',
+            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
+            students: grupo.alumnos || [],
+            comentarioGrupo: grupo.comentarioGrupo || '',
+            date: new Date(),
+            startTime: grupo.horaClase,
+            endTime: grupo.horaFin,
+            title: grupo.nombreCurso,
+            cursoActivo: grupo.cursoActivo,
+            idCurso: grupo.idCurso,
+            profesorActivo: grupo.profesorActivo,
+            capacidadMaxima: grupo.capacidadMaxima,
+            alumnosInscritos: grupo.alumnosInscritos,
+            estatus: grupo.estatus,
+            tipoReagendacionClase: null,
+            fechaHoraNueva: null,
+            modalidad: modalidad, // 🔥 Asignamos modalidad
+          };
+        });
 
+        // 🔥 MAPEO DE REAGENDACIONES (con modalidad)
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
+          // Extraer la primera reagendación del grupo para obtener la nueva fecha/hora
           const primeraReagendacion = grupo.alumnos?.[0]?.reagendacion;
           let fechaHoraNueva = null;
           let diaClase = grupo.diaClase || '';
@@ -123,8 +131,8 @@ export function CalendarioProfesor() {
             }
           }
 
-          // 🔥 OBTENER MODALIDAD DE LA REAGENDACIÓN
-          const modalidadReagendacion = grupo.alumnos?.[0]?.modalidad || 'Presencial';
+          // 🔥 OBTENER MODALIDAD DE LA REAGENDACIÓN (desde el primer alumno)
+          const modalidad = grupo.alumnos?.[0]?.modalidad || 'Presencial';
 
           return {
             id: grupo.reagendacionId || `reag-${Math.random()}`,
@@ -154,7 +162,7 @@ export function CalendarioProfesor() {
             estatus: grupo.estatus,
             tipoReagendacionClase: 'destino',
             fechaHoraNueva: fechaHoraNueva,
-            modalidadReagendacion: modalidadReagendacion, // 🔥 GUARDAMOS LA MODALIDAD
+            modalidad: modalidad, // 🔥 Asignamos modalidad
           };
         });
 
@@ -301,13 +309,8 @@ export function CalendarioProfesor() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {clases.map((clase) => {
-              // 🔥 DETERMINAR MODALIDAD A MOSTRAR
-              let modalidad = 'Presencial';
-              if (clase.tipoReagendacionClase === 'destino' && clase.modalidadReagendacion) {
-                modalidad = clase.modalidadReagendacion;
-              } else if (clase.students && clase.students.length > 0) {
-                modalidad = clase.students[0]?.modalidad || 'Presencial';
-              }
+              // 🔥 USAMOS DIRECTAMENTE clase.modalidad
+              const modalidad = clase.modalidad || 'Presencial';
 
               return (
                 <div
