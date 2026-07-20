@@ -177,36 +177,49 @@ router.delete("/:id", async (req, res) => {
 // ============================================
 // NUEVO ENDPOINT: Actualizar modalidad de una reagendación
 // ============================================
+// ============================================================
+// 🔥 ACTUALIZAR MODALIDAD DE UNA REAGENDACIÓN (CORREGIDO)
+// ============================================================
 router.put("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // "REA001" o un ObjectId de MongoDB
     const { modalidad } = req.body;
 
-    // Validar que la modalidad sea válida
+    // Validar modalidad
     if (!modalidad || !["Presencial", "Virtual"].includes(modalidad)) {
-      return res.status(400).json({ 
-        error: "Modalidad inválida. Debe ser 'Presencial' o 'Virtual'" 
+      return res.status(400).json({
+        error: "Modalidad inválida. Debe ser 'Presencial' o 'Virtual'"
       });
     }
 
-    console.log(`🔄 Actualizando reagendación ${id} con modalidad: ${modalidad}`);
+    console.log(`🔄 Actualizando reagendación con id: ${id} a modalidad: ${modalidad}`);
 
-    // Buscar por _id o ReagendacionId
-    const reagendacion = await Reagendacion.findOneAndUpdate(
-      { $or: [{ _id: id }, { ReagendacionId: id }] },
+    // ✅ Buscar PRIMERO por el campo personalizado ReagendacionId
+    let reagendacion = await Reagendacion.findOneAndUpdate(
+      { ReagendacionId: id },
       { modalidad },
       { new: true, runValidators: true }
     );
+
+    // Si no se encontró, buscar por _id (fallback para compatibilidad)
+    if (!reagendacion) {
+      console.log(`⚠️ No encontrado por ReagendacionId, intentando por _id...`);
+      reagendacion = await Reagendacion.findByIdAndUpdate(
+        id,
+        { modalidad },
+        { new: true, runValidators: true }
+      );
+    }
 
     if (!reagendacion) {
       return res.status(404).json({ error: "Reagendación no encontrada" });
     }
 
     console.log("✅ Reagendación actualizada:", reagendacion);
-    res.json({ 
-      ok: true, 
-      mensaje: "Modalidad actualizada correctamente", 
-      data: reagendacion 
+    res.json({
+      ok: true,
+      mensaje: "Modalidad actualizada correctamente",
+      data: reagendacion
     });
   } catch (error) {
     console.error("❌ Error PUT /reagendaciones/:id:", error);
