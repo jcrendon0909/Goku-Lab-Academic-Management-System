@@ -30,7 +30,7 @@ interface Clase {
   estatus?: string;
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
-  modalidad?: string; // 🔥 Campo agregado
+  modalidad?: string;
 }
 
 export function CalendarioProfesor() {
@@ -93,7 +93,7 @@ export function CalendarioProfesor() {
           estatus: grupo.estatus,
           tipoReagendacionClase: null,
           fechaHoraNueva: null,
-          modalidad: grupo.alumnos?.[0]?.modalidad || 'Presencial', // 🔥 Para clases base
+          modalidad: grupo.alumnos?.[0]?.modalidad || 'Presencial',
         }));
 
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
@@ -123,7 +123,6 @@ export function CalendarioProfesor() {
             }
           }
 
-          // 🔥 EXTRAER MODALIDAD (ahora viene en grupo.modalidad)
           const modalidad = grupo.modalidad || 'Presencial';
 
           return {
@@ -154,7 +153,7 @@ export function CalendarioProfesor() {
             estatus: grupo.estatus,
             tipoReagendacionClase: 'destino',
             fechaHoraNueva: fechaHoraNueva,
-            modalidad: modalidad, // 🔥 Asignamos modalidad
+            modalidad: modalidad,
           };
         });
 
@@ -181,7 +180,7 @@ export function CalendarioProfesor() {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
-  // Manejadores de eventos (sin cambios)
+  // Manejadores de eventos
   const handleReagendar = (student: any) => {
     navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
   };
@@ -229,8 +228,34 @@ export function CalendarioProfesor() {
     toast.info('Baja de alumno pendiente de implementar');
   };
 
-  const handleEliminarReagendacionAlumno = (student: any, classData: any) => {
-    toast.info('Eliminación de reagendación de alumno pendiente de implementar');
+  // 🔥 IMPLEMENTACIÓN DE ELIMINACIÓN DE REAGENDACIÓN POR ALUMNO
+  const handleEliminarReagendacionAlumno = async (student: any, classData: any) => {
+    if (!confirm(`¿Quitar la reagendación de ${student.nombreAlumno}?`)) return;
+    try {
+      // Obtener el idAlumno y el idGrupoNuevo desde la información del alumno
+      const idAlumno = student.idAlumno;
+      // El idGrupoNuevo es el ID del grupo destino (el grupo actual de la clase)
+      const idGrupoNuevo = classData.idGrupo || classData.id;
+      
+      if (!idAlumno || !idGrupoNuevo) {
+        throw new Error('Faltan datos para eliminar la reagendación');
+      }
+
+      const res = await apiFetch(`/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al eliminar reagendación');
+      }
+      
+      toast.success(`Reagendación de ${student.nombreAlumno} eliminada`);
+      await cargarClases(); // Recargar el calendario para reflejar los cambios
+    } catch (error: any) {
+      console.error('Error al eliminar reagendación:', error);
+      toast.error(error.message || 'Error al eliminar reagendación');
+    }
   };
 
   const handleActualizarInscripcion = async (student: any, classData: any, datos: { modalidad?: string; comentarios?: string }) => {
