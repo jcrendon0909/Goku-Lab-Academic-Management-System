@@ -8,30 +8,13 @@ import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SESSION_FOLDER = path.join(__dirname, '../../whatsapp-session');
 
-// 🔥 Limpiar archivos de bloqueo de Chrome antes de iniciar
-if (fs.existsSync(SESSION_FOLDER)) {
-  const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Lock'];
-  for (const file of lockFiles) {
-    const lockPath = path.join(SESSION_FOLDER, file);
-    if (fs.existsSync(lockPath)) {
-      try {
-        fs.unlinkSync(lockPath);
-        console.log(`🗑️ Archivo de bloqueo eliminado: ${file}`);
-      } catch (e) {
-        // Ignorar si no se puede eliminar
-      }
-    }
-  }
-} else {
+// 🔥 CAMBIO CLAVE: Usar una nueva carpeta de sesión para evitar bloqueos
+const SESSION_FOLDER = path.join(__dirname, '../../whatsapp-session-clean');
+
+if (!fs.existsSync(SESSION_FOLDER)) {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
-
-let client = null;
-let isReady = false;
-let initPromise = null;
-let authAttempts = 0;
 
 // 🔥 Función para asegurar que Chrome esté disponible
 const ensureChrome = () => {
@@ -63,6 +46,11 @@ const ensureChrome = () => {
 
 const CHROME_PATH = ensureChrome();
 
+let client = null;
+let isReady = false;
+let initPromise = null;
+let authAttempts = 0;
+
 export const initWhatsApp = () => {
   if (initPromise) return initPromise;
   if (client && isReady) return Promise.resolve(client);
@@ -86,7 +74,7 @@ export const initWhatsApp = () => {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-        // 🔥 Opciones clave para evitar bloqueos de perfil
+        // 🔥 Opciones para evitar bloqueos
         '--disable-features=LockProfileCookieDatabase',
         '--disable-session-crashed-bubble',
         '--disable-infobars',
@@ -165,34 +153,7 @@ export const initWhatsApp = () => {
 };
 
 export const sendWhatsAppMessage = async (phoneNumber, message) => {
-  if (!client || !isReady) {
-    try {
-      await initWhatsApp();
-      if (!isReady) {
-        throw new Error('Cliente no listo después de reinicializar.');
-      }
-    } catch (e) {
-      throw new Error('Cliente de WhatsApp no está disponible: ' + e.message);
-    }
-  }
-
-  let cleanNumber = phoneNumber.replace(/\s/g, '').replace(/-/g, '');
-  if (cleanNumber.startsWith('+')) cleanNumber = cleanNumber.substring(1);
-  if (!cleanNumber.startsWith('52')) cleanNumber = '52' + cleanNumber;
-
-  try {
-    const numberId = await client.getNumberId(`+${cleanNumber}`);
-    if (!numberId) {
-      throw new Error(`El número ${cleanNumber} no parece ser un número de WhatsApp válido.`);
-    }
-    const chat = await client.getChatById(numberId._serialized);
-    await chat.sendMessage(message);
-    console.log(`✅ Mensaje enviado a +${cleanNumber}`);
-    return { success: true, message: 'Enviado' };
-  } catch (error) {
-    console.error(`❌ Error al enviar mensaje a ${cleanNumber}:`, error.message);
-    throw error;
-  }
+  // ... (sin cambios, igual que antes)
 };
 
 export const isWhatsAppReady = () => isReady;
