@@ -21,7 +21,14 @@ interface Clase {
   teacher?: { id: string; name: string; email?: string; available?: boolean };
   students?: any[];
   comentarioGrupo?: string;
-  // ... otros campos que necesite el diálogo
+  diaClase?: string;
+  cursoActivo?: boolean;
+  idCurso?: string;
+  profesorActivo?: boolean;
+  capacidadMaxima?: number;
+  alumnosInscritos?: number;
+  estatus?: string;
+  tipoReagendacionClase?: string | null;
 }
 
 export function CalendarioProfesor() {
@@ -34,125 +41,121 @@ export function CalendarioProfesor() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const idProfesor = user.idProfesor;
 
-  useEffect(() => {
-    const cargarClases = async () => {
-      try {
-        setCargando(true);
-        setError(null);
-        const url = idProfesor ? `/calendario?profesor=${idProfesor}` : '/calendario';
-        const res = await apiFetch(url);
-        
-        if (!res.ok) {
-          throw new Error(`Error al cargar: ${res.status}`);
-        }
-
-        const data = await res.json();
-        console.log('📅 Datos del calendario:', data);
-
-        let eventos: Clase[] = [];
-
-        if (Array.isArray(data)) {
-          eventos = data;
-        } else if (data && typeof data === 'object') {
-          const clasesBase = data.clasesBase || [];
-          const reagendaciones = data.reagendaciones || [];
-
-          const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
-            id: grupo.idGrupo || `base-${Math.random()}`,
-            titulo: grupo.nombreCurso || 'Clase',
-            profesor: grupo.nombreProfesor || 'Sin profesor',
-            fecha: grupo.diaClase || '',
-            horaInicio: grupo.horaClase || '',
-            horaFin: grupo.horaFin || '',
-            reagendada: false,
-            idProfesor: grupo.idProfesor || '',
-            idGrupo: grupo.idGrupo,
-            studentId: grupo.alumnos?.[0]?.idAlumno || '',
-            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
-            students: grupo.alumnos || [],
-            comentarioGrupo: grupo.comentarioGrupo || '',
-            // Añadir otros campos necesarios para el diálogo
-            date: new Date(grupo.diaClase || Date.now()),
-            startTime: grupo.horaClase,
-            endTime: grupo.horaFin,
-            title: grupo.nombreCurso,
-            cursoActivo: grupo.cursoActivo,
-            idCurso: grupo.idCurso,
-            profesorActivo: grupo.profesorActivo,
-            capacidadMaxima: grupo.capacidadMaxima,
-            alumnosInscritos: grupo.alumnosInscritos,
-            estatus: grupo.estatus,
-            tipoReagendacionClase: null,
-          }));
-
-          const reagendacionesMapeadas = reagendaciones.map((grupo: any) => ({
-            id: grupo.reagendacionId || `reag-${Math.random()}`,
-            titulo: grupo.nombreCurso || 'Clase reagendada',
-            profesor: grupo.nombreProfesor || 'Sin profesor',
-            fecha: grupo.diaClase || '',
-            horaInicio: grupo.horaClase || '',
-            horaFin: '',
-            reagendada: true,
-            idProfesor: grupo.idProfesor || '',
-            idGrupo: grupo.idGrupo,
-            studentId: grupo.alumnos?.[0]?.idAlumno || '',
-            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: true },
-            students: grupo.alumnos || [],
-            comentarioGrupo: grupo.comentarioGrupo || '',
-            date: new Date(grupo.diaClase || Date.now()),
-            startTime: grupo.horaClase,
-            endTime: '',
-            title: grupo.nombreCurso,
-            cursoActivo: true,
-            idCurso: grupo.idCurso,
-            profesorActivo: true,
-            capacidadMaxima: grupo.capacidadMaxima,
-            alumnosInscritos: grupo.alumnosInscritos,
-            estatus: grupo.estatus,
-            tipoReagendacionClase: 'destino', // Marcar como reagendada
-          }));
-
-          eventos = [...clasesBaseMapeadas, ...reagendacionesMapeadas];
-        }
-
-        if (idProfesor && eventos.length > 0) {
-          eventos = eventos.filter(
-            (e) => e.idProfesor === idProfesor || e.profesor === user.nombreCompleto
-          );
-        }
-
-        setClases(eventos);
-      } catch (error) {
-        console.error('Error al cargar calendario:', error);
-        setError('No se pudo cargar el calendario. Intenta de nuevo.');
-        setClases([]);
-      } finally {
-        setCargando(false);
+  const cargarClases = async () => {
+    try {
+      setCargando(true);
+      setError(null);
+      const url = idProfesor ? `/calendario?profesor=${idProfesor}` : '/calendario';
+      const res = await apiFetch(url);
+      
+      if (!res.ok) {
+        throw new Error(`Error al cargar: ${res.status}`);
       }
-    };
 
+      const data = await res.json();
+      console.log('📅 Datos del calendario:', data);
+
+      let eventos: Clase[] = [];
+
+      if (Array.isArray(data)) {
+        eventos = data;
+      } else if (data && typeof data === 'object') {
+        const clasesBase = data.clasesBase || [];
+        const reagendaciones = data.reagendaciones || [];
+
+        const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
+          id: grupo.idGrupo || `base-${Math.random()}`,
+          titulo: grupo.nombreCurso || 'Clase',
+          profesor: grupo.nombreProfesor || 'Sin profesor',
+          fecha: grupo.diaClase || '',
+          diaClase: grupo.diaClase || '',
+          horaInicio: grupo.horaClase || '',
+          horaFin: grupo.horaFin || '',
+          reagendada: false,
+          idProfesor: grupo.idProfesor || '',
+          idGrupo: grupo.idGrupo,
+          studentId: grupo.alumnos?.[0]?.idAlumno || '',
+          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
+          students: grupo.alumnos || [],
+          comentarioGrupo: grupo.comentarioGrupo || '',
+          date: new Date(),
+          startTime: grupo.horaClase,
+          endTime: grupo.horaFin,
+          title: grupo.nombreCurso,
+          cursoActivo: grupo.cursoActivo,
+          idCurso: grupo.idCurso,
+          profesorActivo: grupo.profesorActivo,
+          capacidadMaxima: grupo.capacidadMaxima,
+          alumnosInscritos: grupo.alumnosInscritos,
+          estatus: grupo.estatus,
+          tipoReagendacionClase: null,
+        }));
+
+        const reagendacionesMapeadas = reagendaciones.map((grupo: any) => ({
+          id: grupo.reagendacionId || `reag-${Math.random()}`,
+          titulo: grupo.nombreCurso || 'Clase reagendada',
+          profesor: grupo.nombreProfesor || 'Sin profesor',
+          fecha: grupo.diaClase || '',
+          diaClase: grupo.diaClase || '',
+          horaInicio: grupo.horaClase || '',
+          horaFin: '',
+          reagendada: true,
+          idProfesor: grupo.idProfesor || '',
+          idGrupo: grupo.idGrupo,
+          studentId: grupo.alumnos?.[0]?.idAlumno || '',
+          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: true },
+          students: grupo.alumnos || [],
+          comentarioGrupo: grupo.comentarioGrupo || '',
+          date: new Date(),
+          startTime: grupo.horaClase,
+          endTime: '',
+          title: grupo.nombreCurso || 'Clase reagendada',
+          cursoActivo: true,
+          idCurso: grupo.idCurso,
+          profesorActivo: true,
+          capacidadMaxima: grupo.capacidadMaxima,
+          alumnosInscritos: grupo.alumnosInscritos,
+          estatus: grupo.estatus,
+          tipoReagendacionClase: 'destino',
+        }));
+
+        eventos = [...clasesBaseMapeadas, ...reagendacionesMapeadas];
+      }
+
+      if (idProfesor && eventos.length > 0) {
+        eventos = eventos.filter(
+          (e) => e.idProfesor === idProfesor || e.profesor === user.nombreCompleto
+        );
+      }
+
+      setClases(eventos);
+    } catch (error) {
+      console.error('Error al cargar calendario:', error);
+      setError('No se pudo cargar el calendario. Intenta de nuevo.');
+      setClases([]);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
   // Manejadores para las acciones del diálogo
   const handleReagendar = (student: any) => {
-    // Abrir el flujo de reagendación con los datos del estudiante y la clase
     navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
   };
 
   const handleInscribirAlumno = (classData: any) => {
-    // Abrir el formulario de inscripción (puedes implementar un modal o redirigir)
-    toast.info('Función de inscripción pendiente de implementar');
-    // Puedes abrir el formulario de inscripción con los datos de la clase
-    // navigate(`/alumnos/inscribir?grupoId=${classData.id}`);
+    navigate(`/alumnos?grupoId=${classData.idGrupo}&accion=inscribir`);
   };
 
   const handleEliminarGrupo = (classData: any) => {
-    // Confirmar y eliminar grupo
     if (window.confirm(`¿Eliminar el grupo ${classData.titulo}?`)) {
-      // Llamar a la API para eliminar
+      // Llamar a la API para eliminar grupo (pendiente de implementar)
       toast.info('Eliminación de grupo pendiente de implementar');
     }
   };
@@ -166,16 +169,24 @@ export function CalendarioProfesor() {
       });
       if (!res.ok) throw new Error('Error al guardar comentario');
       toast.success('Comentario guardado');
-      // Recargar clases para actualizar
-      cargarClases();
+      await cargarClases();
     } catch (error) {
       toast.error('Error al guardar comentario');
     }
   };
 
-  const handleEliminarReagendacion = (classData: any) => {
-    // Llamar a la API para eliminar la reagendación
-    toast.info('Eliminación de reagendación pendiente de implementar');
+  const handleEliminarReagendacion = async (classData: any) => {
+    if (!confirm('¿Eliminar esta reagendación temporal?')) return;
+    try {
+      const res = await apiFetch(`/reagendaciones/${classData.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Error al eliminar reagendación');
+      toast.success('Reagendación eliminada');
+      await cargarClases();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar reagendación');
+    }
   };
 
   const handleBajaAlumno = (student: any, classData: any) => {
@@ -197,16 +208,10 @@ export function CalendarioProfesor() {
       });
       if (!res.ok) throw new Error('Error al actualizar inscripción');
       toast.success('Inscripción actualizada');
-      // Recargar clases
-      cargarClases();
-    } catch (error) {
-      toast.error('Error al actualizar inscripción');
+      await cargarClases();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al actualizar inscripción');
     }
-  };
-
-  const cargarClases = () => {
-    // Re-ejecutar la carga de clases (se puede refactorizar para reutilizar)
-    window.location.reload(); // O mejor, llamar a la función de carga directamente
   };
 
   if (cargando) {
@@ -297,7 +302,7 @@ export function CalendarioProfesor() {
                     {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
                   </span>
                   <span className="text-gray-300">|</span>
-                  <span>{clase.fecha || 'Fecha por definir'}</span>
+                  <span>{clase.diaClase || 'Fecha por definir'}</span>
                 </div>
 
                 {clase.studentId && clase.studentName && (
@@ -316,7 +321,7 @@ export function CalendarioProfesor() {
         <ClassDetailsDialog
           classData={claseSeleccionada}
           isOpen={dialogAbierto}
-          puedeEditar={user.rol === 'admin'} // Solo admin puede editar
+          puedeEditar={user.rol === 'admin'}
           onClose={() => setDialogAbierto(false)}
           onReagendar={handleReagendar}
           onInscribirAlumno={handleInscribirAlumno}

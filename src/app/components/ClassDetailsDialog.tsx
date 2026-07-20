@@ -18,6 +18,7 @@ interface ClassDetailsDialogProps {
   puedeEditar?: boolean;
   onClose: () => void;
   onReagendar: (student: any) => void;
+  onInscribirAlumno: (classData: any) => void;
   onEliminarGrupo: (classData: any) => void;
   onGuardarComentarioGrupo: (classData: any, comentario: string) => Promise<void> | void;
   onEliminarReagendacion: (classData: any) => void;
@@ -36,6 +37,7 @@ export function ClassDetailsDialog({
   puedeEditar = true,
   onClose,
   onReagendar,
+  onInscribirAlumno,
   onEliminarGrupo,
   onGuardarComentarioGrupo,
   onEliminarReagendacion,
@@ -107,7 +109,6 @@ export function ClassDetailsDialog({
     }
   };
 
-  // 👇 NUEVA FUNCIÓN: redirigir a Alumnos con el grupo pre-seleccionado
   const handleInscribirAlumno = () => {
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
