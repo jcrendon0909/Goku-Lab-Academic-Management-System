@@ -4,6 +4,7 @@ import qrcode from 'qrcode-terminal';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,13 +14,42 @@ if (!fs.existsSync(SESSION_FOLDER)) {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
 
-// 🔥 RUTA FIJA DE CHROME (basada en el log de build)
-const CHROME_PATH = '/opt/render/.cache/puppeteer/chrome/linux-150.0.7871.24/chrome-linux64/chrome';
-
 let client = null;
 let isReady = false;
 let initPromise = null;
 let authAttempts = 0;
+
+// 🔥 Función para asegurar que Chrome esté disponible
+const ensureChrome = () => {
+  // Si PUPPETEER_CACHE_DIR está definida, usarla; si no, usar la predeterminada de Render
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+  const chromePath = path.join(cacheDir, 'chrome', 'linux-150.0.7871.24', 'chrome-linux64', 'chrome');
+  
+  console.log(`🔍 Buscando Chrome en: ${chromePath}`);
+  
+  if (fs.existsSync(chromePath)) {
+    console.log('✅ Chrome encontrado en caché.');
+    return chromePath;
+  }
+  
+  console.warn('⚠️ Chrome no encontrado en caché. Descargando en runtime...');
+  try {
+    execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
+    console.log('✅ Chrome descargado en runtime.');
+    // Verificar nuevamente después de la descarga
+    if (fs.existsSync(chromePath)) {
+      return chromePath;
+    } else {
+      console.error('❌ No se pudo encontrar Chrome incluso después de la descarga.');
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error al descargar Chrome:', error.message);
+    return null;
+  }
+};
+
+const CHROME_PATH = ensureChrome();
 
 export const initWhatsApp = () => {
   if (initPromise) return initPromise;
@@ -32,25 +62,30 @@ export const initWhatsApp = () => {
 
   initPromise = new Promise((resolve, reject) => {
     console.log('🔄 Inicializando cliente de WhatsApp...');
-    console.log(`🔧 Usando Chrome en: ${CHROME_PATH}`);
     
-    client = new Client({
-      puppeteer: {
-        headless: true,
-        executablePath: CHROME_PATH, // 🔥 Ruta fija
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-        ],
-        userDataDir: SESSION_FOLDER,
-      },
-    });
+    const puppeteerConfig = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
+      userDataDir: SESSION_FOLDER,
+    };
+
+    if (CHROME_PATH) {
+      puppeteerConfig.executablePath = CHROME_PATH;
+      console.log(`🔧 Usando Chrome en: ${CHROME_PATH}`);
+    } else {
+      console.warn('⚠️ No se encontró Chrome. Puppeteer intentará usar el sistema.');
+    }
+
+    client = new Client({ puppeteer: puppeteerConfig });
 
     client.on('qr', (qr) => {
       console.log('📱 Escanea el siguiente código QR:');
