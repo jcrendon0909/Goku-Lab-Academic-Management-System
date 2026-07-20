@@ -10,7 +10,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SESSION_FOLDER = path.join(__dirname, '../../whatsapp-session');
 
-if (!fs.existsSync(SESSION_FOLDER)) {
+// 🔥 Limpiar archivos de bloqueo de Chrome antes de iniciar
+if (fs.existsSync(SESSION_FOLDER)) {
+  const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'Lock'];
+  for (const file of lockFiles) {
+    const lockPath = path.join(SESSION_FOLDER, file);
+    if (fs.existsSync(lockPath)) {
+      try {
+        fs.unlinkSync(lockPath);
+        console.log(`🗑️ Archivo de bloqueo eliminado: ${file}`);
+      } catch (e) {
+        // Ignorar si no se puede eliminar
+      }
+    }
+  }
+} else {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
 
@@ -21,7 +35,6 @@ let authAttempts = 0;
 
 // 🔥 Función para asegurar que Chrome esté disponible
 const ensureChrome = () => {
-  // Si PUPPETEER_CACHE_DIR está definida, usarla; si no, usar la predeterminada de Render
   const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
   const chromePath = path.join(cacheDir, 'chrome', 'linux-150.0.7871.24', 'chrome-linux64', 'chrome');
   
@@ -36,7 +49,6 @@ const ensureChrome = () => {
   try {
     execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
     console.log('✅ Chrome descargado en runtime.');
-    // Verificar nuevamente después de la descarga
     if (fs.existsSync(chromePath)) {
       return chromePath;
     } else {
@@ -74,6 +86,10 @@ export const initWhatsApp = () => {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
+        // 🔥 Opciones clave para evitar bloqueos de perfil
+        '--disable-features=LockProfileCookieDatabase',
+        '--disable-session-crashed-bubble',
+        '--disable-infobars',
       ],
       userDataDir: SESSION_FOLDER,
     };
