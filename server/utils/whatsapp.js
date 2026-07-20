@@ -13,6 +13,13 @@ if (!fs.existsSync(SESSION_FOLDER)) {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
 
+// 🔥 DETECTAR ENTORNO Y RUTA DE CHROME
+const isProduction = process.env.NODE_ENV === 'production';
+// Esta es la ruta donde Render instaló Chrome (versión 150)
+const CHROME_PATH = isProduction
+  ? '/opt/render/.cache/puppeteer/chrome/linux-150.0.7871.24/chrome-linux64/chrome'
+  : undefined;
+
 let client = null;
 let isReady = false;
 let initPromise = null;
@@ -41,21 +48,31 @@ export const initWhatsApp = () => {
 
   initPromise = new Promise((resolve, reject) => {
     console.log('🔄 Inicializando cliente de WhatsApp...');
+    
+    // 🔥 CONFIGURACIÓN DE PUPPETEER CON EXECUTABLEPATH
+    const puppeteerConfig = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
+      userDataDir: SESSION_FOLDER,
+    };
+
+    // Agregar executablePath solo en producción
+    if (CHROME_PATH) {
+      puppeteerConfig.executablePath = CHROME_PATH;
+      console.log(`🔧 Usando Chrome en: ${CHROME_PATH}`);
+    }
+
     client = new Client({
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-        ],
-        userDataDir: SESSION_FOLDER,
-      },
+      puppeteer: puppeteerConfig,
     });
 
     client.on('qr', (qr) => {
@@ -65,7 +82,7 @@ export const initWhatsApp = () => {
 
     client.on('authenticated', () => {
       console.log('✅ WhatsApp autenticado. Sesión guardada automáticamente.');
-      authAttempts = 0; // Reiniciar contador de fallos
+      authAttempts = 0;
     });
 
     client.on('ready', () => {
@@ -78,7 +95,6 @@ export const initWhatsApp = () => {
     client.on('auth_failure', (msg) => {
       console.error('❌ Error de autenticación:', msg);
       authAttempts++;
-      // Si falla varias veces, eliminar sesión corrupta
       if (authAttempts > 3) {
         if (fs.existsSync(SESSION_FOLDER)) {
           fs.rmSync(SESSION_FOLDER, { recursive: true, force: true });
@@ -86,7 +102,6 @@ export const initWhatsApp = () => {
         }
         authAttempts = 0;
       }
-      // Rechazar la promesa para que el servidor sepa que falló
       isReady = false;
       client = null;
       initPromise = null;
@@ -96,7 +111,6 @@ export const initWhatsApp = () => {
     client.on('disconnected', (reason) => {
       console.warn('⚠️ WhatsApp desconectado:', reason);
       isReady = false;
-      // Intentar reconectar después de 15 segundos
       setTimeout(() => {
         console.log('🔄 Intentando reconectar WhatsApp...');
         client = null;
@@ -107,7 +121,6 @@ export const initWhatsApp = () => {
 
     client.initialize().catch((error) => {
       console.error('❌ Error al inicializar WhatsApp:', error.message);
-      // Si el error es de contexto, eliminar sesión corrupta
       if (error.message.includes('Execution context was destroyed')) {
         if (fs.existsSync(SESSION_FOLDER)) {
           fs.rmSync(SESSION_FOLDER, { recursive: true, force: true });
@@ -125,7 +138,6 @@ export const initWhatsApp = () => {
 
 export const sendWhatsAppMessage = async (phoneNumber, message) => {
   if (!client || !isReady) {
-    // Intentar reinicializar si el cliente no está listo
     try {
       await initWhatsApp();
       if (!isReady) {
