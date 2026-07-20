@@ -29,6 +29,7 @@ interface Clase {
   alumnosInscritos?: number;
   estatus?: string;
   tipoReagendacionClase?: string | null;
+  fechaHoraNueva?: Date | null;
 }
 
 export function CalendarioProfesor() {
@@ -90,36 +91,71 @@ export function CalendarioProfesor() {
           alumnosInscritos: grupo.alumnosInscritos,
           estatus: grupo.estatus,
           tipoReagendacionClase: null,
+          fechaHoraNueva: null,
         }));
 
-        const reagendacionesMapeadas = reagendaciones.map((grupo: any) => ({
-          id: grupo.reagendacionId || `reag-${Math.random()}`,
-          titulo: grupo.nombreCurso || 'Clase reagendada',
-          profesor: grupo.nombreProfesor || 'Sin profesor',
-          fecha: grupo.diaClase || '',
-          diaClase: grupo.diaClase || '',
-          horaInicio: grupo.horaClase || '',
-          horaFin: '',
-          reagendada: true,
-          idProfesor: grupo.idProfesor || '',
-          idGrupo: grupo.idGrupo,
-          studentId: grupo.alumnos?.[0]?.idAlumno || '',
-          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: true },
-          students: grupo.alumnos || [],
-          comentarioGrupo: grupo.comentarioGrupo || '',
-          date: new Date(),
-          startTime: grupo.horaClase,
-          endTime: '',
-          title: grupo.nombreCurso || 'Clase reagendada',
-          cursoActivo: true,
-          idCurso: grupo.idCurso,
-          profesorActivo: true,
-          capacidadMaxima: grupo.capacidadMaxima,
-          alumnosInscritos: grupo.alumnosInscritos,
-          estatus: grupo.estatus,
-          tipoReagendacionClase: 'destino',
-        }));
+        // ===== MAPEO DE REAGENDACIONES (CORREGIDO) =====
+        const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
+          // Extraer la primera reagendación del grupo para obtener la nueva fecha/hora
+          const primeraReagendacion = grupo.alumnos?.[0]?.reagendacion;
+          let fechaHoraNueva = null;
+          let diaClase = grupo.diaClase || '';
+          let horaInicio = grupo.horaClase || '';
+          let horaFin = '';
+
+          if (primeraReagendacion?.fechaHoraNueva) {
+            const fecha = new Date(primeraReagendacion.fechaHoraNueva);
+            if (!isNaN(fecha.getTime())) {
+              fechaHoraNueva = fecha;
+              // Obtener el día de la semana
+              const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+              diaClase = dias[fecha.getDay()] || grupo.diaClase || '';
+              // Formatear la hora (UTC a local)
+              const horas = String(fecha.getHours()).padStart(2, '0');
+              const minutos = String(fecha.getMinutes()).padStart(2, '0');
+              horaInicio = `${horas}:${minutos}`;
+              // Calcular hora de fin usando la duración del grupo (si existe)
+              const duracion = grupo.duracion || '2 horas';
+              let minutosDuracion = 120; // Default
+              const match = String(duracion).match(/(\d+(?:\.\d+)?)/);
+              if (match) {
+                minutosDuracion = parseFloat(match[1]) * 60;
+              }
+              const fechaFin = new Date(fecha.getTime() + minutosDuracion * 60000);
+              horaFin = `${String(fechaFin.getHours()).padStart(2, '0')}:${String(fechaFin.getMinutes()).padStart(2, '0')}`;
+            }
+          }
+
+          return {
+            id: grupo.reagendacionId || `reag-${Math.random()}`,
+            titulo: grupo.nombreCurso || 'Clase reagendada',
+            profesor: grupo.nombreProfesor || 'Sin profesor',
+            fecha: diaClase,
+            diaClase: diaClase,
+            horaInicio: horaInicio,
+            horaFin: horaFin,
+            reagendada: true,
+            idProfesor: grupo.idProfesor || '',
+            idGrupo: grupo.idGrupo,
+            studentId: grupo.alumnos?.[0]?.idAlumno || '',
+            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: true },
+            students: grupo.alumnos || [],
+            comentarioGrupo: grupo.comentarioGrupo || '',
+            date: fechaHoraNueva || new Date(),
+            startTime: horaInicio,
+            endTime: horaFin,
+            title: grupo.nombreCurso || 'Clase reagendada',
+            cursoActivo: true,
+            idCurso: grupo.idCurso,
+            profesorActivo: true,
+            capacidadMaxima: grupo.capacidadMaxima,
+            alumnosInscritos: grupo.alumnosInscritos,
+            estatus: grupo.estatus,
+            tipoReagendacionClase: 'destino',
+            fechaHoraNueva: fechaHoraNueva,
+          };
+        });
 
         eventos = [...clasesBaseMapeadas, ...reagendacionesMapeadas];
       }

@@ -9,6 +9,7 @@ export const connectDB = async () => {
 
     console.log("MongoDB conectado correctamente");
     console.log("Base usada:", mongoose.connection.name);
+    console.log('🔗 Conectando a:', process.env.MONGODB_URI);
   } catch (error) {
     console.error("Error al conectar MongoDB:", error.message);
     process.exit(1);
