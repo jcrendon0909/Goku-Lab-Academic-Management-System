@@ -28,3 +28,38 @@
 2026/07/20-16:31:12.575 74aa6 Delete type=2 #332
 2026/07/20-16:31:12.575 74aa6 Delete type=2 #324
 2026/07/20-16:31:12.575 74aa6 Delete type=2 #325
+2026/07/20-17:36:15.834 74aa6 Level-0 table #344: started
+2026/07/20-17:36:15.852 74aa6 Level-0 table #344: 1366690 bytes OK
+2026/07/20-17:36:15.856 74aa6 Delete type=0 #331
+2026/07/20-17:36:16.172 74aa6 Compacting 1@0 + 1@1 files
+2026/07/20-17:36:16.192 74aa6 Generated table #345@0: 48805 keys, 1214293 bytes
+2026/07/20-17:36:16.194 74aa6 Generated table #346@0: 35 keys, 5158 bytes
+2026/07/20-17:36:16.194 74aa6 Compacted 1@0 + 1@1 files => 1219451 bytes
+2026/07/20-17:36:16.200 74aa6 compacted to: files[ 0 2 12 0 0 0 0 ]
+2026/07/20-17:36:16.200 74aa6 Delete type=2 #344
+2026/07/20-17:36:16.200 74aa6 Delete type=2 #319
+2026/07/20-17:36:42.192 74aa6 Compacting 1@1 + 10@2 files
+2026/07/20-17:36:42.238 74aa6 Generated table #347@1: 71599 keys, 2234528 bytes
+2026/07/20-17:36:42.261 74aa6 Generated table #348@1: 22523 keys, 2175038 bytes
+2026/07/20-17:36:42.277 74aa6 Generated table #349@1: 1404 keys, 2136186 bytes
+2026/07/20-17:36:42.291 74aa6 Generated table #350@1: 1591 keys, 2139940 bytes
+2026/07/20-17:36:42.321 74aa6 Generated table #351@1: 18144 keys, 2204212 bytes
+2026/07/20-17:36:42.353 74aa6 Generated table #352@1: 21532 keys, 2188729 bytes
+2026/07/20-17:36:42.374 74aa6 Generated table #353@1: 15338 keys, 2138417 bytes
+2026/07/20-17:36:42.411 74aa6 Generated table #354@1: 92023 keys, 2239536 bytes
+2026/07/20-17:36:42.448 74aa6 Generated table #355@1: 91665 keys, 2239150 bytes
+2026/07/20-17:36:42.484 74aa6 Generated table #356@1: 92396 keys, 2242181 bytes
+2026/07/20-17:36:42.493 74aa6 Generated table #357@1: 13386 keys, 391738 bytes
+2026/07/20-17:36:42.493 74aa6 Compacted 1@1 + 10@2 files => 22329655 bytes
+2026/07/20-17:36:42.496 74aa6 compacted to: files[ 0 1 13 0 0 0 0 ]
+2026/07/20-17:36:42.497 74aa6 Delete type=2 #339
+2026/07/20-17:36:42.497 74aa6 Delete type=2 #338
+2026/07/20-17:36:42.497 74aa6 Delete type=2 #342
+2026/07/20-17:36:42.497 74aa6 Delete type=2 #341
+2026/07/20-17:36:42.497 74aa6 Delete type=2 #340
+2026/07/20-17:36:42.498 74aa6 Delete type=2 #345
+2026/07/20-17:36:42.498 74aa6 Delete type=2 #335
+2026/07/20-17:36:42.498 74aa6 Delete type=2 #334
+2026/07/20-17:36:42.499 74aa6 Delete type=2 #336
+2026/07/20-17:36:42.499 74aa6 Delete type=2 #337
+2026/07/20-17:36:42.499 74aa6 Delete type=2 #333
