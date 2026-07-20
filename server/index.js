@@ -61,21 +61,39 @@ app.get("/", (req, res) => {
 // ============================================================
 // Ruta de prueba para WhatsApp (MODIFICADA)
 // ============================================================
+// ============================================================
+// Ruta de prueba para WhatsApp (CON TIMEOUT Y MANEJO ROBUSTO)
+// ============================================================
 app.get("/test-whatsapp", async (req, res) => {
   try {
-    // Intentar enviar directamente, sin esperar a isReady
-    const result = await sendWhatsAppMessage("525555052424", "Hola, esto es una prueba desde Goku Lab.");
-    res.json({ ok: true, mensaje: "Mensaje enviado" });
+    // Timeout de 15 segundos para toda la operación
+    const result = await Promise.race([
+      (async () => {
+        // Esperar hasta que WhatsApp esté listo (máximo 10 segundos)
+        let intentos = 0;
+        while (!isWhatsAppReady() && intentos < 20) {
+          await new Promise(r => setTimeout(r, 500));
+          intentos++;
+        }
+        if (!isWhatsAppReady()) {
+          throw new Error('WhatsApp no está listo después de 10 segundos.');
+        }
+        // Enviar mensaje
+        await sendWhatsAppMessage("525555052424", "Hola, esto es una prueba desde Goku Lab.");
+        return { ok: true, mensaje: "Mensaje enviado" };
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout: la operación tardó más de 15 segundos')), 15000))
+    ]);
+    res.json(result);
   } catch (error) {
     console.error("❌ Error en /test-whatsapp:", error.message);
-    // Si el error es "Cliente no listo", devolver 503
-    if (error.message.includes("Cliente no listo")) {
-      return res.status(503).json({ error: "WhatsApp no está listo. Espera a que se autentique." });
+    // Si el error es de timeout o de cliente no listo, devolver 503
+    if (error.message.includes('no está listo') || error.message.includes('Timeout')) {
+      return res.status(503).json({ error: error.message });
     }
     res.status(500).json({ error: error.message });
   }
 });
-
 // Manejo de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
