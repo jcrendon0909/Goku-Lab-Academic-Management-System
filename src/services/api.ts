@@ -1,6 +1,7 @@
 import { notifyDataChanged } from "../utils/dataSync";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = localStorage.getItem("token");
   const headers = new Headers(init?.headers);
@@ -80,7 +81,6 @@ export async function crearProfesor(data: {
   salarioPorHora?: number;
   tipoPago?: 'por_hora' | 'fijo_mensual';
   salarioMensual?: number;
-  // Nuevos campos para creación de usuario
   crearUsuario?: boolean;
   usuario?: string;
   password?: string;
@@ -530,9 +530,6 @@ export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
 // NUEVAS FUNCIONES PARA EL MÓDULO DE RENTABILIDAD Y DATOS EXTRA
 // ============================================================
 
-/**
- * Actualiza los datos extra de un profesor (fecha nacimiento, salarios y tipo de pago)
- */
 export async function actualizarDatosExtraProfesor(
   idProfesor: string,
   data: {
@@ -555,10 +552,6 @@ export async function actualizarDatosExtraProfesor(
   return responseData;
 }
 
-/**
- * Obtiene la rentabilidad de todos los profesores activos,
- * filtrada por mes y año (opcional).
- */
 export async function getRentabilidadProfesores(filtros?: {
   mes?: string;
   anio?: string;
@@ -573,12 +566,9 @@ export async function getRentabilidadProfesores(filtros?: {
 }
 
 // ============================================================
-// NUEVAS FUNCIONES PARA RECUPERACIÓN DE CONTRASEÑA
+// FUNCIONES PARA RECUPERACIÓN DE CONTRASEÑA
 // ============================================================
 
-/**
- * Solicita un token para restablecer la contraseña (desde la página de login)
- */
 export async function solicitarResetPassword(usuario: string) {
   const res = await apiFetch("/auth/forgot-password", {
     method: "POST",
@@ -590,9 +580,6 @@ export async function solicitarResetPassword(usuario: string) {
   return data;
 }
 
-/**
- * Envía la nueva contraseña junto con el token recibido por correo
- */
 export async function resetPassword(token: string, nuevaPassword: string) {
   const res = await apiFetch("/auth/reset-password", {
     method: "POST",
@@ -604,34 +591,28 @@ export async function resetPassword(token: string, nuevaPassword: string) {
   return data;
 }
 
-/**
- * (Admin) Envía un correo de restablecimiento a un usuario específico
- */
 export async function resetPasswordPorAdmin(idUsuario: string) {
   const res = await apiFetch(`/usuarios/${idUsuario}/reset-password`, {
     method: "POST",
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Error al generar token");
-  return data.token; // Devuelve el token para mostrarlo en el frontend
+  return data.token;
 }
-// Actualizar modalidad de una reagendación
+
+// ============================================================
+// 🔥 FUNCIÓN CORREGIDA: Actualizar modalidad de una reagendación
+// ============================================================
 export const actualizarModalidadReagendacion = async (
   reagendacionId: string, 
   modalidad: string
 ) => {
-  const response = await fetch(`/api/reagendaciones/${reagendacionId}`, {
+  const res = await apiFetch(`/reagendaciones/${reagendacionId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ modalidad }),
   });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Error al actualizar modalidad');
-  }
-  
-  return response.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al actualizar modalidad');
+  return data;
 };
