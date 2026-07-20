@@ -64,36 +64,35 @@ export const ClassProvider = ({ children }: { children: ReactNode }) => {
     loadClasses();
   }, []);
 
-  const rescheduleClass = async (classId: string, studentId: string, data: any) => {
-    try {
-      const payload = {
-        idAlumno: studentId,
-        idGrupoOrigen: classId,
-        idGrupoNuevo: data.newTeacher?.id || classId, // En tu lógica, el nuevo grupo es el del profesor seleccionado
-        fechaHoraNueva: new Date(`${data.newDate}T${data.newTime}`).toISOString(),
-        comentario: `Reagendado por ${data.studentName}`,
-        tipoReagendacion: 'temporal',
-        // Otros campos según tu modelo
-      };
+const rescheduleClass = async (classId: string, studentId: string, data: any) => {
+  try {
+    const payload = {
+      idAlumno: studentId,
+      idGrupoOrigen: classId,
+      idGrupoNuevo: classId, // 👈 CORREGIDO: mantener el mismo grupo
+      fechaHoraNueva: new Date(`${data.newDate}T${data.newTime}`).toISOString(),
+      comentario: `Reagendado por ${data.studentName} - Nuevo profesor: ${data.newTeacher?.name || ''}`,
+      tipoReagendacion: 'temporal',
+    };
 
-      const res = await apiFetch('/reagendaciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    const res = await apiFetch('/reagendaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Error al reagendar');
-      }
-
-      // Recargar clases después de reagendar
-      await loadClasses();
-    } catch (error) {
-      console.error('Error en rescheduleClass:', error);
-      throw error;
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al reagendar');
     }
-  };
+
+    // Recargar clases para reflejar el cambio
+    await loadClasses();
+  } catch (error) {
+    console.error('Error en rescheduleClass:', error);
+    throw error;
+  }
+};
 
   return (
     <ClassContext.Provider value={{ classes, loading, rescheduleClass, refreshClasses: loadClasses }}>
