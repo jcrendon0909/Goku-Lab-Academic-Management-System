@@ -11,6 +11,7 @@ import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Calendar, Clock, User, Users, RotateCcw, StickyNote, BookOpen, Pencil, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatMexicoTimeRange } from '../../utils/dateUtils'; // 👈 NUEVA IMPORTACIÓN
 
 interface ClassDetailsDialogProps {
   classData: any;
@@ -51,6 +52,7 @@ export function ClassDetailsDialog({
   const [comentariosPorAlumno, setComentariosPorAlumno] = useState<Record<string, string>>({});
   const [guardandoComentarioAlumno, setGuardandoComentarioAlumno] = useState<string | null>(null);
   const [cambiandoModalidadAlumno, setCambiandoModalidadAlumno] = useState<string | null>(null);
+  const [showAllData, setShowAllData] = useState(false); // 👈 NUEVO ESTADO
 
   const esReagendada = Boolean(classData?.tipoReagendacionClase);
   const profesorRequiereAtencion = !classData?.teacher?.name || classData?.profesorActivo === false;
@@ -183,7 +185,7 @@ export function ClassDetailsDialog({
                   <div className="text-xs text-gray-500">Horario</div>
                   <div className="text-sm font-medium text-gray-900">
                     {esDestinoReagendado && fechaInfo
-                      ? `${fechaInfo.horaStr} - ${classData?.endTime || 'Fin por definir'}`
+                      ? `${formatMexicoTimeRange(classData.fechaHoraNueva, classData.duracion)}` // 👈 CORREGIDO
                       : `${classData?.startTime} - ${classData?.endTime}`
                     }
                   </div>
@@ -444,6 +446,24 @@ export function ClassDetailsDialog({
               )}
             </div>
           )}
+
+          {/* 👇 NUEVA SECCIÓN: BOTÓN PARA VER TODOS LOS DATOS TÉCNICOS */}
+          <div className="pt-4 border-t border-gray-200">
+            <button
+              onClick={() => setShowAllData(!showAllData)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
+            >
+              {showAllData ? 'Ocultar' : 'Ver'} todos los datos técnicos
+            </button>
+
+            {showAllData && (
+              <div className="mt-3 p-4 bg-gray-50 rounded-lg overflow-auto max-h-80 border border-gray-200">
+                <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+                  {JSON.stringify(classData, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

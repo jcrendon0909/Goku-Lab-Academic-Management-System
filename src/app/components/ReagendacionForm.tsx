@@ -4,6 +4,7 @@ import {
   getCalendario,
   getProfesores,
 } from "../../services/api";
+import { formatMexicoTimeRange } from "../../utils/dateUtils"; // 👈 NUEVA IMPORTACIÓN
 
 interface ReagendacionFormProps {
   data: any;
@@ -203,19 +204,18 @@ export default function ReagendacionForm({
           data.alumno.Alumno ||
           data.alumno.nombre ||
           "",
-        idGrupoOrigen: idGrupoOrigenDetectado, // ✅ Normalizado (era IdgrupoOrigen)
+        idGrupoOrigen: idGrupoOrigenDetectado,
         idGrupoNuevo: idGrupoNuevoFinal,
         nombreCurso: cursoActual,
         profesorOriginal: profesorOriginal,
         profesorNuevo: profesorFinal,
         idProfesorOriginal: idProfesorOriginal,
         idProfesorNuevo: idProfesorFinal,
-        // ✅ CAMBIO CRÍTICO: Enviar fechas en ISO 8601 (no strings con espacios)
         fechaHoraOriginal: fechaOriginalISO,
         fechaHoraNueva: fechaNuevaISO,
         duracion: duracion,
         modalidad: modalidad,
-        tipoReagendacion: tipoReagendacion, // ✅ CAMBIO 7: Usuario elige tipo
+        tipoReagendacion: tipoReagendacion,
         comentario: "",
         motivo: grupoSugerido
           ? "Reagendado a grupo existente"
@@ -263,7 +263,7 @@ Se solicita reagendación:
 Alumno: ${data?.alumno?.nombreAlumno || data?.alumno?.Alumno || ""}
 Curso: ${cursoActual}
 Profesor actual: ${profesorOriginal}
-Horario original: ${data?.clase?.startTime || ""} - ${data?.clase?.endTime || ""}
+Horario original: ${formatMexicoTimeRange(data?.clase?.startTime, data?.duracion)} // 👈 CORREGIDO
 
 Nueva fecha: ${fecha || "[pendiente]"}
 Nueva hora: ${hora || "[pendiente]"}
@@ -315,7 +315,9 @@ ${
               </div>
               <div>
                 <span className="text-blue-600 font-semibold">Horario:</span>
-                <p className="text-gray-800">{data?.clase?.startTime} - {data?.clase?.endTime}</p>
+                <p className="text-gray-800">
+                  {formatMexicoTimeRange(data?.clase?.startTime, data?.duracion)} {/* 👈 CORREGIDO */}
+                </p>
               </div>
               <div>
                 <span className="text-blue-600 font-semibold">Grupo:</span>
