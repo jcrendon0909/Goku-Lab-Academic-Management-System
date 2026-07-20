@@ -615,3 +615,23 @@ export async function resetPasswordPorAdmin(idUsuario: string) {
   if (!res.ok) throw new Error(data.error || "Error al generar token");
   return data.token; // Devuelve el token para mostrarlo en el frontend
 }
+// Actualizar modalidad de una reagendación
+export const actualizarModalidadReagendacion = async (
+  reagendacionId: string, 
+  modalidad: string
+) => {
+  const response = await fetch(`/api/reagendaciones/${reagendacionId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ modalidad }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error al actualizar modalidad');
+  }
+  
+  return response.json();
+};

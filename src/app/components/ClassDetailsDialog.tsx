@@ -12,6 +12,7 @@ import { Card } from './ui/card';
 import { Calendar, Clock, User, Users, RotateCcw, StickyNote, BookOpen, Pencil, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatMexicoTimeRange } from '../../utils/dateUtils';
+import { actualizarModalidadReagendacion } from '../../services/api';
 
 interface ClassDetailsDialogProps {
   classData: any;
@@ -54,8 +55,10 @@ export function ClassDetailsDialog({
   const [guardandoComentarioAlumno, setGuardandoComentarioAlumno] = useState<string | null>(null);
   const [cambiandoModalidadAlumno, setCambiandoModalidadAlumno] = useState<string | null>(null);
   const [showAllData, setShowAllData] = useState(false);
+  const [actualizandoModalidad, setActualizandoModalidad] = useState<string | null>(null);
 
   const esReagendada = Boolean(classData?.tipoReagendacionClase);
+  const esDestino = classData?.tipoReagendacionClase === 'destino';
   const profesorRequiereAtencion = !classData?.teacher?.name || classData?.profesorActivo === false;
 
   useEffect(() => {
@@ -69,9 +72,9 @@ export function ClassDetailsDialog({
         if (student?.idAlumno) {
           comentariosIniciales[student.idAlumno] = student.comentarios || '';
           
-          // Si es destino de reagendación y tenemos modalidad de la reagendación, usarla
+          // Si es destino, usar modalidad de la reagendación
           let modalidad = student.modalidad || 'Presencial';
-          if (classData?.tipoReagendacionClase === 'destino' && classData?.modalidadReagendacion) {
+          if (esDestino && classData?.modalidadReagendacion) {
             modalidad = classData.modalidadReagendacion;
           }
           modalidadesIniciales[student.idAlumno] = modalidad;
@@ -80,7 +83,7 @@ export function ClassDetailsDialog({
       setComentariosPorAlumno(comentariosIniciales);
       setModalidadesPorAlumno(modalidadesIniciales);
     }
-  }, [isOpen, classData]);
+  }, [isOpen, classData, esDestino]);
 
   const handleGuardarComentarioGrupo = async () => {
     const comentarioActual = classData?.comentarioGrupo || '';
@@ -110,47 +113,27 @@ export function ClassDetailsDialog({
     }
   };
 
-  // ✅ Función para actualizar la modalidad en la reagendación (destino)
-  const actualizarReagendacionModalidad = async (modalidad: string) => {
-    // Obtenemos el ID de la reagendación desde classData
-    const reagendacionId = classData?.reagendacionId;
-    if (!reagendacionId) {
-      throw new Error('No se encontró el ID de la reagendación');
-    }
-
-    const response = await fetch(`/api/reagendaciones/${reagendacionId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modalidad }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Error al actualizar la modalidad');
-    }
-
-    return await response.json();
-  };
-
   const handleCambiarModalidad = async (student: any, modalidad: 'Presencial' | 'Virtual') => {
     const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
     if (modalidadActual === modalidad) return;
 
     try {
+      setActualizandoModalidad(student.idAlumno);
       setCambiandoModalidadAlumno(student.idAlumno);
 
-      // Determinar si es destino de reagendación
-      const esDestino = classData?.tipoReagendacionClase === 'destino';
-
       if (esDestino) {
-        // ✅ Actualizar la reagendación (destino)
-        await actualizarReagendacionModalidad(modalidad);
+        // Actualizar la reagendación
+        const reagendacionId = classData.reagendacionId;
+        if (!reagendacionId) {
+          throw new Error('No se encontró el ID de la reagendación');
+        }
+        await actualizarModalidadReagendacion(reagendacionId, modalidad);
       } else {
-        // ✅ Actualizar la inscripción (origen)
+        // Actualizar la inscripción (comportamiento original)
         await onActualizarInscripcion(student, classData, { modalidad });
       }
 
-      // ✅ Actualizar el estado local siempre
+      // Actualizar el estado local
       setModalidadesPorAlumno(prev => ({
         ...prev,
         [student.idAlumno]: modalidad,
@@ -161,6 +144,7 @@ export function ClassDetailsDialog({
       console.error('Error al cambiar modalidad:', error);
       toast.error(error.message || 'Error al cambiar modalidad');
     } finally {
+      setActualizandoModalidad(null);
       setCambiandoModalidadAlumno(null);
     }
   };
@@ -169,7 +153,6 @@ export function ClassDetailsDialog({
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
 
-  // Función auxiliar para formatear fecha/hora de la reagendación
   const formatearFechaHoraReagendacion = (fechaHoraNueva: string) => {
     const fecha = new Date(fechaHoraNueva);
     if (isNaN(fecha.getTime())) return null;
@@ -189,7 +172,6 @@ export function ClassDetailsDialog({
     return { dia, fechaStr, horaStr };
   };
 
-  // Determinar si es reagendación destino y tiene fechaHoraNueva
   const esDestinoReagendado = classData?.tipoReagendacionClase === 'destino' && classData?.fechaHoraNueva;
   const fechaInfo = esDestinoReagendado ? formatearFechaHoraReagendacion(classData.fechaHoraNueva) : null;
 
@@ -345,6 +327,7 @@ export function ClassDetailsDialog({
                   const comentarioEditado = comentariosPorAlumno[student.idAlumno] ?? '';
                   const modalidadActual = modalidadesPorAlumno[student.idAlumno] ?? student.modalidad ?? 'Presencial';
                   const esReagendado = student.reagendacion?.tipo === 'destino';
+                  const estaActualizando = actualizandoModalidad === student.idAlumno;
 
                   return (
                     <Card key={student.idAlumno || index} className="p-4 rounded-xl">
@@ -368,7 +351,7 @@ export function ClassDetailsDialog({
                                 <button
                                   key={opcion}
                                   type="button"
-                                  disabled={!puedeEditar || cambiandoModalidadAlumno === student.idAlumno}
+                                  disabled={!puedeEditar || estaActualizando}
                                   onClick={() => handleCambiarModalidad(student, opcion)}
                                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                                     modalidadActual === opcion
@@ -376,7 +359,7 @@ export function ClassDetailsDialog({
                                         ? 'bg-purple-600 text-white shadow-sm'
                                         : 'bg-emerald-600 text-white shadow-sm'
                                       : 'text-gray-600 hover:bg-white'
-                                  } ${cambiandoModalidadAlumno === student.idAlumno ? 'opacity-60 cursor-wait' : ''}`}
+                                  } ${estaActualizando ? 'opacity-60 cursor-wait' : ''}`}
                                 >
                                   {opcion}
                                 </button>
@@ -427,7 +410,6 @@ export function ClassDetailsDialog({
 
                         {/* Acciones por alumno */}
                         <div className="flex flex-wrap items-center gap-2">
-                          {/* Reagendar (solo si no está reagendado y no es clase destino) */}
                           {puedeEditar && !student.reagendacion && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onReagendar(student)}
@@ -439,7 +421,6 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
-                          {/* Inactivar en grupo */}
                           {puedeEditar && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onBajaAlumno(student, classData)}
@@ -450,7 +431,6 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
-                          {/* Quitar reagendación */}
                           {puedeEditar && (classData?.tipoReagendacionClase === 'destino' || student.reagendacion?.tipo === 'destino') && (
                             <button
                               onClick={() => onEliminarReagendacionAlumno(student, classData)}

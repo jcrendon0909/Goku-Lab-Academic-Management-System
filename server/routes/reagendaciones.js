@@ -174,5 +174,44 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// ============================================
+// NUEVO ENDPOINT: Actualizar modalidad de una reagendación
+// ============================================
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { modalidad } = req.body;
+
+    // Validar que la modalidad sea válida
+    if (!modalidad || !["Presencial", "Virtual"].includes(modalidad)) {
+      return res.status(400).json({ 
+        error: "Modalidad inválida. Debe ser 'Presencial' o 'Virtual'" 
+      });
+    }
+
+    console.log(`🔄 Actualizando reagendación ${id} con modalidad: ${modalidad}`);
+
+    // Buscar por _id o ReagendacionId
+    const reagendacion = await Reagendacion.findOneAndUpdate(
+      { $or: [{ _id: id }, { ReagendacionId: id }] },
+      { modalidad },
+      { new: true, runValidators: true }
+    );
+
+    if (!reagendacion) {
+      return res.status(404).json({ error: "Reagendación no encontrada" });
+    }
+
+    console.log("✅ Reagendación actualizada:", reagendacion);
+    res.json({ 
+      ok: true, 
+      mensaje: "Modalidad actualizada correctamente", 
+      data: reagendacion 
+    });
+  } catch (error) {
+    console.error("❌ Error PUT /reagendaciones/:id:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default router;

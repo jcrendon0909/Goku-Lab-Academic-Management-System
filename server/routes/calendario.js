@@ -419,6 +419,7 @@ router.get("/", async (req, res) => {
       const key = `${normalizar(idGrupoNuevo)}|${fechaKey}|${horaClaseNueva}`;
 
       if (!reagendacionesAgrupadas[key]) {
+        const reagendacionId = idReagendacion(r);
         reagendacionesAgrupadas[key] = {
           tipo: "reagendacion",
           idGrupo:
@@ -437,7 +438,7 @@ router.get("/", async (req, res) => {
           capacidadMaxima: (grupoNuevo && grupoNuevo.CapacidadMaxima) || 8,
           alumnos: [],
           reagendacionIds: [],
-          reagendacionId: "",
+          reagendacionId: reagendacionId,
           idGrupoOrigen:
             r.idGrupoOrigen ||
             r.IdgrupoOrigen ||
@@ -445,6 +446,10 @@ router.get("/", async (req, res) => {
             "",
           estatus: "Reagendado",
           esVirtual: !grupoNuevo,
+          // 🔥 NUEVOS CAMPOS PARA LA REAGENDACIÓN
+          modalidadReagendacion: r.modalidad || "Presencial",
+          duracion: r.duracion || "2 horas",
+          fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : null,
         };
       }
 
@@ -486,10 +491,11 @@ router.get("/", async (req, res) => {
           ) === normalizar(grupoOrigenIns)
       );
 
+      // 🔥 MODIFICACIÓN: Usar la modalidad de la reagendación (r.modalidad) en lugar de la de la inscripción
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
-        modalidad: insOrigen?.modalidad || r.modalidad || "Presencial",
+        modalidad: r.modalidad || "Presencial", // <-- priorizar la de la reagendación
         comentarios: insOrigen?.comentarios || "",
         grupoIdInscripcion: grupoOrigenIns,
         reagendacion: {
@@ -514,6 +520,8 @@ router.get("/", async (req, res) => {
       (grupo) => ({
         ...grupo,
         alumnosInscritos: grupo.alumnos.length,
+        // 🔥 NUEVO: Identificar que es una clase destino
+        tipoReagendacionClase: "destino",
       })
     );
 
