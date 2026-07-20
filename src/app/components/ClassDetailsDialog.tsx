@@ -113,28 +113,29 @@ export function ClassDetailsDialog({
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
 
-  // Función para formatear fecha/hora de la reagendación
-  const formatearFechaHoraReagendacion = () => {
-    if (!classData?.fechaHoraNueva) return null;
-    const fecha = new Date(classData.fechaHoraNueva);
+  // 👇 Función auxiliar para formatear fecha/hora de la reagendación
+  const formatearFechaHoraReagendacion = (fechaHoraNueva: string) => {
+    const fecha = new Date(fechaHoraNueva);
     if (isNaN(fecha.getTime())) return null;
-    return {
-      dia: fecha.toLocaleDateString('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: 'UTC'
-      }),
-      hora: fecha.toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'UTC'
-      })
-    };
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const dia = dias[fecha.getDay()];
+    const fechaStr = fecha.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC'
+    });
+    const horaStr = fecha.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC'
+    });
+    return { dia, fechaStr, horaStr };
   };
 
-  const fechaHoraReagendada = formatearFechaHoraReagendacion();
+  // Determinar si es reagendación destino y tiene fechaHoraNueva
+  const esDestinoReagendado = classData?.tipoReagendacionClase === 'destino' && classData?.fechaHoraNueva;
+  const fechaInfo = esDestinoReagendado ? formatearFechaHoraReagendacion(classData.fechaHoraNueva) : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -161,7 +162,7 @@ export function ClassDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
-          {/* Información general (con soporte para reagendación) */}
+          {/* Información general - CORREGIDO para mostrar nueva fecha/hora en reagendaciones destino */}
           <Card className="p-4 bg-gray-50 rounded-lg border-none">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-3">
@@ -169,9 +170,9 @@ export function ClassDetailsDialog({
                 <div>
                   <div className="text-xs text-gray-500">Día</div>
                   <div className="text-sm font-medium text-gray-900">
-                    {classData.tipoReagendacionClase === 'destino' && fechaHoraReagendada
-                      ? fechaHoraReagendada.dia
-                      : classData.diaClase || 'Sin día asignado'
+                    {esDestinoReagendado && fechaInfo
+                      ? `${fechaInfo.dia} (${fechaInfo.fechaStr})`
+                      : classData?.diaClase || 'Sin día asignado'
                     }
                   </div>
                 </div>
@@ -181,9 +182,9 @@ export function ClassDetailsDialog({
                 <div>
                   <div className="text-xs text-gray-500">Horario</div>
                   <div className="text-sm font-medium text-gray-900">
-                    {classData.tipoReagendacionClase === 'destino' && fechaHoraReagendada
-                      ? `${fechaHoraReagendada.hora} - ${classData.endTime || 'Fin por definir'}`
-                      : `${classData.startTime} - ${classData.endTime}`
+                    {esDestinoReagendado && fechaInfo
+                      ? `${fechaInfo.horaStr} - ${classData?.endTime || 'Fin por definir'}`
+                      : `${classData?.startTime} - ${classData?.endTime}`
                     }
                   </div>
                 </div>
