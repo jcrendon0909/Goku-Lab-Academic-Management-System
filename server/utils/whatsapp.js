@@ -1,4 +1,4 @@
-// server/utils/whatsapp.js (versión sin executablePath)
+// server/utils/whatsapp.js
 import { Client } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
@@ -12,6 +12,9 @@ const SESSION_FOLDER = path.join(__dirname, '../../whatsapp-session');
 if (!fs.existsSync(SESSION_FOLDER)) {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
+
+// 🔥 RUTA FIJA DE CHROME (basada en el log de build)
+const CHROME_PATH = '/opt/render/.cache/puppeteer/chrome/linux-150.0.7871.24/chrome-linux64/chrome';
 
 let client = null;
 let isReady = false;
@@ -29,11 +32,12 @@ export const initWhatsApp = () => {
 
   initPromise = new Promise((resolve, reject) => {
     console.log('🔄 Inicializando cliente de WhatsApp...');
+    console.log(`🔧 Usando Chrome en: ${CHROME_PATH}`);
     
-    // 🔥 Configuración SIN executablePath
     client = new Client({
       puppeteer: {
         headless: true,
+        executablePath: CHROME_PATH, // 🔥 Ruta fija
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -110,7 +114,34 @@ export const initWhatsApp = () => {
 };
 
 export const sendWhatsAppMessage = async (phoneNumber, message) => {
-  // ... (sin cambios)
+  if (!client || !isReady) {
+    try {
+      await initWhatsApp();
+      if (!isReady) {
+        throw new Error('Cliente no listo después de reinicializar.');
+      }
+    } catch (e) {
+      throw new Error('Cliente de WhatsApp no está disponible: ' + e.message);
+    }
+  }
+
+  let cleanNumber = phoneNumber.replace(/\s/g, '').replace(/-/g, '');
+  if (cleanNumber.startsWith('+')) cleanNumber = cleanNumber.substring(1);
+  if (!cleanNumber.startsWith('52')) cleanNumber = '52' + cleanNumber;
+
+  try {
+    const numberId = await client.getNumberId(`+${cleanNumber}`);
+    if (!numberId) {
+      throw new Error(`El número ${cleanNumber} no parece ser un número de WhatsApp válido.`);
+    }
+    const chat = await client.getChatById(numberId._serialized);
+    await chat.sendMessage(message);
+    console.log(`✅ Mensaje enviado a +${cleanNumber}`);
+    return { success: true, message: 'Enviado' };
+  } catch (error) {
+    console.error(`❌ Error al enviar mensaje a ${cleanNumber}:`, error.message);
+    throw error;
+  }
 };
 
 export const isWhatsAppReady = () => isReady;
