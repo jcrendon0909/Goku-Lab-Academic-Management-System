@@ -418,6 +418,15 @@ router.get("/", async (req, res) => {
 
       const key = `${normalizar(idGrupoNuevo)}|${fechaKey}|${horaClaseNueva}`;
 
+      // 🔥 RESOLVER NOMBRE DEL PROFESOR ORIGINAL (si es un ID, buscar en profesoresMap)
+      let profesorOriginalNombre = r.profesorOriginal || '';
+      if (profesorOriginalNombre && profesoresMap.has(normalizar(profesorOriginalNombre))) {
+        const profesor = profesoresMap.get(normalizar(profesorOriginalNombre));
+        if (profesor && profesor.nombre) {
+          profesorOriginalNombre = profesor.nombre;
+        }
+      }
+
       if (!reagendacionesAgrupadas[key]) {
         const reagendacionId = idReagendacion(r);
         reagendacionesAgrupadas[key] = {
@@ -449,7 +458,7 @@ router.get("/", async (req, res) => {
           modalidad: r.modalidad || "Presencial",
           duracion: r.duracion || "2 horas",
           fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : null,
-          profesorOriginal: r.profesorOriginal || '', // 🔥 NUEVO: nombre del profesor original
+          profesorOriginal: profesorOriginalNombre, // 🔥 NOMBRE DEL PROFESOR ORIGINAL (resuelto)
         };
       }
 
@@ -521,7 +530,7 @@ router.get("/", async (req, res) => {
         alumnosInscritos: grupo.alumnos.length,
         tipoReagendacionClase: "destino",
         modalidad: grupo.modalidad || "Presencial",
-        profesorOriginal: grupo.profesorOriginal || '', // 🔥 NUEVO
+        profesorOriginal: grupo.profesorOriginal || '',
       })
     );
 
