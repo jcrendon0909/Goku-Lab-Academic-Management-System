@@ -71,14 +71,17 @@ export function ClassDetailsDialog({
       for (const student of classData?.students || []) {
         if (student?.idAlumno) {
           comentariosIniciales[student.idAlumno] = student.comentarios || '';
-          // ✅ Usar directamente la modalidad del alumno (que ya es la de la reagendación si es destino)
-          modalidadesIniciales[student.idAlumno] = student.modalidad || 'Presencial';
+          let modalidad = student.modalidad || 'Presencial';
+          if (esDestino && classData?.modalidadReagendacion) {
+            modalidad = classData.modalidadReagendacion;
+          }
+          modalidadesIniciales[student.idAlumno] = modalidad;
         }
       }
       setComentariosPorAlumno(comentariosIniciales);
       setModalidadesPorAlumno(modalidadesIniciales);
     }
-  }, [isOpen, classData]);
+  }, [isOpen, classData, esDestino]);
 
   const handleGuardarComentarioGrupo = async () => {
     const comentarioActual = classData?.comentarioGrupo || '';
@@ -117,19 +120,15 @@ export function ClassDetailsDialog({
       setCambiandoModalidadAlumno(student.idAlumno);
 
       if (esDestino) {
-        // ✅ OBTENER EL ID DE LA REAGENDACIÓN DEL ALUMNO (no de classData)
         const reagendacionId = student.reagendacion?.reagendacionId;
         if (!reagendacionId) {
           throw new Error('No se encontró el ID de la reagendación para este alumno');
         }
-        console.log('🔄 Actualizando reagendación:', reagendacionId, 'a modalidad:', modalidad);
         await actualizarModalidadReagendacion(reagendacionId, modalidad);
       } else {
-        // ✅ Actualizar la inscripción (comportamiento original)
         await onActualizarInscripcion(student, classData, { modalidad });
       }
 
-      // ✅ Actualizar el estado local siempre
       setModalidadesPorAlumno(prev => ({
         ...prev,
         [student.idAlumno]: modalidad,
@@ -149,7 +148,6 @@ export function ClassDetailsDialog({
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
 
-  // Función para formatear fecha/hora de la reagendación
   const formatearFechaHoraReagendacion = (fechaHoraNueva: string) => {
     const fecha = new Date(fechaHoraNueva);
     if (isNaN(fecha.getTime())) return null;
@@ -407,7 +405,6 @@ export function ClassDetailsDialog({
 
                         {/* Acciones por alumno */}
                         <div className="flex flex-wrap items-center gap-2">
-                          {/* Reagendar (solo si no está reagendado y no es clase destino) */}
                           {puedeEditar && !student.reagendacion && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onReagendar(student)}
@@ -419,7 +416,6 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
-                          {/* Inactivar en grupo */}
                           {puedeEditar && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onBajaAlumno(student, classData)}
@@ -430,7 +426,6 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
-                          {/* Quitar reagendación */}
                           {puedeEditar && (classData?.tipoReagendacionClase === 'destino' || student.reagendacion?.tipo === 'destino') && (
                             <button
                               onClick={() => onEliminarReagendacionAlumno(student, classData)}
@@ -481,23 +476,158 @@ export function ClassDetailsDialog({
             </div>
           )}
 
-          {/* Botón para ver todos los datos técnicos */}
+          {/* ============================================================ */}
+          {/* NUEVA SECCIÓN: DETALLES TÉCNICOS CON FORMATO BONITO */}
+          {/* ============================================================ */}
           <div className="pt-4 border-t border-gray-200">
             <button
               onClick={() => setShowAllData(!showAllData)}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
             >
-              {showAllData ? 'Ocultar' : 'Ver'} todos los datos técnicos
+              {showAllData ? 'Ocultar' : 'Ver'} detalles técnicos de la reagendación
             </button>
 
             {showAllData && (
-              <div className="mt-3 p-4 bg-gray-50 rounded-lg overflow-auto max-h-80 border border-gray-200">
-                <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                  {JSON.stringify(classData, null, 2)}
-                </pre>
+              <div className="mt-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm space-y-4">
+                {/* Título */}
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <span className="w-1 h-6 bg-[#26AAA3] rounded-full"></span>
+                  Información completa de la reagendación
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Clase Original */}
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 text-gray-600 text-xs font-medium uppercase tracking-wider mb-3">
+                      <Clock className="w-4 h-4" />
+                      Clase Original
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Profesor:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.students?.[0]?.reagendacion?.idProfesorOriginal 
+                            ? classData.students[0].reagendacion.idProfesorOriginal 
+                            : classData?.idProfesor || 'No asignado'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Fecha original:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.students?.[0]?.reagendacion?.fechaHoraOriginal 
+                            ? new Date(classData.students[0].reagendacion.fechaHoraOriginal).toLocaleString('es-MX', {
+                                timeZone: 'America/Mexico_City',
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : 'Sin fecha'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Hora original:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.students?.[0]?.reagendacion?.horaClaseOriginal || 'No disponible'}
+                        </span>
+                      </div>
+                      {classData?.idGrupo && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Grupo origen:</span>
+                          <span className="font-mono text-xs bg-gray-200 px-2 py-0.5 rounded">
+                            {classData.idGrupo}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Clase Reagendada (Destino) */}
+                  <div className="bg-[#f0f9ff] rounded-lg p-4 border border-[#26AAA3] border-opacity-30">
+                    <div className="flex items-center gap-2 text-[#26AAA3] text-xs font-medium uppercase tracking-wider mb-3">
+                      <Calendar className="w-4 h-4" />
+                      Clase Reagendada
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Profesor nuevo:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.profesor || classData?.teacher?.name || 'Sin asignar'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Nueva fecha:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.fechaHoraNueva 
+                            ? new Date(classData.fechaHoraNueva).toLocaleString('es-MX', {
+                                timeZone: 'America/Mexico_City',
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : classData?.fecha || 'Sin fecha'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Horario:</span>
+                        <span className="font-medium text-gray-800">
+                          {classData?.horaInicio} - {classData?.horaFin || 'Fin por definir'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Modalidad:</span>
+                        <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                          classData?.modalidad === 'Virtual' 
+                            ? 'bg-purple-600 text-white' 
+                            : 'bg-emerald-600 text-white'
+                        }`}>
+                          {classData?.modalidad || 'Presencial'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Estatus y Comentarios */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-500">Estatus:</span>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                      {classData?.estatus || 'Reagendado'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-sm text-gray-500 whitespace-nowrap">Comentario:</span>
+                    <span className="text-sm text-gray-700 italic">
+                      {classData?.students?.[0]?.reagendacion?.comentario || 'Sin comentario'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* IDs técnicos (opcional, en pequeño) */}
+                <div className="text-xs text-gray-400 border-t border-gray-100 pt-3 flex flex-wrap gap-4">
+                  {classData?.id && (
+                    <span><span className="font-mono">ID clase:</span> {classData.id}</span>
+                  )}
+                  {classData?.students?.[0]?.reagendacion?.reagendacionId && (
+                    <span><span className="font-mono">ID reagendación:</span> {classData.students[0].reagendacion.reagendacionId}</span>
+                  )}
+                  {classData?.idGrupo && (
+                    <span><span className="font-mono">ID grupo:</span> {classData.idGrupo}</span>
+                  )}
+                  {classData?.studentId && (
+                    <span><span className="font-mono">ID alumno:</span> {classData.studentId}</span>
+                  )}
+                </div>
               </div>
             )}
           </div>
+          {/* ============================================================ */}
+          {/* FIN DE LA NUEVA SECCIÓN */}
+          {/* ============================================================ */}
         </div>
       </DialogContent>
     </Dialog>
