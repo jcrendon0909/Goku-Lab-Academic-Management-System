@@ -71,19 +71,14 @@ export function ClassDetailsDialog({
       for (const student of classData?.students || []) {
         if (student?.idAlumno) {
           comentariosIniciales[student.idAlumno] = student.comentarios || '';
-          
-          // Si es destino, usar modalidad de la reagendación
-          let modalidad = student.modalidad || 'Presencial';
-          if (esDestino && classData?.modalidadReagendacion) {
-            modalidad = classData.modalidadReagendacion;
-          }
-          modalidadesIniciales[student.idAlumno] = modalidad;
+          // ✅ Usar directamente la modalidad del alumno (que ya es la de la reagendación si es destino)
+          modalidadesIniciales[student.idAlumno] = student.modalidad || 'Presencial';
         }
       }
       setComentariosPorAlumno(comentariosIniciales);
       setModalidadesPorAlumno(modalidadesIniciales);
     }
-  }, [isOpen, classData, esDestino]);
+  }, [isOpen, classData]);
 
   const handleGuardarComentarioGrupo = async () => {
     const comentarioActual = classData?.comentarioGrupo || '';
@@ -122,18 +117,19 @@ export function ClassDetailsDialog({
       setCambiandoModalidadAlumno(student.idAlumno);
 
       if (esDestino) {
-        // Actualizar la reagendación
-        const reagendacionId = classData.reagendacionId;
+        // ✅ OBTENER EL ID DE LA REAGENDACIÓN DEL ALUMNO (no de classData)
+        const reagendacionId = student.reagendacion?.reagendacionId;
         if (!reagendacionId) {
-          throw new Error('No se encontró el ID de la reagendación');
+          throw new Error('No se encontró el ID de la reagendación para este alumno');
         }
+        console.log('🔄 Actualizando reagendación:', reagendacionId, 'a modalidad:', modalidad);
         await actualizarModalidadReagendacion(reagendacionId, modalidad);
       } else {
-        // Actualizar la inscripción (comportamiento original)
+        // ✅ Actualizar la inscripción (comportamiento original)
         await onActualizarInscripcion(student, classData, { modalidad });
       }
 
-      // Actualizar el estado local
+      // ✅ Actualizar el estado local siempre
       setModalidadesPorAlumno(prev => ({
         ...prev,
         [student.idAlumno]: modalidad,
@@ -153,6 +149,7 @@ export function ClassDetailsDialog({
     navigate(`/alumnos?grupoId=${classData?.idGrupo || classData?.id}&accion=inscribir`);
   };
 
+  // Función para formatear fecha/hora de la reagendación
   const formatearFechaHoraReagendacion = (fechaHoraNueva: string) => {
     const fecha = new Date(fechaHoraNueva);
     if (isNaN(fecha.getTime())) return null;
@@ -410,6 +407,7 @@ export function ClassDetailsDialog({
 
                         {/* Acciones por alumno */}
                         <div className="flex flex-wrap items-center gap-2">
+                          {/* Reagendar (solo si no está reagendado y no es clase destino) */}
                           {puedeEditar && !student.reagendacion && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onReagendar(student)}
@@ -421,6 +419,7 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
+                          {/* Inactivar en grupo */}
                           {puedeEditar && classData?.tipoReagendacionClase !== 'destino' && (
                             <button
                               onClick={() => onBajaAlumno(student, classData)}
@@ -431,6 +430,7 @@ export function ClassDetailsDialog({
                             </button>
                           )}
 
+                          {/* Quitar reagendación */}
                           {puedeEditar && (classData?.tipoReagendacionClase === 'destino' || student.reagendacion?.tipo === 'destino') && (
                             <button
                               onClick={() => onEliminarReagendacionAlumno(student, classData)}
