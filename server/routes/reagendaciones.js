@@ -5,14 +5,12 @@ import Inscripcion from "../models/Inscripcion.js";
 
 const router = express.Router();
 
-// Función auxiliar para generar ID
 const generarId = async (prefijo) => {
   const count = await Reagendacion.countDocuments();
   const num = String(count + 1).padStart(3, "0");
   return `${prefijo}${num}`;
 };
 
-// GET / - Obtener todas las reagendaciones
 router.get("/", async (req, res) => {
   try {
     const reagendaciones = await Reagendacion.find().lean();
@@ -23,9 +21,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST / - Crear una nueva reagendación
 router.post("/", async (req, res) => {
   try {
+    console.log("📥 POST /reagendaciones - Payload recibido:", req.body);
+
     const {
       idAlumno,
       idGrupoOrigen,
@@ -37,33 +36,27 @@ router.post("/", async (req, res) => {
       modalidad,
     } = req.body;
 
-    console.log('📥 Payload recibido:', req.body);
-
-    // Validaciones básicas
     if (!idAlumno || !idGrupoOrigen || !fechaHoraNueva) {
-      console.error('❌ Faltan campos obligatorios');
+      console.error("❌ Faltan campos obligatorios");
       return res.status(400).json({ error: "Faltan campos obligatorios" });
     }
 
-    // Obtener el grupo origen usando el campo string 'IdGrupo'
     console.log(`🔍 Buscando grupo con IdGrupo: "${idGrupoOrigen}"`);
     const grupoOrigen = await Grupo.findOne({ IdGrupo: idGrupoOrigen }).lean();
-    console.log('✅ Grupo origen encontrado:', grupoOrigen);
+    console.log("✅ Grupo origen encontrado:", grupoOrigen);
 
     if (!grupoOrigen) {
       console.error(`❌ Grupo no encontrado para IdGrupo: "${idGrupoOrigen}"`);
       return res.status(404).json({ error: `Grupo origen no encontrado: ${idGrupoOrigen}` });
     }
 
-    // Obtener el grupo destino (si existe y es diferente)
     let grupoNuevo = null;
     if (idGrupoNuevo && idGrupoNuevo !== idGrupoOrigen) {
       console.log(`🔍 Buscando grupo destino con IdGrupo: "${idGrupoNuevo}"`);
       grupoNuevo = await Grupo.findOne({ IdGrupo: idGrupoNuevo }).lean();
-      console.log('✅ Grupo destino encontrado:', grupoNuevo);
+      console.log("✅ Grupo destino encontrado:", grupoNuevo);
     }
 
-    // Obtener nombres de curso y profesor
     const nombreCurso = grupoOrigen.nombreCurso || "Curso sin nombre";
     const profesorOriginalId = grupoOrigen.idProfesor || "";
     const profesorOriginalNombre = grupoOrigen.nombreProfesor || "Sin profesor";
@@ -78,17 +71,14 @@ router.post("/", async (req, res) => {
       profesorNuevoNombre = profesorOriginalNombre;
     }
 
-    // Obtener nombre del alumno
     let nombreAlumno = req.body.nombreAlumno || "";
     if (!nombreAlumno) {
       const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId: idGrupoOrigen }).lean();
       nombreAlumno = inscripcion?.nombreAlumno || idAlumno;
     }
 
-    // Generar ID de reagendación
     const reagendacionId = await generarId("REA");
 
-    // Crear el documento de reagendación
     const nuevaReagendacion = new Reagendacion({
       ReagendacionId: reagendacionId,
       idAlumno,
@@ -110,17 +100,17 @@ router.post("/", async (req, res) => {
       estatus: "reagendado",
     });
 
+    console.log("🔄 Intentando guardar en MongoDB:", nuevaReagendacion);
     await nuevaReagendacion.save();
-    console.log('✅ Reagendación guardada:', nuevaReagendacion);
+    console.log("✅ Reagendación guardada en MongoDB");
 
     res.status(201).json(nuevaReagendacion);
   } catch (error) {
-    console.error("❌ Error POST /reagendaciones:", error);
+    console.error("❌ Error en POST /reagendaciones:", error);
     res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 
-// DELETE /:id - Eliminar una reagendación
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
