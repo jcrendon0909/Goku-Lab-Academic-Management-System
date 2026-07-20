@@ -504,11 +504,9 @@ export function ClassDetailsDialog({
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Profesor:</span>
+                        <span className="text-gray-500">Profesor original:</span>
                         <span className="font-medium text-gray-800">
-                          {classData?.students?.[0]?.reagendacion?.idProfesorOriginal 
-                            ? classData.students[0].reagendacion.idProfesorOriginal 
-                            : classData?.idProfesor || 'No asignado'}
+                          {classData?.profesorOriginal || classData?.students?.[0]?.reagendacion?.idProfesorOriginal || 'No asignado'}
                         </span>
                       </div>
                       <div className="flex justify-between">

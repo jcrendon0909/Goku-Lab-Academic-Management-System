@@ -446,10 +446,10 @@ router.get("/", async (req, res) => {
             "",
           estatus: "Reagendado",
           esVirtual: !grupoNuevo,
-          // 🔥 CAMBIO: usar 'modalidad' en lugar de 'modalidadReagendacion'
           modalidad: r.modalidad || "Presencial",
           duracion: r.duracion || "2 horas",
           fechaHoraNueva: r.fechaHoraNueva ? new Date(r.fechaHoraNueva).toISOString() : null,
+          profesorOriginal: r.profesorOriginal || '', // 🔥 NUEVO: nombre del profesor original
         };
       }
 
@@ -491,11 +491,10 @@ router.get("/", async (req, res) => {
           ) === normalizar(grupoOrigenIns)
       );
 
-      // 🔥 MODIFICACIÓN: Usar la modalidad de la reagendación (r.modalidad)
       reagendacionesAgrupadas[key].alumnos.push({
         idAlumno: r.idAlumno || "",
         nombreAlumno: r.nombreAlumno || "",
-        modalidad: r.modalidad || "Presencial", // priorizar la de la reagendación
+        modalidad: r.modalidad || "Presencial",
         comentarios: insOrigen?.comentarios || "",
         grupoIdInscripcion: grupoOrigenIns,
         reagendacion: {
@@ -521,8 +520,8 @@ router.get("/", async (req, res) => {
         ...grupo,
         alumnosInscritos: grupo.alumnos.length,
         tipoReagendacionClase: "destino",
-        // 🔥 Asegurar que modalidad esté presente
         modalidad: grupo.modalidad || "Presencial",
+        profesorOriginal: grupo.profesorOriginal || '', // 🔥 NUEVO
       })
     );
 
@@ -531,7 +530,6 @@ router.get("/", async (req, res) => {
     // ============================================================
     const profesorId = req.query.profesor;
     if (profesorId) {
-      // Filtrar clases base
       clasesBase = clasesBase.filter(
         (c) => 
           c.idProfesor === profesorId || 
@@ -539,7 +537,6 @@ router.get("/", async (req, res) => {
           c.nombreProfesor?.toLowerCase() === profesorId.toLowerCase()
       );
       
-      // Filtrar reagendaciones
       clasesReagendadas = clasesReagendadas.filter(
         (c) => 
           c.idProfesor === profesorId || 
