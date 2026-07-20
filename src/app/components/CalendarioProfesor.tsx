@@ -30,6 +30,7 @@ interface Clase {
   estatus?: string;
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
+  modalidadReagendacion?: string; // Nuevo campo para destino
 }
 
 export function CalendarioProfesor() {
@@ -92,6 +93,7 @@ export function CalendarioProfesor() {
           estatus: grupo.estatus,
           tipoReagendacionClase: null,
           fechaHoraNueva: null,
+          modalidadReagendacion: null,
         }));
 
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
@@ -121,6 +123,9 @@ export function CalendarioProfesor() {
             }
           }
 
+          // 🔥 OBTENER MODALIDAD DE LA REAGENDACIÓN
+          const modalidadReagendacion = grupo.alumnos?.[0]?.modalidad || 'Presencial';
+
           return {
             id: grupo.reagendacionId || `reag-${Math.random()}`,
             titulo: grupo.nombreCurso || 'Clase reagendada',
@@ -149,6 +154,7 @@ export function CalendarioProfesor() {
             estatus: grupo.estatus,
             tipoReagendacionClase: 'destino',
             fechaHoraNueva: fechaHoraNueva,
+            modalidadReagendacion: modalidadReagendacion, // 🔥 GUARDAMOS LA MODALIDAD
           };
         });
 
@@ -294,51 +300,74 @@ export function CalendarioProfesor() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {clases.map((clase) => (
-              <div
-                key={clase.id}
-                onClick={() => {
-                  setClaseSeleccionada(clase);
-                  setDialogAbierto(true);
-                }}
-                className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
-                  clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <BookOpen className="h-4 w-4 text-[#26AAA3]" />
-                      {clase.titulo}
-                    </h3>
-                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                      <User className="h-3 w-3" />
-                      {clase.profesor}
-                    </p>
+            {clases.map((clase) => {
+              // 🔥 DETERMINAR MODALIDAD A MOSTRAR
+              let modalidad = 'Presencial';
+              if (clase.tipoReagendacionClase === 'destino' && clase.modalidadReagendacion) {
+                modalidad = clase.modalidadReagendacion;
+              } else if (clase.students && clase.students.length > 0) {
+                modalidad = clase.students[0]?.modalidad || 'Presencial';
+              }
+
+              return (
+                <div
+                  key={clase.id}
+                  onClick={() => {
+                    setClaseSeleccionada(clase);
+                    setDialogAbierto(true);
+                  }}
+                  className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
+                    clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-[#26AAA3]" />
+                        {clase.titulo}
+                      </h3>
+                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                        <User className="h-3 w-3" />
+                        {clase.profesor}
+                      </p>
+                    </div>
+                    {clase.reagendada && (
+                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                        Reagendada
+                      </span>
+                    )}
                   </div>
-                  {clase.reagendada && (
-                    <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                      Reagendada
+
+                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
                     </span>
+                    <span className="text-gray-300">|</span>
+                    <span>{clase.diaClase || 'Fecha por definir'}</span>
+                  </div>
+
+                  {clase.studentId && clase.studentName && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">
+                        Alumno: {clase.studentName}
+                      </span>
+                      {modalidad && (
+                        <span 
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            modalidad === 'Virtual' 
+                              ? 'bg-purple-600 text-white' 
+                              : 'bg-emerald-600 text-white'
+                          }`}
+                        >
+                          {modalidad}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
-                  </span>
-                  <span className="text-gray-300">|</span>
-                  <span>{clase.diaClase || 'Fecha por definir'}</span>
-                </div>
-
-                {clase.studentId && clase.studentName && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    Alumno: {clase.studentName}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
