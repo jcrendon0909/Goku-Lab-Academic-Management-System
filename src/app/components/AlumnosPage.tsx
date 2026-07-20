@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   bajaAlumnoDeGrupo,
   eliminarHistorialCursoBaja,
@@ -207,6 +208,10 @@ function HistorialMensual({
 }
 
 export function AlumnosPage() {
+  const [searchParams] = useSearchParams();
+  const grupoIdParam = searchParams.get('grupoId');
+  const accionParam = searchParams.get('accion');
+
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string>("");
   const [busqueda, setBusqueda] = useState("");
@@ -228,6 +233,18 @@ export function AlumnosPage() {
     nombreAlumno?: string;
     nombre?: string;
   } | null>(null);
+  const [grupoPreSeleccionado, setGrupoPreSeleccionado] = useState<string | null>(null);
+
+  // 👇 NUEVO: Abrir formulario de inscripción si viene de redirección
+  useEffect(() => {
+    if (grupoIdParam && accionParam === 'inscribir') {
+      setShowInscripcion(true);
+      setGrupoPreSeleccionado(grupoIdParam);
+      // Limpiar los parámetros de la URL para evitar que se reabra al recargar
+      // Esto es opcional, pero puedes usar navigate para limpiar la URL
+      // navigate('/alumnos', { replace: true });
+    }
+  }, [grupoIdParam, accionParam]);
 
   const abrirInscripcion = (
     alumno?: { idAlumno: string; nombreAlumno?: string; nombre?: string } | null
@@ -484,7 +501,6 @@ export function AlumnosPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* HEADER DE LA PÁGINA - SIN NAVBAR */}
       <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
         <div className="mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
           <div className="min-w-0">
@@ -976,13 +992,16 @@ export function AlumnosPage() {
       {showInscripcion && (
         <InscripcionForm
           alumnoInicial={alumnoParaInscripcion}
+          grupoIdInicial={grupoPreSeleccionado}
           onClose={() => {
             setShowInscripcion(false);
             setAlumnoParaInscripcion(null);
+            setGrupoPreSeleccionado(null);
           }}
           onSuccess={async () => {
             setShowInscripcion(false);
             setAlumnoParaInscripcion(null);
+            setGrupoPreSeleccionado(null);
             await recargar();
           }}
         />

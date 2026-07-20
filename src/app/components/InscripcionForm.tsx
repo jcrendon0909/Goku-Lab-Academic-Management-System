@@ -17,6 +17,8 @@ import {
 interface InscripcionFormProps {
   /** Si viene del calendario, el grupo queda fijo */
   classData?: any | null;
+  /** ID del grupo preseleccionado (vía redirección desde diálogo) */
+  grupoIdInicial?: string | null;
   onClose: () => void;
   onSuccess?: () => void;
   /** Preseleccionar alumno (desde Alumnos inscritos) */
@@ -52,11 +54,32 @@ const DURACIONES_CLASE = [
 
 export default function InscripcionForm({
   classData = null,
+  grupoIdInicial = null,
   onClose,
   onSuccess,
   alumnoInicial = null,
 }: InscripcionFormProps) {
-  const modoLibre = !classData;
+  // 👇 NUEVA LÓGICA: determinar si el grupo está fijo
+  const grupoFijo = classData || grupoIdInicial;
+  const grupoIdDesdeClase = useMemo(() => {
+    if (classData) {
+      return (
+        classData?.idGrupo ||
+        classData?.IdGrupo ||
+        classData?.grupoId ||
+        classData?.GrupoId ||
+        classData?.id_grupo ||
+        classData?.id ||
+        ""
+      );
+    }
+    if (grupoIdInicial) {
+      return grupoIdInicial;
+    }
+    return "";
+  }, [classData, grupoIdInicial]);
+
+  const modoLibre = !grupoFijo;
 
   const [modo, setModo] = useState<"existente" | "nuevo">("existente");
   const [busqueda, setBusqueda] = useState("");
@@ -93,19 +116,6 @@ export default function InscripcionForm({
 
   const [guardando, setGuardando] = useState(false);
   const [buscando, setBuscando] = useState(false);
-
-  const grupoIdDesdeClase = useMemo(() => {
-    if (!classData) return "";
-    return (
-      classData?.idGrupo ||
-      classData?.IdGrupo ||
-      classData?.grupoId ||
-      classData?.GrupoId ||
-      classData?.id_grupo ||
-      classData?.id ||
-      ""
-    );
-  }, [classData]);
 
   const cursoSeleccionado = useMemo(
     () =>
@@ -165,6 +175,7 @@ export default function InscripcionForm({
     }
   }, [fechaInscripcion]);
 
+  // Cargar catálogos solo si estamos en modo libre
   useEffect(() => {
     if (!modoLibre) return;
 
@@ -206,6 +217,7 @@ export default function InscripcionForm({
     cargar();
   }, [modoLibre]);
 
+  // Buscar alumnos solo si estamos en modo existente y no hay alumno inicial
   useEffect(() => {
     if (modo !== "existente" || alumnoInicial) return;
 
@@ -250,6 +262,7 @@ export default function InscripcionForm({
     try {
       setGuardando(true);
 
+      // Validar grupo fijo o horario completo
       if (modoLibre && !horarioCompleto) {
         alert("Completa curso, profesor, día, hora y duración de la clase");
         return;
@@ -304,6 +317,7 @@ export default function InscripcionForm({
 
       try {
         if (modoLibre) {
+          // Crear grupo con alumno (modo libre)
           const respuesta = await crearGrupoConAlumno({
             grupo: {
               idCurso: cursoSeleccionado!.idCurso,
@@ -343,6 +357,7 @@ export default function InscripcionForm({
             : "El alumno quedó inscrito en el grupo existente.";
           alert(`Inscripción correcta. ${mensajeGrupo}`);
         } else {
+          // Grupo fijo: usar el ID proporcionado
           let alumnoCalendario = alumnoSeleccionado;
 
           if (modo === "nuevo") {
@@ -369,7 +384,7 @@ export default function InscripcionForm({
             fechaInscripcion,
             ...datosPago,
           });
-          alert("Alumno inscrito correctamente");
+          alert("Alumno inscrito correctamente en el grupo");
         }
       } catch (errorInscripcion: any) {
         alert(
@@ -618,6 +633,12 @@ export default function InscripcionForm({
 
         {tituloClase && (
           <p className="text-sm text-gray-500 mb-4">Clase: {tituloClase}</p>
+        )}
+
+        {grupoIdInicial && !classData && (
+          <p className="text-sm text-cyan-600 mb-4 bg-cyan-50 p-2 rounded border border-cyan-200">
+            ✅ Grupo preseleccionado: <strong>{grupoIdInicial}</strong>
+          </p>
         )}
 
         {selectorGrupo}
