@@ -4,52 +4,36 @@ import qrcode from 'qrcode-terminal';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// 🔥 Usar /tmp en lugar de la carpeta del proyecto para evitar bloqueos
-const SESSION_FOLDER = '/tmp/whatsapp-session';
+const SESSION_FOLDER = path.join(__dirname, '../../whatsapp-session');
 
 if (!fs.existsSync(SESSION_FOLDER)) {
   fs.mkdirSync(SESSION_FOLDER, { recursive: true });
 }
 
-// 🔥 Función para asegurar que Chrome esté disponible
-const ensureChrome = () => {
-  const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-  const chromePath = path.join(cacheDir, 'chrome', 'linux-150.0.7871.24', 'chrome-linux64', 'chrome');
-  
-  console.log(`🔍 Buscando Chrome en: ${chromePath}`);
-  
-  if (fs.existsSync(chromePath)) {
-    console.log('✅ Chrome encontrado en caché.');
-    return chromePath;
-  }
-  
-  console.warn('⚠️ Chrome no encontrado en caché. Descargando en runtime...');
-  try {
-    execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
-    console.log('✅ Chrome descargado en runtime.');
-    if (fs.existsSync(chromePath)) {
-      return chromePath;
-    } else {
-      console.error('❌ No se pudo encontrar Chrome incluso después de la descarga.');
-      return null;
-    }
-  } catch (error) {
-    console.error('❌ Error al descargar Chrome:', error.message);
-    return null;
-  }
-};
-
-const CHROME_PATH = ensureChrome();
-
 let client = null;
 let isReady = false;
 let initPromise = null;
 let authAttempts = 0;
+
+// 🔥 DETECTAR CHROME EN macOS
+const getChromePath = () => {
+  const paths = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      console.log(`✅ Chrome encontrado en: ${p}`);
+      return p;
+    }
+  }
+  return null;
+};
+
+const CHROME_PATH = getChromePath();
 
 export const initWhatsApp = () => {
   if (initPromise) return initPromise;
@@ -74,34 +58,34 @@ export const initWhatsApp = () => {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
+        // 🔥 FLAGS PARA EVITAR ERRORES DE CONTEXTO
         '--disable-features=LockProfileCookieDatabase',
         '--disable-session-crashed-bubble',
         '--disable-infobars',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-web-security',
+        '--disable-features=BlockInsecurePrivateNetworkRequests',
+        '--disable-blink-features=AutomationControlled',
+        '--remote-debugging-port=0',
       ],
-      userDataDir: SESSION_FOLDER, // Usa /tmp
+      userDataDir: SESSION_FOLDER,
     };
 
     if (CHROME_PATH) {
       puppeteerConfig.executablePath = CHROME_PATH;
-      console.log(`🔧 Usando Chrome en: ${CHROME_PATH}`);
+      console.log(`🔧 Usando Chrome del sistema: ${CHROME_PATH}`);
     } else {
-      console.warn('⚠️ No se encontró Chrome. Puppeteer intentará usar el sistema.');
+      console.warn('⚠️ No se encontró Chrome. Puppeteer intentará usar el que descargue.');
     }
 
     client = new Client({ puppeteer: puppeteerConfig });
 
-client.on('qr', (qr) => {
-  console.log('📱 Escanea el siguiente código QR:');
-  qrcode.generate(qr, { small: true });
-  
-  // 🔥 GENERA LA URL CORRECTA CON EL TEXTO CODIFICADO
-  const encodedQR = encodeURIComponent(qr);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedQR}`;
-  
-  console.log('\n🔗 COPIA ESTA URL COMPLETA Y PÉGALA EN TU NAVEGADOR:\n');
-  console.log(qrUrl);
-  console.log('\n⏳ Esperando conexión...\n');
-});
+    client.on('qr', (qr) => {
+      console.log('📱 Escanea el siguiente código QR:');
+      qrcode.generate(qr, { small: true });
+      console.log('\n🔗 O genera el QR desde aquí (copia esta URL en tu navegador):');
+      console.log(`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qr)}\n`);
+    });
 
     client.on('authenticated', () => {
       console.log('✅ WhatsApp autenticado. Sesión guardada automáticamente.');
