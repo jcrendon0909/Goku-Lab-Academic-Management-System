@@ -14,7 +14,7 @@ function extraerHoras(duracionStr) {
 }
 
 // ============================================================
-// REPORTE DE RENTABILIDAD DE PROFESORES (CORREGIDO)
+// REPORTE DE RENTABILIDAD DE PROFESORES (DEFINITIVO)
 // ============================================================
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
@@ -37,23 +37,34 @@ router.get("/rentabilidad-profesores", async (req, res) => {
     console.log(`💰 Abonos encontrados (filtrados): ${abonos.length}`);
 
     // 3. Mapa de abonos por grupo (extraemos grupoId de pagoId)
-    // pagoId tiene formato "ALU001-GRU002"
+    // Formato esperado: "ALU001-GRU002" -> extraemos "GRU002"
     const abonosPorGrupo = new Map();
+    const abonosSinGrupo = [];
+
     for (const a of abonos) {
       const pagoId = a.pagoId || '';
-      // Extraer grupoId: asumimos que pagoId contiene "-GRU" seguido de código
+      // Extraer grupoId: buscar "-GRU" seguido de letras/números
       const match = pagoId.match(/-GRU([A-Za-z0-9]+)/);
       const grupoId = match ? `GRU${match[1]}` : null;
+      
       if (!grupoId) {
+        abonosSinGrupo.push(a);
         console.warn(`⚠️ No se pudo extraer grupoId de pagoId: ${pagoId}`);
         continue;
       }
+
       const monto = a.montoAbono || 0;
       if (!abonosPorGrupo.has(grupoId)) {
         abonosPorGrupo.set(grupoId, 0);
       }
       abonosPorGrupo.set(grupoId, abonosPorGrupo.get(grupoId) + monto);
     }
+
+    if (abonosSinGrupo.length > 0) {
+      console.warn(`⚠️ ${abonosSinGrupo.length} abonos no se pudieron asignar a un grupo.`);
+    }
+
+    console.log(`📊 Abonos agrupados por grupo:`, Array.from(abonosPorGrupo.entries()));
 
     // 4. Agrupar grupos por profesor
     const gruposPorProfesor = {};
@@ -93,9 +104,11 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         const grupoId = g.IdGrupo || g.idGrupo;
         const alumnosInscritos = inscripciones.filter(ins => ins.grupoId === grupoId);
 
-        // Obtener el total abonado para este grupo
+        // Obtener el total abonado para este grupo (directamente del mapa)
         const totalAbonadoGrupo = abonosPorGrupo.get(grupoId) || 0;
         ingresos += totalAbonadoGrupo;
+
+        console.log(`   Grupo ${grupoId}: abonado = $${totalAbonadoGrupo}`);
 
         // Construir lista de alumnos para el frontend
         const alumnos = alumnosInscritos.map(ins => ({
@@ -135,6 +148,7 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       });
     }
 
+    console.log(`✅ Reporte generado con ${resultados.length} profesores`);
     res.json(resultados);
   } catch (error) {
     console.error("ERROR RENTABILIDAD:", error);
