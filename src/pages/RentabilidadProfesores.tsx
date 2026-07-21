@@ -13,6 +13,8 @@ interface Grupo {
   nombreCurso: string;
   diaClase: string;
   horaClase: string;
+  cantidadAlumnos: number;    // 👈 NUEVO
+  montoMensualidad: number;   // 👈 NUEVO
   alumnos: Alumno[];
 }
 
@@ -29,7 +31,7 @@ interface ProfesorRentabilidad {
   utilidad: number;
   porcentaje: number;
   cantidadGrupos: number;
-  grupos: Grupo[]; // 👈 Asegurar que es un array
+  grupos: Grupo[];
 }
 
 export default function RentabilidadProfesores() {
@@ -161,7 +163,9 @@ export default function RentabilidadProfesores() {
                                 {grupo.diaClase} {grupo.horaClase}
                               </span>
                             </div>
-                            <span className="text-sm text-gray-500">{grupo.alumnos.length} alumnos</span>
+                            <div className="text-sm text-gray-500">
+                              {grupo.cantidadAlumnos} alumnos · ${formatearMonto(grupo.montoMensualidad)} c/u
+                            </div>
                           </div>
                           {grupo.alumnos.length > 0 ? (
                             <div className="flex flex-wrap gap-2 mt-2">
