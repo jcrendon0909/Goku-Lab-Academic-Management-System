@@ -14,6 +14,7 @@ import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
+import { ReporteCobranza } from './components/ReporteCobranza'; // 👈 Importa el componente
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       { path: '/maestros', element: <MaestrosPage /> },
       { path: '/cursos', element: <CursosPage /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
+      { path: '/reportes/cobranza', element: <ReporteCobranza /> }, // 👈 Ruta nueva
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
     ],
