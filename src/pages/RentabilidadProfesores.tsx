@@ -1,37 +1,56 @@
-import React, { useEffect, useState } from "react";
-// 👇 Ruta corregida: subimos a src y entramos a services
-import { getRentabilidadProfesores } from "../services/api";
+import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../app/services/api';
+import { toast } from 'sonner';
 
-interface RentabilidadItem {
+interface Alumno {
+  idAlumno: string;
+  nombreAlumno: string;
+  modalidad: string;
+}
+
+interface Grupo {
+  idGrupo: string;
+  nombreCurso: string;
+  diaClase: string;
+  horaClase: string;
+  alumnos: Alumno[];
+}
+
+interface ProfesorRentabilidad {
   idProfesor: string;
   nombre: string;
   totalHorasSemana: number;
   totalHorasMes: number;
   salarioPorHora: number;
+  tipoPago: 'por_hora' | 'fijo_mensual';
+  salarioMensual: number;
   costo: number;
   ingresos: number;
   utilidad: number;
   porcentaje: number;
-  grupos: number;
+  cantidadGrupos: number;
+  grupos: Grupo[];
 }
 
-const RentabilidadProfesores: React.FC = () => {
-  const [data, setData] = useState<RentabilidadItem[]>([]);
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mes, setMes] = useState("Abr");
-  const [anio, setAnio] = useState("2026");
-
-  const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+export default function RentabilidadProfesores() {
+  const [data, setData] = useState<ProfesorRentabilidad[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [mes, setMes] = useState('');
+  const [anio, setAnio] = useState('');
+  const [profesorExpandido, setProfesorExpandido] = useState<string | null>(null);
 
   const cargarDatos = async () => {
-    setCargando(true);
-    setError(null);
     try {
-      const resultado = await getRentabilidadProfesores({ mes, anio });
-      setData(resultado);
-    } catch (err: any) {
-      setError(err.message || "Error al cargar datos");
+      setCargando(true);
+      const params = new URLSearchParams();
+      if (mes) params.append('mes', mes);
+      if (anio) params.append('anio', anio);
+      const res = await apiFetch(`/reportes/rentabilidad-profesores?${params.toString()}`);
+      const data = await res.json();
+      setData(data);
+    } catch (error) {
+      toast.error('Error al cargar rentabilidad');
+      console.error(error);
     } finally {
       setCargando(false);
     }
@@ -39,91 +58,131 @@ const RentabilidadProfesores: React.FC = () => {
 
   useEffect(() => {
     cargarDatos();
-  }, [mes, anio]);
+  }, []);
+
+  const toggleExpandir = (id: string) => {
+    setProfesorExpandido(profesorExpandido === id ? null : id);
+  };
+
+  const formatearMonto = (monto: number) => {
+    return monto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  if (cargando) {
+    return <div className="p-8 text-center">Cargando...</div>;
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Rentabilidad por Profesor</h1>
-
-      <div className="flex gap-4 mb-6 items-end">
-        <div>
-          <label className="block text-sm font-medium">Mes</label>
-          <select
-            value={mes}
-            onChange={(e) => setMes(e.target.value)}
-            className="border border-gray-300 rounded p-2"
-          >
-            {meses.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Año</label>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">📊 Rentabilidad de Profesores</h1>
+        <div className="flex gap-2 items-center">
           <input
             type="number"
+            placeholder="Mes"
+            value={mes}
+            onChange={(e) => setMes(e.target.value)}
+            className="border p-2 w-20 rounded-lg"
+          />
+          <input
+            type="number"
+            placeholder="Año"
             value={anio}
             onChange={(e) => setAnio(e.target.value)}
-            className="border border-gray-300 rounded p-2 w-24"
+            className="border p-2 w-24 rounded-lg"
           />
+          <button
+            onClick={cargarDatos}
+            className="bg-[#26AAA3] text-white px-4 py-2 rounded-lg"
+          >
+            Filtrar
+          </button>
         </div>
-        <button
-          onClick={cargarDatos}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Actualizar
-        </button>
       </div>
 
-      {cargando && <p className="text-gray-500">Cargando...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+      {data.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">No hay datos para mostrar</div>
+      ) : (
+        <div className="grid gap-6">
+          {data.map((prof) => (
+            <div key={prof.idProfesor} className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+              <div className="p-4 bg-gradient-to-r from-gray-50 to-white border-b flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{prof.nombre}</h2>
+                  <span className="text-sm text-gray-500">
+                    {prof.cantidadGrupos} grupos · {prof.tipoPago === 'fijo_mensual' ? 'Salario fijo' : 'Por hora'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Ingresos</div>
+                    <div className="text-lg font-bold text-emerald-600">${formatearMonto(prof.ingresos)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Costo</div>
+                    <div className="text-lg font-bold text-red-500">${formatearMonto(prof.costo)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Utilidad</div>
+                    <div className={`text-lg font-bold ${prof.utilidad >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      ${formatearMonto(prof.utilidad)}
+                    </div>
+                  </div>
+                  <div className="text-right min-w-[70px]">
+                    <div className="text-xs text-gray-500">%</div>
+                    <div className={`text-lg font-bold ${prof.porcentaje >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {prof.porcentaje}%
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleExpandir(prof.idProfesor)}
+                    className="text-sm text-cyan-600 hover:underline"
+                  >
+                    {profesorExpandido === prof.idProfesor ? 'Ocultar grupos' : 'Ver grupos'}
+                  </button>
+                </div>
+              </div>
 
-      {!cargando && !error && (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border border-gray-200 rounded-lg">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Profesor</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Horas/Sem</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Horas/Mes</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Salario x Hora</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Costo</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Ingresos</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Utilidad</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">%</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Grupos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-center py-4 text-gray-500">
-                    No hay datos para mostrar
-                  </td>
-                </tr>
-              ) : (
-                data.map((item) => (
-                  <tr key={item.idProfesor} className="border-t border-gray-200">
-                    <td className="px-4 py-2">{item.nombre}</td>
-                    <td className="px-4 py-2">{item.totalHorasSemana.toFixed(1)}</td>
-                    <td className="px-4 py-2">{item.totalHorasMes.toFixed(1)}</td>
-                    <td className="px-4 py-2">${item.salarioPorHora.toFixed(2)}</td>
-                    <td className="px-4 py-2">${item.costo.toFixed(2)}</td>
-                    <td className="px-4 py-2">${item.ingresos.toFixed(2)}</td>
-                    <td className={`px-4 py-2 font-semibold ${item.utilidad >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      ${item.utilidad.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2">{item.porcentaje.toFixed(1)}%</td>
-                    <td className="px-4 py-2">{item.grupos}</td>
-                  </tr>
-                ))
+              {profesorExpandido === prof.idProfesor && (
+                <div className="p-4 bg-gray-50">
+                  <div className="grid gap-4">
+                    {prof.grupos.map((grupo) => (
+                      <div key={grupo.idGrupo} className="bg-white rounded-lg border p-4 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-bold text-gray-800">{grupo.nombreCurso}</span>
+                            <span className="ml-3 text-sm text-gray-500">
+                              {grupo.diaClase} {grupo.horaClase}
+                            </span>
+                          </div>
+                          <span className="text-sm text-gray-500">{grupo.alumnos.length} alumnos</span>
+                        </div>
+                        {grupo.alumnos.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {grupo.alumnos.map((alumno) => (
+                              <span
+                                key={alumno.idAlumno}
+                                className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full text-xs"
+                              >
+                                {alumno.nombreAlumno}
+                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${alumno.modalidad === 'Virtual' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                  {alumno.modalidad}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Sin alumnos inscritos</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
-};
-
-export default RentabilidadProfesores;
+}

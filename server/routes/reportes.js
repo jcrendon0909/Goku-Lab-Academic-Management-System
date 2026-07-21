@@ -7,6 +7,9 @@ import Abono from "../models/Abono.js";
 
 const router = express.Router();
 
+// ============================================================
+// FUNCIÓN AUXILIAR: Extraer horas de un string de duración
+// ============================================================
 function extraerHoras(duracionStr) {
   if (!duracionStr) return 0;
   const match = duracionStr.match(/(\d+(?:\.\d+)?)/);
@@ -14,28 +17,36 @@ function extraerHoras(duracionStr) {
 }
 
 // ============================================================
-// REPORTE DE RENTABILIDAD DE PROFESORES
+// 1. REPORTE DE RENTABILIDAD DE PROFESORES (CORREGIDO Y MEJORADO)
 // ============================================================
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
     const { mes, anio } = req.query;
 
+    // 1. Obtener datos
     const profesores = await Profesor.find({ estatus: "Activo" }).lean();
     const grupos = await Grupo.find({ Estatus: "Activo" }).lean();
     const inscripciones = await Inscripcion.find({ estatus: "Activo" }).lean();
 
+    // 2. Construir mapa de pagos por alumno-grupo (filtrado por mes/año si se proporciona)
     let filtroPagos = {};
     if (mes && anio) {
+      // Asumimos que el pago tiene un campo fechaPago o mesCorrespondiente
+      // Si usas mesCorrespondiente, ajusta el filtro
       filtroPagos = { mesCorrespondiente: mes, anio: parseInt(anio) };
     }
     const pagos = await Pago.find(filtroPagos).lean();
 
+    // Mapa: clave = idAlumno|grupoId, valor = total pagado
     const pagosMap = new Map();
     for (const p of pagos) {
+      // Asegúrate de que p.idAlumno y p.grupoId existan
       const key = `${p.idAlumno}|${p.grupoId}`;
-      pagosMap.set(key, (pagosMap.get(key) || 0) + p.montoPago);
+      const monto = p.montoPago || p.montoAbonado || 0;
+      pagosMap.set(key, (pagosMap.get(key) || 0) + monto);
     }
 
+    // 3. Agrupar grupos por profesor
     const gruposPorProfesor = {};
     for (const g of grupos) {
       const idProf = g.idProfesor;
@@ -44,18 +55,21 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       gruposPorProfesor[idProf].push(g);
     }
 
+    // 4. Calcular resultados por profesor
     const resultados = [];
 
     for (const prof of profesores) {
       const id = prof.idProfesor;
       const gruposDelProf = gruposPorProfesor[id] || [];
 
+      // Calcular horas
       let totalHorasSemana = 0;
       for (const g of gruposDelProf) {
         totalHorasSemana += extraerHoras(g.duracionClase);
       }
       const totalHorasMes = totalHorasSemana * 4;
 
+      // Calcular costo
       let costo = 0;
       if (prof.tipoPago === 'fijo_mensual') {
         costo = prof.salarioMensual || 0;
@@ -63,9 +77,11 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         costo = totalHorasMes * (prof.salarioPorHora || 0);
       }
 
+      // Calcular ingresos: sumar pagos de todos los alumnos en todos los grupos del profesor
       let ingresos = 0;
       for (const g of gruposDelProf) {
-        const grupoId = g.IdGrupo;
+        const grupoId = g.IdGrupo || g.idGrupo;
+        // Obtener inscripciones de este grupo
         const alumnosInscritos = inscripciones.filter(ins => ins.grupoId === grupoId);
         for (const ins of alumnosInscritos) {
           const key = `${ins.idAlumno}|${grupoId}`;
@@ -73,6 +89,27 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         }
       }
 
+      // Construir lista de grupos con sus alumnos (para el frontend)
+      const gruposConAlumnos = gruposDelProf.map(g => {
+        const grupoId = g.IdGrupo || g.idGrupo;
+        const alumnos = inscripciones
+          .filter(ins => ins.grupoId === grupoId)
+          .map(ins => ({
+            idAlumno: ins.idAlumno,
+            nombreAlumno: ins.nombreAlumno || 'Sin nombre',
+            modalidad: ins.modalidad || 'Presencial',
+            // Puedes agregar más campos si lo deseas
+          }));
+        return {
+          idGrupo: grupoId,
+          nombreCurso: g.nombreCurso || 'Curso sin nombre',
+          diaClase: g.diaClase || '',
+          horaClase: g.horaClase || '',
+          alumnos
+        };
+      });
+
+      // Calcular utilidad
       const utilidad = ingresos - costo;
       const porcentaje = costo > 0 ? (utilidad / costo) * 100 : 0;
 
@@ -88,7 +125,8 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         ingresos,
         utilidad,
         porcentaje: parseFloat(porcentaje.toFixed(2)),
-        grupos: gruposDelProf.length,
+        cantidadGrupos: gruposDelProf.length,
+        grupos: gruposConAlumnos, // 👈 NUEVO: lista de grupos con alumnos
       });
     }
 
@@ -100,7 +138,7 @@ router.get("/rentabilidad-profesores", async (req, res) => {
 });
 
 // ============================================================
-// REPORTE DE PAGOS (COBRANZA) - CORREGIDO
+// 2. REPORTE DE PAGOS (COBRANZA)
 // ============================================================
 router.get("/pagos", async (req, res) => {
   try {
@@ -118,7 +156,6 @@ router.get("/pagos", async (req, res) => {
 
     // 1. Obtener los abonos con datos relacionados
     const abonos = await Abono.aggregate([
-      // 🔥 FILTRAR SOLO DOCUMENTOS CON FECHA VÁLIDA
       {
         $match: {
           ...filtro,
@@ -186,7 +223,6 @@ router.get("/pagos", async (req, res) => {
 
     // 2. Totales agrupados por mes/año (SOLO fechas válidas)
     const totales = await Abono.aggregate([
-      // 🔥 FILTRAR SOLO DOCUMENTOS CON FECHA VÁLIDA
       {
         $match: {
           ...filtro,
@@ -214,7 +250,7 @@ router.get("/pagos", async (req, res) => {
 });
 
 // ============================================================
-// RESUMEN DE PAGOS (POR MÉTODO Y FACTURA)
+// 3. RESUMEN DE PAGOS (POR MÉTODO Y FACTURA)
 // ============================================================
 router.get("/pagos/resumen", async (req, res) => {
   try {
@@ -243,7 +279,7 @@ router.get("/pagos/resumen", async (req, res) => {
 });
 
 // ============================================================
-// OBTENER DATOS PARA UN RECIBO DE PAGO
+// 4. OBTENER DATOS PARA UN RECIBO DE PAGO
 // ============================================================
 router.get("/pagos/:pagoId", async (req, res) => {
   try {
