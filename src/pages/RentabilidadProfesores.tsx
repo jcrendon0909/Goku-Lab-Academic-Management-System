@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiFetch } from '../app/services/api';
+import { apiFetch } from '../../app/services/api'; // 👈 RUTA CORREGIDA
 import { toast } from 'sonner';
 
 interface Alumno {
