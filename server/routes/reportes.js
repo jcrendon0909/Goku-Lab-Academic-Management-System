@@ -3,7 +3,7 @@ import Profesor from "../models/Profesor.js";
 import Grupo from "../models/Grupo.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Pago from "../models/Pago.js";
-import Abono from "../models/Abono.js";  // ← Importar si no está
+import Abono from "../models/Abono.js";
 
 const router = express.Router();
 
@@ -13,7 +13,9 @@ function extraerHoras(duracionStr) {
   return match ? parseFloat(match[1]) : 0;
 }
 
-// GET /api/reportes/rentabilidad-profesores
+// ============================================================
+// REPORTE DE RENTABILIDAD DE PROFESORES
+// ============================================================
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
     const { mes, anio } = req.query;
@@ -54,12 +56,10 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       }
       const totalHorasMes = totalHorasSemana * 4;
 
-      // ===== CÁLCULO DEL COSTO SEGÚN TIPO DE PAGO =====
       let costo = 0;
       if (prof.tipoPago === 'fijo_mensual') {
         costo = prof.salarioMensual || 0;
       } else {
-        // Por defecto 'por_hora'
         costo = totalHorasMes * (prof.salarioPorHora || 0);
       }
 
@@ -100,16 +100,14 @@ router.get("/rentabilidad-profesores", async (req, res) => {
 });
 
 // ============================================================
-// REPORTE DE PAGOS HISTÓRICOS (similar al Excel)
+// REPORTE DE PAGOS (COBRANZA) - CORREGIDO
 // ============================================================
-
-// GET /api/reportes/pagos?mes=&anio=&metodo=&factura=
 router.get("/pagos", async (req, res) => {
   try {
     const { mes, anio, metodo, factura } = req.query;
     const filtro = {};
 
-    // Filtro por mes/año si se proporcionan
+    // Filtro por mes/año (usando fechas)
     if (mes && anio) {
       const start = new Date(anio, mes - 1, 1);
       const end = new Date(anio, mes, 1);
@@ -118,9 +116,15 @@ router.get("/pagos", async (req, res) => {
     if (metodo) filtro.metodoAbono = metodo;
     if (factura) filtro.facturaRequerida = factura === 'true';
 
-    // Obtener los abonos con datos relacionados
+    // 1. Obtener los abonos con datos relacionados
     const abonos = await Abono.aggregate([
-      { $match: filtro },
+      // 🔥 FILTRAR SOLO DOCUMENTOS CON FECHA VÁLIDA
+      {
+        $match: {
+          ...filtro,
+          fechaAbono: { $type: "date" } // Solo documentos donde fechaAbono sea Date
+        }
+      },
       {
         $lookup: {
           from: "pagos",
@@ -129,7 +133,7 @@ router.get("/pagos", async (req, res) => {
           as: "pago"
         }
       },
-      { $unwind: "$pago" },
+      { $unwind: { path: "$pago", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: "alumnos",
@@ -138,7 +142,7 @@ router.get("/pagos", async (req, res) => {
           as: "alumno"
         }
       },
-      { $unwind: "$alumno" },
+      { $unwind: { path: "$alumno", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
           from: "inscripciones",
@@ -180,9 +184,15 @@ router.get("/pagos", async (req, res) => {
       { $sort: { fecha: -1 } }
     ]);
 
-    // Totales agrupados por mes/año
+    // 2. Totales agrupados por mes/año (SOLO fechas válidas)
     const totales = await Abono.aggregate([
-      { $match: filtro },
+      // 🔥 FILTRAR SOLO DOCUMENTOS CON FECHA VÁLIDA
+      {
+        $match: {
+          ...filtro,
+          fechaAbono: { $type: "date" }
+        }
+      },
       {
         $group: {
           _id: {
@@ -203,11 +213,17 @@ router.get("/pagos", async (req, res) => {
   }
 });
 
-// GET /api/reportes/pagos/resumen
+// ============================================================
+// RESUMEN DE PAGOS (POR MÉTODO Y FACTURA)
+// ============================================================
 router.get("/pagos/resumen", async (req, res) => {
   try {
-    // Agrupar por método de pago y facturación
     const resumen = await Abono.aggregate([
+      {
+        $match: {
+          fechaAbono: { $type: "date" } // Solo fechas válidas
+        }
+      },
       {
         $group: {
           _id: {
@@ -226,7 +242,9 @@ router.get("/pagos/resumen", async (req, res) => {
   }
 });
 
-// GET /api/reportes/pagos/:pagoId (para recibo)
+// ============================================================
+// OBTENER DATOS PARA UN RECIBO DE PAGO
+// ============================================================
 router.get("/pagos/:pagoId", async (req, res) => {
   try {
     const { pagoId } = req.params;
@@ -235,7 +253,6 @@ router.get("/pagos/:pagoId", async (req, res) => {
       .lean();
     if (!pago) return res.status(404).json({ error: "Pago no encontrado" });
 
-    // Obtener abonos asociados
     const abonos = await Abono.find({ idPago: pagoId }).lean();
     const totalAbonado = abonos.reduce((sum, a) => sum + a.montoAbono, 0);
 
