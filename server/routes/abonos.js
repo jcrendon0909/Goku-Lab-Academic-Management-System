@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from "mongoose"; // IMPORTANTE: Agregamos mongoose aquí
+import mongoose from "mongoose"; // IMPORTANTE: Agregamos mongoose aquï¿½
 import Abono from "../models/Abono.js";
 import Pago from "../models/Pago.js";
 
@@ -19,7 +19,7 @@ router.post("/", async (req, res) => {
             fechaFinal = new Date(year, month - 1, day, 12, 0, 0);
         }
 
-        // 1. GUARDAMOS EL RECIBO HISTÓRICO SIEMPRE
+        // 1. GUARDAMOS EL RECIBO HISTï¿½RICO SIEMPRE
         const nuevoAbono = new Abono({
             abonoId: `ABO-${Date.now()}`,
             nombreAlumno: nombreAlumno,
@@ -33,7 +33,7 @@ router.post("/", async (req, res) => {
         await nuevoAbono.save();
 
         // ----------------------------------------------------------------
-        // 2. BUSCAMOS AL ALUMNO (Con protección Anti-CastError)
+        // 2. BUSCAMOS AL ALUMNO (Con protecciÃ³n Anti-CastError)
         // ----------------------------------------------------------------
         const nombreClean = nombreAlumno.trim();
         let pagosDelAlumno = await Pago.find({
@@ -69,7 +69,7 @@ router.post("/", async (req, res) => {
                 }
             }
 
-            // Ordenamos cronológicamente para pagar lo más viejo primero
+            // Ordenamos cronolï¿½gicamente para pagar lo mï¿½s viejo primero
             mesesExistentes.sort((a, b) => new Date(a.mes.vencimiento) - new Date(b.mes.vencimiento));
 
             for (let item of mesesExistentes) {
@@ -96,9 +96,9 @@ router.post("/", async (req, res) => {
             }
 
             // ----------------------------------------------------------------
-            // 4. CREAR MESES FUTUROS SI AÚN SOBRA DINERO
+            // 4. CREAR MESES FUTUROS SI Aï¿½N SOBRA DINERO
             // ----------------------------------------------------------------
-            // Filtramos cursos que tengan cobro activo. Si todos están en $0, usamos el primero por defecto.
+            // Filtramos cursos que tengan cobro activo. Si todos estï¿½n en $0, usamos el primero por defecto.
             let cursosParaProyectar = pagosDelAlumno.filter(p => (p.montoPago || p.montoMensualidad) > 0);
             if (cursosParaProyectar.length === 0) cursosParaProyectar = [pagosDelAlumno[0]];
 
@@ -106,7 +106,7 @@ router.post("/", async (req, res) => {
                 let cursoElegido = null;
                 let fechaVence = new Date("2100-01-01"); // Fecha pivote lejana
 
-                // Buscamos qué curso se quedó más atrasado para inyectarle el mes
+                // Buscamos quï¿½ curso se quedï¿½ mï¿½s atrasado para inyectarle el mes
                 for (let doc of cursosParaProyectar) {
                     let nextDate;
                     if (doc.periodosMensuales.length > 0) {
@@ -190,14 +190,14 @@ router.post("/", async (req, res) => {
                 pago.montoTotal = pago.periodosMensuales.reduce((sum, m) => sum + (m.monto || 0), 0);
                 pago.saldo = pago.montoTotal - pago.montoPagado;
 
-                // Le avisamos a Mongoose explícitamente que los meses cambiaron para que no los borre
+                // Le avisamos a Mongoose explï¿½citamente que los meses cambiaron para que no los borre
                 pago.markModified('periodosMensuales');
                 await pago.save();
             }
         }
 
         res.status(201).json({
-            message: "Pago distribuido en cascada con éxito",
+            message: "Pago distribuido en cascada con ï¿½xito",
             data: nuevoAbono
         });
 

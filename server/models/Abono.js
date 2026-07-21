@@ -8,10 +8,11 @@ const abonoSchema = new mongoose.Schema({
     montoAbono: { type: Number, required: true },
     metodoAbono: { type: String, required: true },
     numeroDeabono: { type: String, required: true },
+    grupoId: { type: String, index: true },
 }, {
     collection: "abonos",
     versionKey: false
 });
 
-// Aquí es donde exportas el modelo para que 'pagos.js' pueda usar Abono.find()
+// Aquï¿½ es donde exportas el modelo para que 'pagos.js' pueda usar Abono.find()
 export default mongoose.model('Abono', abonoSchema);
