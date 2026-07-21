@@ -19,31 +19,43 @@ function extraerHoras(duracionStr) {
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
     const { mes, anio } = req.query;
-    console.log(`📊 Generando reporte de rentabilidad - Mes: ${mes || 'todos'}, Año: ${anio || 'todos'}`);
+    console.log(`📊 Generando rentabilidad - Mes: ${mes || 'todos'}, Año: ${anio || 'todos'}`);
 
-    // 1. Obtener datos
+    // 1. Obtener datos base
     const profesores = await Profesor.find({ estatus: "Activo" }).lean();
     const grupos = await Grupo.find({ Estatus: "Activo" }).lean();
     const inscripciones = await Inscripcion.find({ estatus: "Activo" }).lean();
 
-    // Filtrar pagos por mes/año si se proporciona
-    let filtroPagos = {};
+    // 2. Obtener ABONOS con filtro de mes/año
+    let filtroAbonos = {};
     if (mes && anio) {
-      // Asumiendo que los pagos tienen campo `mesCorrespondiente` y `anio`
-      filtroPagos = { mesCorrespondiente: mes, anio: parseInt(anio) };
+      const start = new Date(anio, mes - 1, 1);
+      const end = new Date(anio, mes, 1);
+      filtroAbonos.fechaAbono = { $gte: start, $lt: end };
     }
-    const pagos = await Pago.find(filtroPagos).lean();
-    console.log(`📋 Pagos encontrados: ${pagos.length}`);
+    const abonos = await Abono.find(filtroAbonos).lean();
+    console.log(`💰 Abonos encontrados (filtrados): ${abonos.length}`);
 
-    // Mapa de pagos por alumno-grupo
-    const pagosMap = new Map();
-    for (const p of pagos) {
-      const key = `${p.idAlumno}|${p.grupoId}`;
-      const monto = p.montoPago || p.montoAbonado || 0;
-      pagosMap.set(key, (pagosMap.get(key) || 0) + monto);
+    // 3. Mapa de abonos por grupo (extraemos grupoId de pagoId)
+    // pagoId tiene formato "ALU001-GRU002"
+    const abonosPorGrupo = new Map();
+    for (const a of abonos) {
+      const pagoId = a.pagoId || '';
+      // Extraer grupoId: asumimos que pagoId contiene "-GRU" seguido de código
+      const match = pagoId.match(/-GRU([A-Za-z0-9]+)/);
+      const grupoId = match ? `GRU${match[1]}` : null;
+      if (!grupoId) {
+        console.warn(`⚠️ No se pudo extraer grupoId de pagoId: ${pagoId}`);
+        continue;
+      }
+      const monto = a.montoAbono || 0;
+      if (!abonosPorGrupo.has(grupoId)) {
+        abonosPorGrupo.set(grupoId, 0);
+      }
+      abonosPorGrupo.set(grupoId, abonosPorGrupo.get(grupoId) + monto);
     }
 
-    // Agrupar grupos por profesor
+    // 4. Agrupar grupos por profesor
     const gruposPorProfesor = {};
     for (const g of grupos) {
       const idProf = g.idProfesor;
@@ -58,14 +70,14 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       const id = prof.idProfesor;
       const gruposDelProf = gruposPorProfesor[id] || [];
 
-      // Calcular horas
+      // Calcular horas totales del profesor
       let totalHorasSemana = 0;
       for (const g of gruposDelProf) {
         totalHorasSemana += extraerHoras(g.duracionClase);
       }
       const totalHorasMes = totalHorasSemana * 4;
 
-      // Calcular costo (salario del profesor)
+      // Calcular costo (salario)
       let costo = 0;
       if (prof.tipoPago === 'fijo_mensual') {
         costo = prof.salarioMensual || 0;
@@ -73,56 +85,19 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         costo = totalHorasMes * (prof.salarioPorHora || 0);
       }
 
-      // ---- NUEVO CÁLCULO DE INGRESOS ----
+      // Calcular ingresos: sumar abonos de todos los grupos del profesor
       let ingresos = 0;
       const gruposConAlumnos = [];
 
       for (const g of gruposDelProf) {
         const grupoId = g.IdGrupo || g.idGrupo;
         const alumnosInscritos = inscripciones.filter(ins => ins.grupoId === grupoId);
-        console.log(`🔍 Grupo ${grupoId} - Alumnos inscritos: ${alumnosInscritos.length}`);
 
-        // Intentar obtener monto mensualidad de la primera inscripción
-        let montoMensualidad = 0;
-        if (alumnosInscritos.length > 0) {
-          // Buscar en la inscripción
-          montoMensualidad = alumnosInscritos[0].montoMensualidad || 0;
-          // Si no tiene, buscar en el grupo
-          if (!montoMensualidad) {
-            montoMensualidad = g.montoMensualidad || 0;
-          }
-          // Si sigue sin tener, buscar en pagos reales (suma de pagos de alumnos en este grupo)
-          if (!montoMensualidad) {
-            // Calcular el total pagado por todos los alumnos de este grupo
-            let totalPagadoGrupo = 0;
-            for (const ins of alumnosInscritos) {
-              const key = `${ins.idAlumno}|${grupoId}`;
-              totalPagadoGrupo += pagosMap.get(key) || 0;
-            }
-            // Si hay pagos, el monto mensual es el promedio por alumno (para estimar)
-            if (alumnosInscritos.length > 0 && totalPagadoGrupo > 0) {
-              montoMensualidad = Math.round(totalPagadoGrupo / alumnosInscritos.length);
-              console.log(`💡 Estimando monto mensual desde pagos: ${montoMensualidad}`);
-            } else {
-              console.warn(`⚠️ No se encontró monto para grupo ${grupoId}`);
-            }
-          }
-        }
+        // Obtener el total abonado para este grupo
+        const totalAbonadoGrupo = abonosPorGrupo.get(grupoId) || 0;
+        ingresos += totalAbonadoGrupo;
 
-        // Si aun no hay monto, intentar obtener del curso (si existe relación)
-        if (!montoMensualidad && g.idCurso) {
-          // Podrías hacer un lookup a Curso si tienes el modelo importado
-          // const curso = await Curso.findById(g.idCurso).lean();
-          // if (curso) montoMensualidad = curso.precio || 0;
-        }
-
-        console.log(`💰 Grupo ${grupoId} - Monto mensualidad: ${montoMensualidad}`);
-
-        // Calcular ingreso para este grupo: cantidad de alumnos × monto mensual
-        const ingresoGrupo = alumnosInscritos.length * montoMensualidad;
-        ingresos += ingresoGrupo;
-
-        // Construir lista de alumnos
+        // Construir lista de alumnos para el frontend
         const alumnos = alumnosInscritos.map(ins => ({
           idAlumno: ins.idAlumno,
           nombreAlumno: ins.nombreAlumno || 'Sin nombre',
@@ -135,8 +110,7 @@ router.get("/rentabilidad-profesores", async (req, res) => {
           diaClase: g.diaClase || '',
           horaClase: g.horaClase || '',
           cantidadAlumnos: alumnos.length,
-          montoMensualidad: montoMensualidad,
-          ingresoGrupo: ingresoGrupo, // 👈 NUEVO: para depuración
+          totalAbonadoGrupo, // 👈 Para depuración
           alumnos,
         });
       }
@@ -161,7 +135,6 @@ router.get("/rentabilidad-profesores", async (req, res) => {
       });
     }
 
-    console.log(`✅ Reporte generado con ${resultados.length} profesores`);
     res.json(resultados);
   } catch (error) {
     console.error("ERROR RENTABILIDAD:", error);
