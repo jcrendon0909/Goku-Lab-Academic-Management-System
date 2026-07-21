@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiFetch } from '../services/api'; // 👈 RUTA CORRECTA
+import { apiFetch } from '../services/api';
 import { toast } from 'sonner';
 
 interface Alumno {
@@ -29,7 +29,7 @@ interface ProfesorRentabilidad {
   utilidad: number;
   porcentaje: number;
   cantidadGrupos: number;
-  grupos: Grupo[];
+  grupos: Grupo[]; // 👈 Asegurar que es un array
 }
 
 export default function RentabilidadProfesores() {
@@ -47,7 +47,12 @@ export default function RentabilidadProfesores() {
       if (anio) params.append('anio', anio);
       const res = await apiFetch(`/reportes/rentabilidad-profesores?${params.toString()}`);
       const data = await res.json();
-      setData(data);
+      // Asegurar que 'grupos' sea siempre un array
+      const dataConArrays = data.map((prof: any) => ({
+        ...prof,
+        grupos: Array.isArray(prof.grupos) ? prof.grupos : [],
+      }));
+      setData(dataConArrays);
     } catch (error) {
       toast.error('Error al cargar rentabilidad');
       console.error(error);
@@ -146,36 +151,40 @@ export default function RentabilidadProfesores() {
               {profesorExpandido === prof.idProfesor && (
                 <div className="p-4 bg-gray-50">
                   <div className="grid gap-4">
-                    {prof.grupos.map((grupo) => (
-                      <div key={grupo.idGrupo} className="bg-white rounded-lg border p-4 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="font-bold text-gray-800">{grupo.nombreCurso}</span>
-                            <span className="ml-3 text-sm text-gray-500">
-                              {grupo.diaClase} {grupo.horaClase}
-                            </span>
-                          </div>
-                          <span className="text-sm text-gray-500">{grupo.alumnos.length} alumnos</span>
-                        </div>
-                        {grupo.alumnos.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {grupo.alumnos.map((alumno) => (
-                              <span
-                                key={alumno.idAlumno}
-                                className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full text-xs"
-                              >
-                                {alumno.nombreAlumno}
-                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${alumno.modalidad === 'Virtual' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                  {alumno.modalidad}
-                                </span>
+                    {prof.grupos.length > 0 ? (
+                      prof.grupos.map((grupo) => (
+                        <div key={grupo.idGrupo} className="bg-white rounded-lg border p-4 shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <span className="font-bold text-gray-800">{grupo.nombreCurso}</span>
+                              <span className="ml-3 text-sm text-gray-500">
+                                {grupo.diaClase} {grupo.horaClase}
                               </span>
-                            ))}
+                            </div>
+                            <span className="text-sm text-gray-500">{grupo.alumnos.length} alumnos</span>
                           </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">Sin alumnos inscritos</span>
-                        )}
-                      </div>
-                    ))}
+                          {grupo.alumnos.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {grupo.alumnos.map((alumno) => (
+                                <span
+                                  key={alumno.idAlumno}
+                                  className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full text-xs"
+                                >
+                                  {alumno.nombreAlumno}
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${alumno.modalidad === 'Virtual' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    {alumno.modalidad}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Sin alumnos inscritos</span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500">Este profesor no tiene grupos asignados.</p>
+                    )}
                   </div>
                 </div>
               )}
