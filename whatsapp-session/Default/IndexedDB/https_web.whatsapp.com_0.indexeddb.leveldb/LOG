@@ -49,3 +49,7 @@
 2026/07/20-20:36:32.144 a24ae compacted to: files[ 0 1 1 0 0 0 0 ]
 2026/07/20-20:36:32.144 a24ae Delete type=2 #19
 2026/07/20-20:36:32.144 a24ae Manual compaction at level-0 from '\x00\x02\x0a\x02\x03\x00\x00\x00\x00\x00\x00\x00@' @ 12343 : 0 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-22:03:48.033 a24bd Level-0 table #22: started
+2026/07/20-22:03:48.065 a24bd Level-0 table #22: 1097117 bytes OK
+2026/07/20-22:03:48.073 a24bd Delete type=2 #17
+2026/07/20-22:03:48.073 a24bd Delete type=0 #18
