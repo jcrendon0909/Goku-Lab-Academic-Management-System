@@ -1,0 +1,6 @@
+2026/07/20-20:32:36.124 a0c75 Creating DB /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb since it was missing.
+2026/07/20-20:32:36.129 a0c75 Reusing MANIFEST /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/07/20-20:32:36.480 a0c89 Level-0 table #5: started
+2026/07/20-20:32:36.483 a0c89 Level-0 table #5: 7956 bytes OK
+2026/07/20-20:32:36.486 a0c89 Delete type=0 #3
+2026/07/20-20:32:36.486 a0c89 Manual compaction at level-0 from '\x00\x01\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x02\x00\x00\x00' @ 0 : 0; will stop at (end)

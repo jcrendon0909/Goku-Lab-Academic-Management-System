@@ -1,6 +1,51 @@
-2026/07/20-20:32:36.124 a0c75 Creating DB /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb since it was missing.
-2026/07/20-20:32:36.129 a0c75 Reusing MANIFEST /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
-2026/07/20-20:32:36.480 a0c89 Level-0 table #5: started
-2026/07/20-20:32:36.483 a0c89 Level-0 table #5: 7956 bytes OK
-2026/07/20-20:32:36.486 a0c89 Delete type=0 #3
-2026/07/20-20:32:36.486 a0c89 Manual compaction at level-0 from '\x00\x01\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x02\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:31.929 a24ac Reusing MANIFEST /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/07/20-20:36:31.930 a24ac Recovering log #4
+2026/07/20-20:36:31.938 a24ac Reusing old log /Users/juancarlosrendon/Library/CloudStorage/OneDrive-Personal 2/My Algorithmics/12. Desarrollos/Repositorio GitHub/GokulabWebpage/Desarrollo webpage/Goku-Lab-Academic-Management-System/whatsapp-session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000004.log 
+2026/07/20-20:36:32.082 a24ac Manual compaction at level-0 from '\x00\x05\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x06\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:32.084 a24ac Level-0 table #8: started
+2026/07/20-20:36:32.095 a24ac Level-0 table #8: 168108 bytes OK
+2026/07/20-20:36:32.097 a24ac Delete type=0 #4
+2026/07/20-20:36:32.099 a24ac Manual compaction at level-0 from '\x00\x0b\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x0c\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:32.100 a24ae Level-0 table #10: started
+2026/07/20-20:36:32.104 a24ae Level-0 table #10: 906 bytes OK
+2026/07/20-20:36:32.107 a24ae Delete type=0 #7
+2026/07/20-20:36:32.107 a24ae Manual compaction at level-0 from '\x00\x0c\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x0d\x00\x00\x00' @ 0 : 0; will stop at '\x00\x0c\x00\x00\xc8\x06\x00s\x00t\x00a\x00t\x00u\x00s' @ 11369 : 0
+2026/07/20-20:36:32.107 a24ae Compacting 1@0 + 1@1 files
+2026/07/20-20:36:32.112 a24ae Generated table #11@0: 4046 keys, 74143 bytes
+2026/07/20-20:36:32.112 a24ae Compacted 1@0 + 1@1 files => 74143 bytes
+2026/07/20-20:36:32.113 a24ae compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/20-20:36:32.113 a24ae Delete type=2 #10
+2026/07/20-20:36:32.114 a24ae Manual compaction at level-0 from '\x00\x0c\x00\x00\xc8\x06\x00s\x00t\x00a\x00t\x00u\x00s' @ 11369 : 0 .. '\x00\x0d\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:32.114 a24ae Level-0 table #13: started
+2026/07/20-20:36:32.115 a24ae Level-0 table #13: 508 bytes OK
+2026/07/20-20:36:32.116 a24ae Delete type=2 #8
+2026/07/20-20:36:32.116 a24ae Delete type=0 #9
+2026/07/20-20:36:32.116 a24ae Manual compaction at level-0 from '\x00\x0e\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x0f\x00\x00\x00' @ 0 : 0; will stop at '\x00\x0e\x02\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 11398 : 0
+2026/07/20-20:36:32.116 a24ae Compacting 1@0 + 1@1 files
+2026/07/20-20:36:32.119 a24ae Generated table #14@0: 4021 keys, 73465 bytes
+2026/07/20-20:36:32.119 a24ae Compacted 1@0 + 1@1 files => 73465 bytes
+2026/07/20-20:36:32.120 a24ae compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/20-20:36:32.120 a24ae Delete type=2 #13
+2026/07/20-20:36:32.120 a24ae Manual compaction at level-0 from '\x00\x0e\x02\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 11398 : 0 .. '\x00\x0f\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:32.120 a24ae Level-0 table #16: started
+2026/07/20-20:36:32.121 a24ae Level-0 table #16: 505 bytes OK
+2026/07/20-20:36:32.123 a24ae Delete type=0 #12
+2026/07/20-20:36:32.123 a24ae Delete type=2 #11
+2026/07/20-20:36:32.123 a24ae Manual compaction at level-0 from '\x00\x0f\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x10\x00\x00\x00' @ 0 : 0; will stop at '\x00\x0f\x00\x00\xc8\x0d\x00l\x00o\x00c\x00a\x00l\x00_\x00s\x00t\x00o\x00r\x00a\x00g\x00e' @ 11423 : 0
+2026/07/20-20:36:32.123 a24ae Compacting 1@0 + 1@1 files
+2026/07/20-20:36:32.125 a24ae Generated table #17@0: 4000 keys, 73126 bytes
+2026/07/20-20:36:32.126 a24ae Compacted 1@0 + 1@1 files => 73126 bytes
+2026/07/20-20:36:32.127 a24ae compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/20-20:36:32.127 a24ae Delete type=2 #16
+2026/07/20-20:36:32.127 a24ae Manual compaction at level-0 from '\x00\x0f\x00\x00\xc8\x0d\x00l\x00o\x00c\x00a\x00l\x00_\x00s\x00t\x00o\x00r\x00a\x00g\x00e' @ 11423 : 0 .. '\x00\x10\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/20-20:36:32.128 a24ae Level-0 table #19: started
+2026/07/20-20:36:32.129 a24ae Level-0 table #19: 17125 bytes OK
+2026/07/20-20:36:32.130 a24ae Delete type=0 #15
+2026/07/20-20:36:32.130 a24ae Delete type=2 #14
+2026/07/20-20:36:32.130 a24ae Manual compaction at level-0 from '\x00\x02\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at '\x00\x02\x0a\x02\x03\x00\x00\x00\x00\x00\x00\x00@' @ 12343 : 0
+2026/07/20-20:36:32.130 a24ae Compacting 1@0 + 1@1 files
+2026/07/20-20:36:32.142 a24ae Generated table #20@0: 3084 keys, 26209 bytes
+2026/07/20-20:36:32.142 a24ae Compacted 1@0 + 1@1 files => 26209 bytes
+2026/07/20-20:36:32.144 a24ae compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/07/20-20:36:32.144 a24ae Delete type=2 #19
+2026/07/20-20:36:32.144 a24ae Manual compaction at level-0 from '\x00\x02\x0a\x02\x03\x00\x00\x00\x00\x00\x00\x00@' @ 12343 : 0 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at (end)

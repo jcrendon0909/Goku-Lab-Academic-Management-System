@@ -1,11 +1,10 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Laptop, LogOut, LayoutDashboard, Calendar, Users, DollarSign } from "lucide-react";
+import { Bell, Laptop, LogOut, LayoutDashboard, Calendar, Users, DollarSign, BarChart } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function Header() {
   const navigate = useNavigate();
-  // Obtenemos los datos del usuario desde localStorage
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const nombreUsuario = user.nombreCompleto || user.usuario || 'Usuario';
   const rolUsuario = user.rol || '';
@@ -19,7 +18,7 @@ export function Header() {
   return (
     <header className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-gray-100 flex items-center justify-center z-50">
       <div className="w-full max-w-[1440px] px-8 flex items-center justify-between">
-        {/* Logo y nombre de la academia - ahora enlace al dashboard */}
+        {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 bg-[#26AAA3] rounded-lg flex items-center justify-center shadow-sm shadow-[#26AAA3]/20">
             <Laptop className="text-white w-4 h-4" />
@@ -49,6 +48,11 @@ export function Header() {
               <Users className="w-3 h-3" />
               Alumnos
             </Link>
+            {/* 👇 NUEVO ENLACE AL REPORTE DE COBRANZA */}
+            <Link to="/reportes/cobranza" className="text-xs font-medium text-gray-500 hover:text-[#26AAA3] transition-colors flex items-center gap-1">
+              <BarChart className="w-3 h-3" />
+              Cobranza
+            </Link>
             {/* Otros enlaces que ya tenías: Clases, Reportes, etc. (los mantengo comentados por si los necesitas) */}
             {/* <a href="#" className="text-xs font-medium text-gray-500 hover:text-cyan-500 transition-colors">Clases</a> */}
             {/* <a href="#" className="text-xs font-medium text-gray-500 hover:text-cyan-500 transition-colors">Reportes</a> */}
@@ -56,7 +60,7 @@ export function Header() {
 
           <div className="h-6 w-[1px] bg-gray-100 hidden md:block"></div>
 
-          {/* Área de usuario y acciones */}
+          {/* Área de usuario */}
           <div className="flex items-center gap-3">
             <button className="relative p-1.5 text-gray-400 hover:text-[#26AAA3] transition-colors">
               <Bell className="w-4 h-4" />
@@ -65,7 +69,6 @@ export function Header() {
             
             <div className="flex items-center gap-2 pl-1">
               <div className="flex flex-col items-end">
-                {/* 👇 Aquí mostramos el nombre y rol real del usuario logueado */}
                 <span className="text-xs font-bold text-gray-900 leading-none">{nombreUsuario}</span>
                 <span className="text-[10px] text-gray-500 capitalize">{rolUsuario || 'Usuario'}</span>
               </div>
@@ -76,7 +79,6 @@ export function Header() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              {/* 👇 Botón de logout */}
               <button 
                 onClick={handleLogout}
                 className="ml-1 p-1.5 text-gray-400 hover:text-red-500 transition-colors"
