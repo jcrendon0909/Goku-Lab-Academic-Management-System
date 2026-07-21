@@ -90,15 +90,16 @@ export const initWhatsApp = () => {
 
     client = new Client({ puppeteer: puppeteerConfig });
 
-   client.on('qr', (qr) => {
+client.on('qr', (qr) => {
   console.log('📱 Escanea el siguiente código QR:');
-  // Muestra la imagen QR (puede ser ilegible)
   qrcode.generate(qr, { small: true });
   
-  // 🔥 MUESTRA EL STRING REAL DEL QR (ESTO ES LO QUE DEBES COPIAR)
-  console.log('\n✅ COPIA ESTE TEXTO COMPLETO (incluyendo todo, sin espacios):\n');
-  console.log(qr); // <--- ESTO ES EL PAYLOAD REAL
-  console.log('\n🔗 Pégalo en: https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qr));
+  // 🔥 GENERA LA URL CORRECTA CON EL TEXTO CODIFICADO
+  const encodedQR = encodeURIComponent(qr);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedQR}`;
+  
+  console.log('\n🔗 COPIA ESTA URL COMPLETA Y PÉGALA EN TU NAVEGADOR:\n');
+  console.log(qrUrl);
   console.log('\n⏳ Esperando conexión...\n');
 });
 
