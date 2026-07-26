@@ -26,49 +26,24 @@ router.get("/pagos", async (req, res) => {
     // Obtener todos los abonos que cumplan el filtro
     const abonos = await Abono.find(filtro).lean();
 
-    // Mapear cada abono para enriquecerlo con datos del pago y alumno
-    const abonosConNombre = await Promise.all(
-      abonos.map(async (abono) => {
-        // 1. Obtener el pago asociado al abono
-        const pago = await Pago.findOne({ idPago: abono.pagoId }).lean();
+    // Mapear cada abono directamente (sin join con Pago)
+    const abonosConNombre = abonos.map((abono) => ({
+      fecha: abono.fechaAbono || abono.createdAt,
+      estudiante: abono.nombreAlumno || "Alumno desconocido",
+      monto: abono.montoAbono || 0,
+      metodoPago: abono.metodoAbono || "Efectivo",
+      concepto: "Abono",
+      factura: false,
+      recibidoPor: abono.recibidoPor || "Sistema",
+      saldoAFavor: abono.saldoAFavor || 0,
+      observaciones: abono.observaciones || "",
+      periodoFacturacion: abono.periodoFacturacion || "",
+      estatus: abono.estatus || "",
+      notas: abono.notas || "",
+      grupoId: abono.grupoId || "", // si existe el campo
+    }));
 
-        // 2. Obtener el nombre del alumno desde el pago (si existe)
-        let estudiante = "Alumno desconocido";
-        let grupoId = "";
-        let metodoPago = abono.metodoAbono || "Efectivo";
-        let concepto = "Abono";
-        let factura = false;
-        let recibidoPor = abono.recibidoPor || "Sistema";
-
-        if (pago) {
-          estudiante = pago.nombreAlumno || "Alumno desconocido";
-          grupoId = pago.grupoId || "";
-          // Si el abono no tiene método, tomar el del pago (opcional)
-          if (!abono.metodoAbono && pago.metodoPago) {
-            metodoPago = pago.metodoPago;
-          }
-        }
-
-        // 3. Retornar el objeto enriquecido (formato que espera el frontend)
-        return {
-          fecha: abono.fechaAbono || abono.createdAt,
-          estudiante: estudiante,
-          monto: abono.montoAbono || 0,
-          metodoPago: metodoPago,
-          concepto: concepto,
-          factura: factura,
-          recibidoPor: recibidoPor,
-          saldoAFavor: abono.saldoAFavor || 0,
-          observaciones: abono.observaciones || "",
-          periodoFacturacion: abono.periodoFacturacion || "",
-          estatus: abono.estatus || "",
-          notas: abono.notas || "",
-          grupoId: grupoId,
-        };
-      })
-    );
-
-    // También calculamos los totales por mes (opcional, pero lo dejamos como estaba)
+    // Totales por mes (opcional, pero se mantiene)
     const totales = await Abono.aggregate([
       { $match: filtro },
       {
@@ -96,7 +71,7 @@ router.get("/pagos", async (req, res) => {
 
 // ============================================================
 // GET /rentabilidad-profesores - Reporte de rentabilidad
-// (No se modifica, solo se incluye por contexto)
+// (No se modifica, se incluye por contexto)
 // ============================================================
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
@@ -105,7 +80,7 @@ router.get("/rentabilidad-profesores", async (req, res) => {
     // Lógica para calcular rentabilidad por profesor (ya existente)
     // ... (código original, no se modifica)
 
-    // Respuesta de ejemplo
+    // Respuesta de ejemplo (reemplazar con tu lógica real)
     res.json([]);
   } catch (error) {
     console.error("❌ Error en GET /reportes/rentabilidad-profesores:", error);
