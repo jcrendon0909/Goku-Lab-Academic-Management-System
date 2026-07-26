@@ -1,26 +1,31 @@
 import Counter from "../models/Counter.js";
 
-export async function generarId(tipo) {
-  const configuracion = {
-    alumno: { prefijo: "ALU", digitos: 3 },
-    curso: { prefijo: "CUR", digitos: 3 },
-    grupo: { prefijo: "GRU", digitos: 3 },
-    profesor: { prefijo: "PROF", digitos: 3 },
-    reagendacion: { prefijo: "REA", digitos: 3 },
-  };
+const prefijos = {
+  alumno: 'ALU',
+  profesor: 'PROF',
+  grupo: 'GRU',
+  curso: 'CUR',
+  inscripcion: 'INS',
+  pago: 'PAG',
+  abono: 'ABO',
+  reagendacion: 'REA',
+  usuario: 'USR',
+  cursoVerano: 'CV',
+};
 
-  if (!configuracion[tipo]) {
-    throw new Error(`Tipo de ID no válido: ${tipo}`);
+export const generarId = async (tipo) => {
+  const prefijo = prefijos[tipo];
+  if (!prefijo) {
+    throw new Error(`Tipo de ID desconocido: ${tipo}`);
   }
 
+  // Obtener el siguiente número de secuencia usando el modelo Counter
   const counter = await Counter.findOneAndUpdate(
     { nombre: tipo },
     { $inc: { secuencia: 1 } },
-    { new: true, upsert: true }
+    { new: true, upsert: true, returnDocument: 'after' }
   );
 
-  const { prefijo, digitos } = configuracion[tipo];
-  const numero = String(counter.secuencia).padStart(digitos, "0");
-
+  const numero = String(counter.secuencia).padStart(3, '0');
   return `${prefijo}${numero}`;
-}
+};

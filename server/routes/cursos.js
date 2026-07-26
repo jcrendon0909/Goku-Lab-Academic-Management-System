@@ -77,14 +77,15 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Editar el nombre de un curso (se refleja en sus grupos y pagos)
+// Editar curso (todos los campos)
 router.patch("/:idCurso", async (req, res) => {
   try {
     const { idCurso } = req.params;
-    const nombreCurso = String(req.body?.nombreCurso || req.body?.nombre || "").trim();
+    const { nombreCurso, precioMensualidad, duracionMeses, nivel, categoria, estatus } = req.body;
 
-    if (!nombreCurso) {
-      return res.status(400).json({ error: "El nombre del curso es obligatorio" });
+    // Validar que al menos un campo sea enviado
+    if (!nombreCurso && precioMensualidad === undefined && duracionMeses === undefined && !nivel && !categoria && !estatus) {
+      return res.status(400).json({ error: "Al menos un campo debe ser enviado" });
     }
 
     const curso = await Curso.findOne({ idCurso });
@@ -92,39 +93,62 @@ router.patch("/:idCurso", async (req, res) => {
       return res.status(404).json({ error: "Curso no encontrado" });
     }
 
-    const duplicado = await Curso.findOne({
-      idCurso: { $ne: idCurso },
-      nombreCurso: new RegExp(
-        `^${nombreCurso.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-        "i"
-      ),
-    });
-    if (duplicado) {
-      return res.status(409).json({ error: "Ya existe un curso con ese nombre" });
+    // Si se envía nombreCurso, validar duplicados (excluyendo el propio curso)
+    if (nombreCurso && nombreCurso.trim() !== curso.nombreCurso) {
+      const duplicado = await Curso.findOne({
+        idCurso: { $ne: idCurso },
+        nombreCurso: new RegExp(
+          `^${nombreCurso.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i"
+        ),
+      });
+      if (duplicado) {
+        return res.status(409).json({ error: "Ya existe un curso con ese nombre" });
+      }
     }
 
-    const nombreAnterior = curso.nombreCurso;
-    curso.nombreCurso = nombreCurso;
-    await curso.save();
+    // Construir objeto de actualización
+    const updateData = {};
+    if (nombreCurso !== undefined) updateData.nombreCurso = nombreCurso.trim();
+    if (precioMensualidad !== undefined) updateData.precioMensualidad = precioMensualidad;
+    if (duracionMeses !== undefined) updateData.duracionMeses = duracionMeses;
+    if (nivel !== undefined) updateData.nivel = nivel;
+    if (categoria !== undefined) updateData.categoria = categoria;
+    if (estatus !== undefined) updateData.estatus = estatus;
 
-    // Reflejar el nuevo nombre en grupos y pagos relacionados
-    await Grupo.updateMany(
-      { $or: [{ idCurso }, { nombreCurso: nombreAnterior }] },
-      { $set: { idCurso, nombreCurso } }
+    // Actualizar el curso
+    const cursoActualizado = await Curso.findOneAndUpdate(
+      { idCurso },
+      { $set: updateData },
+      { new: true }
     );
-    await Pago.updateMany({ nombreCurso: nombreAnterior }, { $set: { nombreCurso } });
 
-    res.status(200).json(curso);
+    // Si se cambió el nombre, reflejar en grupos y pagos (solo el nombre)
+    if (nombreCurso && nombreCurso.trim() !== curso.nombreCurso) {
+      await Grupo.updateMany(
+        { idCurso: idCurso },
+        { $set: { nombreCurso: nombreCurso.trim() } }
+      );
+      await Pago.updateMany(
+        { nombreCurso: curso.nombreCurso },
+        { $set: { nombreCurso: nombreCurso.trim() } }
+      );
+    }
+
+    // Nota: Los demás campos (precio, duración, nivel, categoría, estatus) NO se propagan a grupos/pagos,
+    // ya que son datos referenciales del curso. Los grupos y pagos solo guardan el nombre del curso.
+
+    res.status(200).json(cursoActualizado);
   } catch (error) {
-    console.error("ERROR PATCH NOMBRE CURSO:", error);
+    console.error("ERROR PATCH CURSO:", error);
     res.status(500).json({
-      error: "Error al editar el nombre del curso",
+      error: "Error al actualizar el curso",
       detalle: error.message,
     });
   }
 });
 
-// Dar de alta / inactivar un curso (cambiar estatus)
+// Dar de alta / inactivar un curso (cambiar estatus) - esta ruta ya no es necesaria si usamos la general, pero la dejamos por compatibilidad
 router.patch("/:idCurso/estatus", async (req, res) => {
   try {
     const { idCurso } = req.params;

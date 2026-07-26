@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft, MapPin, Users, Tag, Repeat, Sparkles } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { Link } from 'react-router-dom';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { toast } from 'sonner';
+import BackgroundVideo from './BackgroundVideo';  // ✅ CORREGIDO: misma carpeta
 
 interface Clase {
   id: string;
@@ -228,13 +229,10 @@ export function CalendarioProfesor() {
     toast.info('Baja de alumno pendiente de implementar');
   };
 
-  // 🔥 IMPLEMENTACIÓN DE ELIMINACIÓN DE REAGENDACIÓN POR ALUMNO
   const handleEliminarReagendacionAlumno = async (student: any, classData: any) => {
     if (!confirm(`¿Quitar la reagendación de ${student.nombreAlumno}?`)) return;
     try {
-      // Obtener el idAlumno y el idGrupoNuevo desde la información del alumno
       const idAlumno = student.idAlumno;
-      // El idGrupoNuevo es el ID del grupo destino (el grupo actual de la clase)
       const idGrupoNuevo = classData.idGrupo || classData.id;
       
       if (!idAlumno || !idGrupoNuevo) {
@@ -251,7 +249,7 @@ export function CalendarioProfesor() {
       }
       
       toast.success(`Reagendación de ${student.nombreAlumno} eliminada`);
-      await cargarClases(); // Recargar el calendario para reflejar los cambios
+      await cargarClases();
     } catch (error: any) {
       console.error('Error al eliminar reagendación:', error);
       toast.error(error.message || 'Error al eliminar reagendación');
@@ -273,13 +271,14 @@ export function CalendarioProfesor() {
     }
   };
 
-  // Renderizado
+  const decorativeVideos: { src: string; position: any }[] = [];
+
   if (cargando) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#26AAA3] mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando tu calendario...</p>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center text-white">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#F8B50E] mx-auto mb-4"></div>
+          <p className="text-lg font-bold">📅 Cargando tu calendario...</p>
         </div>
       </div>
     );
@@ -287,13 +286,13 @@ export function CalendarioProfesor() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8 flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-xl shadow-md max-w-md">
-          <div className="text-red-500 text-4xl mb-4">⚠️</div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="bg-white/90 backdrop-blur-sm p-8 rounded-2xl shadow-2xl max-w-md text-center">
+          <div className="text-5xl mb-4">⚠️</div>
           <p className="text-gray-700">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 bg-[#26AAA3] text-white px-4 py-2 rounded-lg hover:bg-[#1f8c86]"
+            className="mt-4 bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white px-6 py-2 rounded-full hover:scale-105 transition-all shadow-lg"
           >
             Reintentar
           </button>
@@ -303,94 +302,130 @@ export function CalendarioProfesor() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/dashboard" className="text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="h-6 w-6" />
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <CalendarIcon className="h-6 w-6 text-[#26AAA3]" />
-            Mi Calendario de Clases
-          </h1>
+    <BackgroundVideo
+      videoSrc="https://media.gokulab.mx/Galery/videos/lummyanimado.mp4"
+      decorativeVideos={decorativeVideos}
+    >
+      <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
+        {/* Cabecera */}
+        <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-3 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <Link to="/dashboard" className="bg-white/20 backdrop-blur-sm p-2 rounded-full hover:bg-white/30 transition-all hover:scale-110">
+              <ArrowLeft className="h-5 w-5 text-white" />
+            </Link>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white drop-shadow-lg flex items-center gap-3">
+              <span className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] p-2 rounded-full shadow-lg inline-flex items-center justify-center">
+                <CalendarIcon className="h-6 w-6 text-gray-900" />
+              </span>
+              <span className="bg-gradient-to-r from-[#F8B50E] via-[#FFD700] to-white text-transparent bg-clip-text">
+                Mi Calendario
+              </span>
+            </h1>
+          </div>
           {idProfesor && (
-            <span className="text-sm text-gray-500 ml-2">
-              (Clases de {user.nombreCompleto || 'tu'})
-            </span>
+            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+              <span className="text-white text-sm font-medium flex items-center gap-2">
+                <User className="h-4 w-4" />
+                {user.nombreCompleto || 'Profesor'}
+              </span>
+            </div>
           )}
         </div>
 
+        {/* Grid de clases */}
         {clases.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-md p-8 text-center">
-            <p className="text-gray-500">No tienes clases programadas.</p>
-            <p className="text-sm text-gray-400 mt-2">Las clases que se te asignen aparecerán aquí.</p>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center max-w-md border border-white/20">
+              <div className="text-6xl mb-4">🎯</div>
+              <p className="text-white text-lg font-medium">No tienes clases programadas</p>
+              <p className="text-white/70 text-sm mt-2">Las clases que se te asignen aparecerán aquí</p>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {clases.map((clase) => {
-              const modalidad = clase.modalidad || 'Presencial';
+          <div className="flex-1 overflow-y-auto pr-1 pb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clases.map((clase) => {
+                const modalidad = clase.modalidad || 'Presencial';
+                const isReagendada = clase.reagendada;
 
-              return (
-                <div
-                  key={clase.id}
-                  onClick={() => {
-                    setClaseSeleccionada(clase);
-                    setDialogAbierto(true);
-                  }}
-                  className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 border-l-4 cursor-pointer ${
-                    clase.reagendada ? 'border-yellow-400' : 'border-[#26AAA3]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-[#26AAA3]" />
-                        {clase.titulo}
-                      </h3>
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                        <User className="h-3 w-3" />
+                return (
+                  <div
+                    key={clase.id}
+                    onClick={() => {
+                      setClaseSeleccionada(clase);
+                      setDialogAbierto(true);
+                    }}
+                    className={`
+                      group relative bg-white/20 backdrop-blur-md rounded-2xl p-5 
+                      border border-white/20 hover:border-white/40 
+                      shadow-lg hover:shadow-2xl 
+                      transition-all duration-300 cursor-pointer
+                      hover:scale-[1.02] hover:-translate-y-1
+                      ${isReagendada ? 'ring-2 ring-[#F8B50E]/50' : ''}
+                    `}
+                  >
+                    {isReagendada && (
+                      <div className="absolute -top-2 -right-2 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
+                        <Repeat className="h-3 w-3" />
+                        Reagendada
+                      </div>
+                    )}
+
+                    <div className="flex flex-col h-full">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <h3 className="font-bold text-white text-base flex items-center gap-2 flex-1">
+                          <BookOpen className="h-4 w-4 text-[#F8B50E] flex-shrink-0" />
+                          <span className="line-clamp-2">{clase.titulo}</span>
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex-shrink-0 ${
+                          modalidad === 'Virtual' 
+                            ? 'bg-purple-500/80 text-white' 
+                            : 'bg-emerald-500/80 text-white'
+                        }`}>
+                          {modalidad === 'Virtual' ? '💻 Virtual' : '🏫 Presencial'}
+                        </span>
+                      </div>
+
+                      <p className="text-white/80 text-sm flex items-center gap-2 mb-3">
+                        <User className="h-3.5 w-3.5 text-white/50" />
                         {clase.profesor}
                       </p>
-                    </div>
-                    {clase.reagendada && (
-                      <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                        Reagendada
-                      </span>
-                    )}
-                  </div>
 
-                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {clase.horaInicio} - {clase.horaFin || 'Fin por definir'}
-                    </span>
-                    <span className="text-gray-300">|</span>
-                    <span>{clase.diaClase || 'Fecha por definir'}</span>
-                  </div>
-
-                  {clase.studentId && clase.studentName && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
-                        Alumno: {clase.studentName}
-                      </span>
-                      {modalidad && (
-                        <span 
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            modalidad === 'Virtual' 
-                              ? 'bg-purple-600 text-white' 
-                              : 'bg-emerald-600 text-white'
-                          }`}
-                        >
-                          {modalidad}
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-white/70 mb-3">
+                        <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full">
+                          <Clock className="h-3.5 w-3.5" />
+                          {clase.horaInicio} {clase.horaFin ? `- ${clase.horaFin}` : ''}
                         </span>
+                        <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full">
+                          <CalendarIcon className="h-3.5 w-3.5" />
+                          {clase.diaClase || 'Fecha por definir'}
+                        </span>
+                      </div>
+
+                      {clase.studentId && clase.studentName && (
+                        <div className="mt-auto pt-3 border-t border-white/10">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/60">Alumno:</span>
+                            <span className="text-sm font-medium text-white bg-white/10 px-3 py-1 rounded-full">
+                              {clase.studentName}
+                            </span>
+                          </div>
+                        </div>
                       )}
+
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
+
+        <div className="mt-2 flex justify-between items-center text-xs text-white/50 flex-shrink-0">
+          <span>📋 {clases.length} clases programadas</span>
+          <span>🔄 {clases.filter(c => c.reagendada).length} reagendadas</span>
+        </div>
       </div>
 
       {claseSeleccionada && (
@@ -409,6 +444,6 @@ export function CalendarioProfesor() {
           onActualizarInscripcion={handleActualizarInscripcion}
         />
       )}
-    </div>
+    </BackgroundVideo>
   );
 }

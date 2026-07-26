@@ -1,811 +1,634 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  crearAlumno,
-  crearGrupoConAlumno,
-  crearInscripcion,
-  getAlumnos,
-  getCursos,
-  getProfesores,
-} from "../../services/api";
-import {
-  mesCobroAFechaInicio,
-  toDateInputValue,
-  toMonthInputValue,
-  validarFechasInscripcion,
-} from "../../utils/fechasInscripcion";
+import React, { useEffect, useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { apiFetch } from '../../services/api';
+import { toast } from 'sonner';
+
+interface InscripcionFormData {
+  idAlumno?: string;
+  nombreAlumno: string;
+  telefono?: string;
+  email?: string;
+  fechaNacimiento?: string;
+  tutor?: string;
+  descuento?: number;
+  notasInternas?: string;
+  observaciones?: string;
+  idCurso: string;
+  idProfesor: string;
+  grupoId: string;
+  diaClase: string;
+  horaClase: string;
+  duracionClase: string;
+  modalidad: string;
+  montoMensualidad: number;
+  diaPago: number;
+  fechaInicioPago: string;
+  comentarios?: string;
+}
 
 interface InscripcionFormProps {
-  /** Si viene del calendario, el grupo queda fijo */
-  classData?: any | null;
-  /** ID del grupo preseleccionado (vía redirección desde diálogo) */
-  grupoIdInicial?: string | null;
   onClose: () => void;
-  onSuccess?: () => void;
-  /** Preseleccionar alumno (desde Alumnos inscritos) */
+  onSuccess: () => void;
   alumnoInicial?: {
     idAlumno: string;
-    nombreAlumno?: string;
-    nombre?: string;
-  } | null;
+    nombreAlumno: string;
+    telefono?: string;
+    email?: string;
+    fechaNacimiento?: string;
+    tutor?: string;
+    descuento?: number;
+    notasInternas?: string;
+    observaciones?: string;
+  };
 }
 
-function normalizar(valor: string) {
-  return String(valor || "").trim().toUpperCase();
-}
-
-const DIAS_SEMANA = [
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-  "Domingo",
-];
-
-const DURACIONES_CLASE = [
-  "1 hora",
-  "1:30 hr",
-  "2 horas",
-  "2:30 horas",
-  "3 horas",
-  "3:30 horas",
-];
-
-export default function InscripcionForm({
-  classData = null,
-  grupoIdInicial = null,
-  onClose,
-  onSuccess,
-  alumnoInicial = null,
-}: InscripcionFormProps) {
-  // 👇 NUEVA LÓGICA: determinar si el grupo está fijo
-  const grupoFijo = classData || grupoIdInicial;
-  const grupoIdDesdeClase = useMemo(() => {
-    if (classData) {
-      return (
-        classData?.idGrupo ||
-        classData?.IdGrupo ||
-        classData?.grupoId ||
-        classData?.GrupoId ||
-        classData?.id_grupo ||
-        classData?.id ||
-        ""
-      );
-    }
-    if (grupoIdInicial) {
-      return grupoIdInicial;
-    }
-    return "";
-  }, [classData, grupoIdInicial]);
-
-  const modoLibre = !grupoFijo;
-
-  const [modo, setModo] = useState<"existente" | "nuevo">("existente");
-  const [busqueda, setBusqueda] = useState("");
-  const [alumnosEncontrados, setAlumnosEncontrados] = useState<any[]>([]);
-  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any | null>(
-    alumnoInicial
-      ? {
-          idAlumno: alumnoInicial.idAlumno,
-          nombreAlumno:
-            alumnoInicial.nombreAlumno || alumnoInicial.nombre || "",
-        }
-      : null
-  );
-
-  const [nombreAlumno, setNombreAlumno] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [tutor, setTutor] = useState("");
-  const [observaciones, setObservaciones] = useState("");
-  const [modalidad, setModalidad] = useState("Presencial");
-  const [fechaInscripcion, setFechaInscripcion] = useState("");
-  const [primerMesCobro, setPrimerMesCobro] = useState("");
-  const [montoMensualidad, setMontoMensualidad] = useState("");
-  const [diaPago, setDiaPago] = useState<string>("5");
-
+const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, alumnoInicial }) => {
   const [cursos, setCursos] = useState<any[]>([]);
   const [profesores, setProfesores] = useState<any[]>([]);
-  const [cargandoCatalogos, setCargandoCatalogos] = useState(modoLibre);
-  const [idCursoFiltro, setIdCursoFiltro] = useState("");
-  const [idProfesorFiltro, setIdProfesorFiltro] = useState("");
-  const [diaClaseSeleccionado, setDiaClaseSeleccionado] = useState("");
-  const [horaClaseSeleccionada, setHoraClaseSeleccionada] = useState("");
-  const [duracionClaseSeleccionada, setDuracionClaseSeleccionada] =
-    useState("2 horas");
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(false);
+  const [paso, setPaso] = useState(1);
 
-  const [guardando, setGuardando] = useState(false);
-  const [buscando, setBuscando] = useState(false);
-
-  const cursoSeleccionado = useMemo(
-    () =>
-      cursos.find(
-        (c) => normalizar(c.idCurso) === normalizar(idCursoFiltro)
-      ) || null,
-    [cursos, idCursoFiltro]
-  );
-
-  const profesorSeleccionado = useMemo(
-    () =>
-      profesores.find(
-        (p) => normalizar(p.idProfesor) === normalizar(idProfesorFiltro)
-      ) || null,
-    [profesores, idProfesorFiltro]
-  );
-
-  const horarioCompleto = useMemo(
-    () =>
-      Boolean(
-        cursoSeleccionado &&
-          profesorSeleccionado &&
-          diaClaseSeleccionado &&
-          horaClaseSeleccionada &&
-          duracionClaseSeleccionada
-      ),
-    [
-      cursoSeleccionado,
-      profesorSeleccionado,
-      diaClaseSeleccionado,
-      horaClaseSeleccionada,
-      duracionClaseSeleccionada,
-    ]
-  );
-
-  useEffect(() => {
-    const hoy = toDateInputValue(new Date());
-    if (classData?.date) {
-      const fechaClase = toDateInputValue(classData.date);
-      setFechaInscripcion(fechaClase);
-      setPrimerMesCobro(toMonthInputValue(classData.date));
-      return;
+  const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<InscripcionFormData>({
+    defaultValues: {
+      idAlumno: alumnoInicial?.idAlumno || '',
+      nombreAlumno: alumnoInicial?.nombreAlumno || '',
+      telefono: alumnoInicial?.telefono || '',
+      email: alumnoInicial?.email || '',
+      fechaNacimiento: alumnoInicial?.fechaNacimiento || '',
+      tutor: alumnoInicial?.tutor || '',
+      descuento: alumnoInicial?.descuento || 0,
+      notasInternas: alumnoInicial?.notasInternas || '',
+      observaciones: alumnoInicial?.observaciones || '',
+      modalidad: 'Presencial',
+      diaPago: 1,
+      fechaInicioPago: new Date().toISOString().split('T')[0],
+      duracionClase: '2 horas',
     }
-    setFechaInscripcion(hoy);
-    setPrimerMesCobro(toMonthInputValue(new Date()));
-  }, [classData]);
+  });
 
+  const idCursoSeleccionado = watch('idCurso');
+  const idProfesorSeleccionado = watch('idProfesor');
+  const diaClaseSeleccionado = watch('diaClase');
+  const horaClaseSeleccionada = watch('horaClase');
+
+  // Cargar datos iniciales
   useEffect(() => {
-    if (!fechaInscripcion) return;
-    const mesClase = toMonthInputValue(fechaInscripcion);
-    if (!primerMesCobro) {
-      setPrimerMesCobro(mesClase);
-      return;
-    }
-    if (validarFechasInscripcion(fechaInscripcion, primerMesCobro)) {
-      setPrimerMesCobro(mesClase);
-    }
-  }, [fechaInscripcion]);
-
-  // Cargar catálogos solo si estamos en modo libre
-  useEffect(() => {
-    if (!modoLibre) return;
-
-    const cargar = async () => {
+    const cargarDatos = async () => {
       try {
-        setCargandoCatalogos(true);
-        const [cursosResp, profesoresResp] = await Promise.all([
-          getCursos(),
-          getProfesores(),
+        const [resCursos, resProfesores, resGrupos] = await Promise.all([
+          apiFetch('/cursos'),
+          apiFetch('/profesores'),
+          apiFetch('/grupos/con-ocupacion')
         ]);
-
-        const cursosActivos = (cursosResp || [])
-          .map((curso: any) => ({
-            idCurso: curso.idCurso || curso.IdCurso || "",
-            nombreCurso: curso.nombreCurso || curso.nombre || "",
-          }))
-          .filter((c: any) => c.nombreCurso)
-          .sort((a: any, b: any) =>
-            a.nombreCurso.localeCompare(b.nombreCurso, "es")
-          );
-
-        const profesoresActivos = (profesoresResp || [])
-          .map((prof: any) => ({
-            idProfesor: prof.idProfesor || prof.IdProfesor || "",
-            nombre: prof.nombre || prof.nombreProfesor || "",
-          }))
-          .filter((p: any) => p.nombre)
-          .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre, "es"));
-
-        setCursos(cursosActivos);
-        setProfesores(profesoresActivos);
+        const cursosData = await resCursos.json();
+        const profesoresData = await resProfesores.json();
+        const gruposData = await resGrupos.json();
+        setCursos(cursosData);
+        setProfesores(profesoresData);
+        setGrupos(gruposData);
       } catch (error) {
-        console.error("Error al cargar catálogos:", error);
-      } finally {
-        setCargandoCatalogos(false);
+        toast.error('Error al cargar datos iniciales');
       }
     };
+    cargarDatos();
+  }, []);
 
-    cargar();
-  }, [modoLibre]);
-
-  // Buscar alumnos solo si estamos en modo existente y no hay alumno inicial
+  // Auto-completar grupo
   useEffect(() => {
-    if (modo !== "existente" || alumnoInicial) return;
-
-    const buscar = async () => {
-      try {
-        setBuscando(true);
-        const alumnos = await getAlumnos(busqueda);
-        setAlumnosEncontrados(alumnos || []);
-      } catch (error) {
-        console.error("Error al buscar alumnos:", error);
-        setAlumnosEncontrados([]);
-      } finally {
-        setBuscando(false);
-      }
-    };
-
-    buscar();
-  }, [busqueda, modo, alumnoInicial]);
-
-  useEffect(() => {
-    if (modo === "nuevo") {
-      setAlumnoSeleccionado(null);
-    } else if (alumnoInicial) {
-      setAlumnoSeleccionado({
-        idAlumno: alumnoInicial.idAlumno,
-        nombreAlumno:
-          alumnoInicial.nombreAlumno || alumnoInicial.nombre || "",
-      });
-    }
-  }, [modo, alumnoInicial]);
-
-  const alumnoYaElegidoTexto = useMemo(() => {
-    if (!alumnoSeleccionado) return "";
-    return `${alumnoSeleccionado.nombreAlumno || "Sin nombre"} (${alumnoSeleccionado.idAlumno || "Sin ID"})`;
-  }, [alumnoSeleccionado]);
-
-  const handleSeleccionarAlumno = (alumno: any) => {
-    setAlumnoSeleccionado(alumno);
-  };
-
-  const handleGuardar = async () => {
-    try {
-      setGuardando(true);
-
-      // Validar grupo fijo o horario completo
-      if (modoLibre && !horarioCompleto) {
-        alert("Completa curso, profesor, día, hora y duración de la clase");
-        return;
-      }
-
-      if (!modoLibre && !grupoIdDesdeClase?.trim()) {
-        alert(
-          "No se encontró el grupo de la clase. Recarga e intenta de nuevo."
-        );
-        return;
-      }
-
-      if (!fechaInscripcion) {
-        alert("Indica desde qué día empieza a tomar clase");
-        return;
-      }
-
-      const errorFechas = validarFechasInscripcion(
-        fechaInscripcion,
-        primerMesCobro
+    if (idCursoSeleccionado && idProfesorSeleccionado && diaClaseSeleccionado && horaClaseSeleccionada) {
+      const grupoEncontrado = grupos.find(g => 
+        g.idCurso === idCursoSeleccionado &&
+        g.idProfesor === idProfesorSeleccionado &&
+        g.diaClase === diaClaseSeleccionado &&
+        g.horaClase === horaClaseSeleccionada
       );
-      if (errorFechas) {
-        alert(errorFechas);
-        return;
+      if (grupoEncontrado) {
+        setValue('grupoId', grupoEncontrado.IdGrupo);
+        setValue('duracionClase', grupoEncontrado.duracionClase || '2 horas');
+      } else {
+        setValue('grupoId', '');
       }
+    }
+  }, [idCursoSeleccionado, idProfesorSeleccionado, diaClaseSeleccionado, horaClaseSeleccionada, grupos, setValue]);
 
-      const montoPagoNumero = Number(montoMensualidad);
-      if (
-        !montoMensualidad ||
-        !Number.isFinite(montoPagoNumero) ||
-        montoPagoNumero <= 0
-      ) {
-        alert("Captura un monto de mensualidad válido");
-        return;
-      }
-
-      if (modo === "existente" && !alumnoSeleccionado) {
-        alert("Debes seleccionar un alumno");
-        return;
-      }
-
-      if (modo === "nuevo" && !nombreAlumno.trim()) {
-        alert("Debes capturar el nombre del alumno");
-        return;
-      }
-
-      const datosPago = {
-        montoMensualidad: montoPagoNumero,
-        diaPago: Number(diaPago),
-        fechaInicioPago: mesCobroAFechaInicio(primerMesCobro),
-      };
-
-      try {
-        if (modoLibre) {
-          // Crear grupo con alumno (modo libre)
-          const respuesta = await crearGrupoConAlumno({
-            grupo: {
-              idCurso: cursoSeleccionado!.idCurso,
-              nombreCurso: cursoSeleccionado!.nombreCurso,
-              diaClase: diaClaseSeleccionado,
-              horaClase: horaClaseSeleccionada,
-              duracionClase: duracionClaseSeleccionada,
-              idProfesor: profesorSeleccionado!.idProfesor,
-              nombreProfesor: profesorSeleccionado!.nombre,
-              capacidadMaxima: 8,
-              fechaCreacion: toDateInputValue(new Date()),
-              Estatus: "Activo",
-            },
-            fechaInscripcion,
-            datosPago,
-            ...(modo === "existente"
-              ? {
-                  alumnoExistente: {
-                    idAlumno: alumnoSeleccionado!.idAlumno,
-                    nombreAlumno: alumnoSeleccionado!.nombreAlumno,
-                    modalidad,
-                  },
-                }
-              : {
-                  alumnoNuevo: {
-                    nombreAlumno: nombreAlumno.trim(),
-                    telefono,
-                    tutor,
-                    observaciones,
-                    modalidad,
-                  },
-                }),
+  const onSubmit = async (data: InscripcionFormData) => {
+    setCargando(true);
+    try {
+      // Si es alumno existente, solo creamos la inscripción
+      if (alumnoInicial) {
+        let grupoId = data.grupoId;
+        if (!grupoId) {
+          const nuevoGrupo = await apiFetch('/grupos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              idCurso: data.idCurso,
+              nombreCurso: cursos.find(c => c.idCurso === data.idCurso)?.nombreCurso || '',
+              diaClase: data.diaClase,
+              horaClase: data.horaClase,
+              duracionClase: data.duracionClase,
+              idProfesor: data.idProfesor,
+              nombreProfesor: profesores.find(p => p.idProfesor === data.idProfesor)?.nombre || '',
+              capacidadMaxima: 20,
+              Estatus: 'Activo'
+            })
           });
-
-          const mensajeGrupo = respuesta?.grupoCreado
-            ? "Se creó el grupo y el alumno quedó inscrito."
-            : "El alumno quedó inscrito en el grupo existente.";
-          alert(`Inscripción correcta. ${mensajeGrupo}`);
-        } else {
-          // Grupo fijo: usar el ID proporcionado
-          let alumnoCalendario = alumnoSeleccionado;
-
-          if (modo === "nuevo") {
-            alumnoCalendario = await crearAlumno({
-              nombreAlumno: nombreAlumno.trim(),
-              telefono,
-              tutor,
-              observaciones,
-              estatus: "Activo",
-            });
-          }
-
-          if (!alumnoCalendario?.idAlumno) {
-            alert("No se pudo obtener el ID del alumno");
-            return;
-          }
-
-          await crearInscripcion({
-            idAlumno: alumnoCalendario.idAlumno,
-            nombreAlumno:
-              alumnoCalendario.nombreAlumno || alumnoCalendario.nombre,
-            grupoId: grupoIdDesdeClase.trim(),
-            modalidad,
-            fechaInscripcion,
-            ...datosPago,
-          });
-          alert("Alumno inscrito correctamente en el grupo");
+          const grupoCreado = await nuevoGrupo.json();
+          grupoId = grupoCreado.IdGrupo;
         }
-      } catch (errorInscripcion: any) {
-        alert(
-          `Error al inscribir: ${errorInscripcion.message || "Error desconocido"}`
-        );
+
+        const res = await apiFetch('/inscripciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idAlumno: alumnoInicial.idAlumno,
+            nombreAlumno: alumnoInicial.nombreAlumno,
+            grupoId: grupoId,
+            modalidad: data.modalidad,
+            montoMensualidad: data.montoMensualidad,
+            diaPago: data.diaPago,
+            fechaInicioPago: data.fechaInicioPago,
+            comentarios: data.comentarios || '',
+            estatus: 'Activa',
+            fechaInscripcion: new Date().toISOString()
+          })
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || 'Error al crear inscripción');
+        }
+
+        toast.success('🎉 ¡Curso agregado correctamente!');
+        onSuccess();
+        onClose();
         return;
       }
 
-      onSuccess?.();
+      // Si es alumno nuevo
+      const cursoNombre = cursos.find(c => c.idCurso === data.idCurso)?.nombreCurso || '';
+      const profesorNombre = profesores.find(p => p.idProfesor === data.idProfesor)?.nombre || '';
+
+      let grupoId = data.grupoId;
+      if (!grupoId) {
+        const nuevoGrupo = await apiFetch('/grupos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idCurso: data.idCurso,
+            nombreCurso: cursoNombre,
+            diaClase: data.diaClase,
+            horaClase: data.horaClase,
+            duracionClase: data.duracionClase,
+            idProfesor: data.idProfesor,
+            nombreProfesor: profesorNombre,
+            capacidadMaxima: 20,
+            Estatus: 'Activo'
+          })
+        });
+        const grupoCreado = await nuevoGrupo.json();
+        grupoId = grupoCreado.IdGrupo;
+      }
+
+      const res = await apiFetch('/grupos/crear-con-alumno', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fechaInscripcion: new Date().toISOString(),
+          grupo: {
+            idCurso: data.idCurso,
+            nombreCurso: cursoNombre,
+            diaClase: data.diaClase,
+            horaClase: data.horaClase,
+            duracionClase: data.duracionClase,
+            idProfesor: data.idProfesor,
+            nombreProfesor: profesorNombre,
+            comentario: '',
+            capacidadMaxima: 20,
+            Estatus: 'Activo'
+          },
+          alumnoNuevo: {
+            nombreAlumno: data.nombreAlumno,
+            telefono: data.telefono || '',
+            email: data.email || '',
+            fechaNacimiento: data.fechaNacimiento || null,
+            tutor: data.tutor || '',
+            descuento: data.descuento || 0,
+            notasInternas: data.notasInternas || '',
+            observaciones: data.observaciones || '',
+            estatus: 'Activo',
+            modalidad: data.modalidad
+          },
+          datosPago: {
+            montoMensualidad: data.montoMensualidad,
+            diaPago: data.diaPago,
+            fechaInicioPago: data.fechaInicioPago,
+            comentarios: data.comentarios || ''
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al inscribir alumno');
+      }
+
+      toast.success('🎉 ¡Alumno inscrito correctamente!');
+      onSuccess();
       onClose();
     } catch (error: any) {
-      alert(`Error inesperado: ${error.message || "Error al inscribir"}`);
+      toast.error('❌ ' + (error.message || 'Error al procesar la inscripción'));
     } finally {
-      setGuardando(false);
+      setCargando(false);
     }
   };
 
-  const puedeConfirmar =
-    Boolean(fechaInscripcion) &&
-    Boolean(primerMesCobro) &&
-    Boolean(diaPago) &&
-    Number(montoMensualidad) > 0 &&
-    (modoLibre ? horarioCompleto : Boolean(grupoIdDesdeClase?.trim())) &&
-    (modo === "existente"
-      ? Boolean(alumnoSeleccionado)
-      : Boolean(nombreAlumno.trim()));
-
-  const selectorGrupo = modoLibre && (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 space-y-3">
-      <h3 className="font-semibold text-gray-900">Clase / grupo</h3>
-      <p className="text-xs text-gray-500">
-        Elige curso, profesor, día y horario libremente. Si no existe un grupo
-        con esa combinación, se creará al confirmar la inscripción.
-      </p>
-
-      {cargandoCatalogos ? (
-        <p className="text-sm text-gray-500">Cargando cursos y profesores...</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Curso
-              </label>
-              <select
-                value={idCursoFiltro}
-                onChange={(e) => setIdCursoFiltro(e.target.value)}
-                className="w-full border p-2 rounded bg-white"
-                required
-              >
-                <option value="">Selecciona curso</option>
-                {cursos.map((c) => (
-                  <option key={c.idCurso || c.nombreCurso} value={c.idCurso}>
-                    {c.nombreCurso}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Profesor
-              </label>
-              <select
-                value={idProfesorFiltro}
-                onChange={(e) => setIdProfesorFiltro(e.target.value)}
-                className="w-full border p-2 rounded bg-white"
-                required
-              >
-                <option value="">Selecciona profesor</option>
-                {profesores.map((p) => (
-                  <option key={p.idProfesor} value={p.idProfesor}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Día
-              </label>
-              <select
-                value={diaClaseSeleccionado}
-                onChange={(e) => setDiaClaseSeleccionado(e.target.value)}
-                className="w-full border p-2 rounded bg-white"
-                required
-              >
-                <option value="">Selecciona día</option>
-                {DIAS_SEMANA.map((dia) => (
-                  <option key={dia} value={dia}>
-                    {dia}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hora
-              </label>
-              <input
-                type="time"
-                value={horaClaseSeleccionada}
-                onChange={(e) => setHoraClaseSeleccionada(e.target.value)}
-                className="w-full border p-2 rounded bg-white"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Duración de la clase
-              </label>
-              <select
-                value={duracionClaseSeleccionada}
-                onChange={(e) => setDuracionClaseSeleccionada(e.target.value)}
-                className="w-full border p-2 rounded bg-white"
-                required
-              >
-                {DURACIONES_CLASE.map((dur) => (
-                  <option key={dur} value={dur}>
-                    {dur}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {horarioCompleto && (
-            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-100 rounded p-2">
-              <b>Horario:</b> {cursoSeleccionado?.nombreCurso} con{" "}
-              {profesorSeleccionado?.nombre} — {diaClaseSeleccionado},{" "}
-              {horaClaseSeleccionada} ({duracionClaseSeleccionada})
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-
-  const camposClaseYPago = (
-    <>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Modalidad
-        </label>
-        <select
-          value={modalidad}
-          onChange={(e) => setModalidad(e.target.value)}
-          className="w-full border p-2 rounded"
-        >
-          <option value="Presencial">Presencial</option>
-          <option value="Virtual">Virtual</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Desde qué día empieza su clase
-        </label>
-        <p className="text-xs text-gray-500 mb-1">
-          Aparecerá en el calendario a partir de esta fecha
-        </p>
-        <input
-          type="date"
-          value={fechaInscripcion}
-          onChange={(e) => setFechaInscripcion(e.target.value)}
-          className="w-full border p-2 rounded"
-          required
-        />
-      </div>
-    </>
-  );
-
-  const datosPagoForm = (
-    <div className="bg-cyan-50 border border-cyan-100 rounded-lg p-4 mt-5 space-y-3">
-      <h3 className="font-semibold text-gray-900">Datos de pago</h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Monto de mensualidad
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={montoMensualidad}
-            onChange={(e) => setMontoMensualidad(e.target.value)}
-            placeholder="0.00"
-            className="w-full border p-2 rounded bg-white"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Día de pago (1-31)
-          </label>
-          <select
-            value={diaPago}
-            onChange={(e) => setDiaPago(e.target.value)}
-            className="w-full border p-2 rounded bg-white"
-            required
-          >
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-              <option key={day} value={day}>
-                {day}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Primer mes de cobro
-          </label>
-          <p className="text-xs text-gray-500 mb-1">
-            El cobro mensual empieza en este mes (no el día exacto de hoy)
-          </p>
-          <input
-            type="month"
-            value={primerMesCobro}
-            onChange={(e) => setPrimerMesCobro(e.target.value)}
-            className="w-full border p-2 rounded bg-white"
-            required
-          />
-        </div>
-      </div>
-    </div>
-  );
-
-  const tituloClase = classData
-    ? `${classData?.title || classData?.nombreCurso || "Sin curso"} | ${
-        classData?.teacher?.name || classData?.nombreProfesor || "Sin profesor"
-      } | ${classData?.startTime || ""}`
-    : null;
+  const nextStep = () => setPaso(paso + 1);
+  const prevStep = () => setPaso(paso - 1);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-      <div className="bg-white w-[95vw] max-w-5xl rounded-xl p-6 shadow-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-2">Inscribir alumno</h2>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 border-4 border-blue-200 relative">
+        {/* Personaje decorativo */}
+        <div className="absolute -top-6 -right-6 w-20 h-20 bg-yellow-300 rounded-full flex items-center justify-center shadow-lg border-4 border-yellow-400">
+          <span className="text-4xl">⭐</span>
+        </div>
+        <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-green-300 rounded-full flex items-center justify-center shadow-lg border-4 border-green-400">
+          <span className="text-3xl">🐉</span>
+        </div>
 
-        {tituloClase && (
-          <p className="text-sm text-gray-500 mb-4">Clase: {tituloClase}</p>
-        )}
-
-        {grupoIdInicial && !classData && (
-          <p className="text-sm text-cyan-600 mb-4 bg-cyan-50 p-2 rounded border border-cyan-200">
-            ✅ Grupo preseleccionado: <strong>{grupoIdInicial}</strong>
-          </p>
-        )}
-
-        {selectorGrupo}
-
-        {!alumnoInicial && (
-          <div className="flex gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => setModo("existente")}
-              className={`px-4 py-2 rounded-lg ${
-                modo === "existente"
-                  ? "bg-cyan-500 text-white"
-                  : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              Alumno existente
-            </button>
-            <button
-              type="button"
-              onClick={() => setModo("nuevo")}
-              className={`px-4 py-2 rounded-lg ${
-                modo === "nuevo"
-                  ? "bg-cyan-500 text-white"
-                  : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              Alumno nuevo
-            </button>
-          </div>
-        )}
-
-        {modo === "existente" && (
-          <div className="space-y-4">
-            {alumnoInicial ? (
-              <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 p-3 rounded text-sm">
-                <b>Alumno:</b> {alumnoYaElegidoTexto}
-              </div>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Buscar alumno
-                  </label>
-                  <input
-                    type="text"
-                    value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Nombre o ID"
-                    className="w-full border p-2 rounded"
-                  />
-                </div>
-
-                {alumnoSeleccionado && (
-                  <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 p-3 rounded text-sm">
-                    <b>Seleccionado:</b> {alumnoYaElegidoTexto}
-                  </div>
-                )}
-
-                <div className="border rounded-lg max-h-48 overflow-y-auto">
-                  {buscando ? (
-                    <p className="p-3 text-sm text-gray-500">Buscando...</p>
-                  ) : alumnosEncontrados.length > 0 ? (
-                    alumnosEncontrados.map((alumno) => {
-                      const seleccionado =
-                        alumnoSeleccionado?.idAlumno === alumno.idAlumno;
-                      return (
-                        <div
-                          key={alumno.idAlumno}
-                          onClick={() => handleSeleccionarAlumno(alumno)}
-                          className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 ${
-                            seleccionado ? "bg-cyan-100" : ""
-                          }`}
-                        >
-                          <div className="font-medium">{alumno.nombreAlumno}</div>
-                          <div className="text-sm text-gray-500">
-                            {alumno.idAlumno}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="p-3 text-sm text-gray-500">
-                      No se encontraron alumnos
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-
-            {camposClaseYPago}
-          </div>
-        )}
-
-        {modo === "nuevo" && (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre del alumno
-              </label>
-              <input
-                type="text"
-                value={nombreAlumno}
-                onChange={(e) => setNombreAlumno(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-            {camposClaseYPago}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Teléfono
-              </label>
-              <input
-                type="text"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tutor
-              </label>
-              <input
-                type="text"
-                value={tutor}
-                onChange={(e) => setTutor(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Observaciones
-              </label>
-              <textarea
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                className="w-full border p-2 rounded"
-                rows={2}
-              />
-            </div>
-          </div>
-        )}
-
-        {datosPagoForm}
-
-        <div className="flex justify-end gap-2 mt-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+            {alumnoInicial ? '🌟 Agregar nuevo curso' : '🌟 ¡Inscribir nuevo alumno!'}
+          </h2>
+          {/* ✅ Botón de cierre con fondo visible */}
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-2 border rounded"
+            className="w-10 h-10 rounded-full bg-gray-200/80 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-xl transition hover:scale-110"
           >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleGuardar}
-            disabled={guardando || !puedeConfirmar}
-            className={`px-4 py-2 rounded text-white ${
-              guardando || !puedeConfirmar
-                ? "bg-emerald-300 cursor-not-allowed"
-                : "bg-emerald-500 hover:bg-emerald-600"
-            }`}
-          >
-            {guardando ? "Guardando..." : "Confirmar inscripción"}
+            ✕
           </button>
         </div>
+
+        {/* Pasos visuales */}
+        <div className="flex justify-center gap-2 mb-6">
+          {[1, 2, 3].map((num) => (
+            <div
+              key={num}
+              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-all ${
+                paso >= num ? 'bg-blue-500 scale-110' : 'bg-gray-300'
+              }`}
+            >
+              {num}
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* PASO 1: Datos del alumno */}
+          {paso === 1 && (
+            <div className="space-y-4">
+              <div className="bg-yellow-50/70 p-4 rounded-2xl border-2 border-yellow-200">
+                <h3 className="text-lg font-semibold text-yellow-700 mb-3 flex items-center gap-2">
+                  <span>🧑‍🎓</span> Datos del alumno
+                </h3>
+                {!alumnoInicial && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+                      <Controller
+                        name="nombreAlumno"
+                        control={control}
+                        rules={{ required: 'Nombre requerido' }}
+                        render={({ field }) => (
+                          <input
+                            {...field}
+                            placeholder="Ej: Mateo Goku"
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                      {errors.nombreAlumno && <p className="text-xs text-rose-500 mt-1">{errors.nombreAlumno.message}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento</label>
+                      <Controller
+                        name="fechaNacimiento"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            type="date"
+                            {...field}
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                      <Controller
+                        name="telefono"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            {...field}
+                            placeholder="Ej: 55 1234 5678"
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <Controller
+                        name="email"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            {...field}
+                            placeholder="Ej: mateo@email.com"
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tutor</label>
+                      <Controller
+                        name="tutor"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            {...field}
+                            placeholder="Nombre del tutor"
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+                      <Controller
+                        name="descuento"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            type="number"
+                            {...field}
+                            placeholder="0"
+                            className="w-full border-2 border-yellow-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 bg-white/80"
+                          />
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+                {alumnoInicial && (
+                  <div className="bg-blue-50 p-3 rounded-xl border-2 border-blue-200">
+                    <p className="text-sm text-gray-700">🧑‍🎓 Alumno: <span className="font-bold text-blue-600">{alumnoInicial.nombreAlumno}</span></p>
+                    <p className="text-sm text-gray-700">ID: <span className="font-mono text-blue-600">{alumnoInicial.idAlumno}</span></p>
+                  </div>
+                )}
+                <div className="flex justify-end mt-4">
+                  <button type="button" onClick={nextStep} className="px-6 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium">
+                    Siguiente ➜
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PASO 2: Datos del curso */}
+          {paso === 2 && (
+            <div className="space-y-4">
+              <div className="bg-pink-50/70 p-4 rounded-2xl border-2 border-pink-200">
+                <h3 className="text-lg font-semibold text-pink-700 mb-3 flex items-center gap-2">
+                  <span>📚</span> Datos del curso
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Curso *</label>
+                    <Controller
+                      name="idCurso"
+                      control={control}
+                      rules={{ required: 'Curso requerido' }}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        >
+                          <option value="">Seleccionar curso</option>
+                          {cursos.map(c => (
+                            <option key={c.idCurso} value={c.idCurso}>{c.nombreCurso}</option>
+                          ))}
+                        </select>
+                      )}
+                    />
+                    {errors.idCurso && <p className="text-xs text-rose-500 mt-1">{errors.idCurso.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Profesor *</label>
+                    <Controller
+                      name="idProfesor"
+                      control={control}
+                      rules={{ required: 'Profesor requerido' }}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        >
+                          <option value="">Seleccionar profesor</option>
+                          {profesores.map(p => (
+                            <option key={p.idProfesor} value={p.idProfesor}>{p.nombre}</option>
+                          ))}
+                        </select>
+                      )}
+                    />
+                    {errors.idProfesor && <p className="text-xs text-rose-500 mt-1">{errors.idProfesor.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Día de clase *</label>
+                    <Controller
+                      name="diaClase"
+                      control={control}
+                      rules={{ required: 'Día requerido' }}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        >
+                          <option value="">Seleccionar día</option>
+                          {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      )}
+                    />
+                    {errors.diaClase && <p className="text-xs text-rose-500 mt-1">{errors.diaClase.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Hora de clase *</label>
+                    <Controller
+                      name="horaClase"
+                      control={control}
+                      rules={{ required: 'Hora requerida' }}
+                      render={({ field }) => (
+                        <input
+                          type="time"
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        />
+                      )}
+                    />
+                    {errors.horaClase && <p className="text-xs text-rose-500 mt-1">{errors.horaClase.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Duración</label>
+                    <Controller
+                      name="duracionClase"
+                      control={control}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        >
+                          <option value="1 hora">1 hora</option>
+                          <option value="1:30 hr">1:30 horas</option>
+                          <option value="2 horas">2 horas</option>
+                          <option value="2:30 hr">2:30 horas</option>
+                          <option value="3 horas">3 horas</option>
+                        </select>
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Modalidad</label>
+                    <Controller
+                      name="modalidad"
+                      control={control}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                        >
+                          <option value="Presencial">Presencial</option>
+                          <option value="Virtual">Virtual</option>
+                        </select>
+                      )}
+                    />
+                  </div>
+                </div>
+                {watch('grupoId') && (
+                  <div className="mt-3 bg-emerald-50 p-2 rounded-xl border-2 border-emerald-200">
+                    <p className="text-sm text-emerald-700">✅ ¡Grupo existente encontrado! ID: <span className="font-mono">{watch('grupoId')}</span></p>
+                  </div>
+                )}
+                <div className="flex justify-between mt-4">
+                  <button type="button" onClick={prevStep} className="px-6 py-2 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-colors font-medium">
+                    ← Anterior
+                  </button>
+                  <button type="button" onClick={nextStep} className="px-6 py-2 bg-pink-500 text-white rounded-xl hover:bg-pink-600 transition-colors font-medium">
+                    Siguiente ➜
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PASO 3: Datos de pago y confirmación */}
+          {paso === 3 && (
+            <div className="space-y-4">
+              <div className="bg-green-50/70 p-4 rounded-2xl border-2 border-green-200">
+                <h3 className="text-lg font-semibold text-green-700 mb-3 flex items-center gap-2">
+                  <span>💰</span> Datos de pago
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Monto mensual *</label>
+                    <Controller
+                      name="montoMensualidad"
+                      control={control}
+                      rules={{ required: 'Monto requerido', min: 1 }}
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          {...field}
+                          placeholder="0"
+                          className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
+                        />
+                      )}
+                    />
+                    {errors.montoMensualidad && <p className="text-xs text-rose-500 mt-1">{errors.montoMensualidad.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Día de pago *</label>
+                    <Controller
+                      name="diaPago"
+                      control={control}
+                      rules={{ required: 'Día requerido', min: 1, max: 31 }}
+                      render={({ field }) => (
+                        <input
+                          type="number"
+                          {...field}
+                          className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
+                          min="1"
+                          max="31"
+                        />
+                      )}
+                    />
+                    {errors.diaPago && <p className="text-xs text-rose-500 mt-1">{errors.diaPago.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha inicio pago *</label>
+                    <Controller
+                      name="fechaInicioPago"
+                      control={control}
+                      rules={{ required: 'Fecha requerida' }}
+                      render={({ field }) => (
+                        <input
+                          type="date"
+                          {...field}
+                          className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
+                        />
+                      )}
+                    />
+                    {errors.fechaInicioPago && <p className="text-xs text-rose-500 mt-1">{errors.fechaInicioPago.message}</p>}
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Comentarios</label>
+                  <Controller
+                    name="comentarios"
+                    control={control}
+                    render={({ field }) => (
+                      <input
+                        {...field}
+                        placeholder="Notas adicionales"
+                        className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
+                      />
+                    )}
+                  />
+                </div>
+                <div className="flex justify-between mt-4">
+                  <button type="button" onClick={prevStep} className="px-6 py-2 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-colors font-medium">
+                    ← Anterior
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={cargando}
+                    className={`px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-bold text-lg shadow-lg ${cargando ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                  >
+                    {cargando ? '⏳ Guardando...' : (alumnoInicial ? '✨ Agregar curso' : '🎉 Inscribir alumno')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </form>
       </div>
     </div>
   );
-}
+};
+
+export default InscripcionForm;

@@ -1,6 +1,7 @@
 import { notifyDataChanged } from "../utils/dataSync";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+// ✅ CORRECCIÓN: eliminar "/api" para que coincida con el backend
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = localStorage.getItem("token");
@@ -221,9 +222,11 @@ export async function getAlumnos(busqueda: string = "") {
   return res.json();
 }
 
+// ✅ FUNCIÓN ACTUALIZADA: acepta nombreAlumno
 export async function actualizarAlumno(
   idAlumno: string,
   data: {
+    nombreAlumno?: string;
     telefono?: string;
     tutor?: string;
     observaciones?: string;

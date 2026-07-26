@@ -1,1011 +1,684 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import {
-  bajaAlumnoDeGrupo,
-  eliminarHistorialCursoBaja,
-  reactivarInscripcion,
-  actualizarAlumno,
-  getAlumnos,
-  getGrupos,
-  getInscripciones,
-  getPagosConEstatus,
-  guardarNotasAlumno,
-} from "../../services/api";
-import { toast } from "sonner";
-import {
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  StickyNote,
-  UserPlus,
-  UserMinus,
-} from "lucide-react";
-import InscripcionForm from "./InscripcionForm";
-import { useSyncDataReload } from "../../utils/dataSync";
-import {
-  buildPagosMap,
-  crearPagoId,
-  resolverPagoParaInscripcion,
-  saldoVisiblePago,
-} from "../../utils/pagoInscripcion";
+import React, { useEffect, useState, useMemo } from 'react';
+import { apiFetch, actualizarAlumno } from '../../services/api';
+import { toast } from 'sonner';
+import { useSyncDataReload } from '../../utils/dataSync';
+import BackgroundVideo from './BackgroundVideo';
+import InscripcionForm from './InscripcionForm';
 
-function normalizar(valor: any) {
-  return String(valor || "").trim().toUpperCase();
-}
-
-function esGrupoInactivo(estatus?: string) {
-  return String(estatus || "Activa").trim().toLowerCase() === "baja";
-}
-
-type FiltroVistaAlumnos = "activos" | "inactivos" | "todos";
-
-function formatearMoneda(monto: number) {
-  return Number(monto || 0).toLocaleString("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 2,
-  });
-}
-
-function parseFecha(fechaIso?: string) {
-  if (!fechaIso) return null;
-  const d = new Date(fechaIso);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function keyMes(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function etiquetaMes(d: Date) {
-  return d.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-}
-
-function listarMeses(desde: Date, hasta: Date) {
-  const months: Date[] = [];
-  const cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
-  const end = new Date(hasta.getFullYear(), hasta.getMonth(), 1);
-  while (cursor <= end) {
-    months.push(new Date(cursor));
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return months;
-}
-
-type Alumno = {
+// ----------------------------- INTERFACES -----------------------------
+interface Alumno {
   idAlumno: string;
-  nombreAlumno?: string;
-  nombre?: string;
+  nombreAlumno: string;
   telefono?: string;
-  tutor?: string;
-  observaciones?: string;
-  estatus?: string;
-};
+  email?: string;
+  estatus: string;
+  origen?: string;
+  situacion_percibida?: string;
+  createdAt?: string;
+  cursosActivos?: number;
+}
 
-type Grupo = {
-  IdGrupo?: string;
-  idGrupo?: string;
-  GrupoId?: string;
-  nombreCurso?: string;
-};
-
-type Inscripcion = {
+interface Inscripcion {
+  _id: string;
   idAlumno: string;
   nombreAlumno: string;
   grupoId: string;
-  modalidad?: string;
+  modalidad: string;
   montoMensualidad: number;
   diaPago: number;
   fechaInicioPago: string;
-  comentarios?: string;
-  estatus?: string;
-  fechaInscripcion?: string;
-  fechaBaja?: string | null;
-  createdAt?: string;
-};
-
-type PagoConEstatus = {
-  id: string;
-  idAlumno?: string;
-  grupoId?: string;
-  nombreAlumno?: string;
-  nombreCurso?: string;
-  montoTotal: number;
-  diaPagoFijo?: number;
-  fechaPago?: string;
-  activo?: boolean;
-  montoPagado?: number;
-  saldo?: number;
-  status?: string;
-  historialAbonos?: Array<{
-    abonoId?: string;
-    fechaAbono?: string;
-    montoAbono?: number;
-    metodoAbono?: string;
-  }>;
-};
-
-function HistorialMensual({
-  pago,
-}: {
-  pago: PagoConEstatus;
-}) {
-  const resumen = useMemo(() => {
-    const inicio = parseFecha(pago.fechaPago);
-    if (!inicio) return null;
-
-    const abonos = Array.isArray(pago.historialAbonos) ? pago.historialAbonos : [];
-    const abonosPorMes = new Map<string, number>();
-    for (const a of abonos) {
-      const d = parseFecha(a.fechaAbono);
-      if (!d) continue;
-      const k = keyMes(d);
-      abonosPorMes.set(k, (abonosPorMes.get(k) || 0) + Number(a.montoAbono || 0));
-    }
-
-    const meses = listarMeses(inicio, new Date());
-    return meses.map((m) => {
-      const k = keyMes(m);
-      const pagado = abonosPorMes.get(k) || 0;
-      const requerido = Number(pago.montoTotal || 0);
-      const saldo = Math.max(requerido - pagado, 0);
-      const estatus = saldo < 0.01 ? "Pagado" : pagado > 0 ? "Parcial" : "Pendiente";
-      return {
-        key: k,
-        etiqueta: etiquetaMes(m),
-        requerido,
-        pagado,
-        saldo,
-        estatus,
-      };
-    }).slice().reverse(); // último mes arriba
-  }, [pago]);
-
-  if (!resumen) {
-    return (
-      <div className="text-sm text-gray-500">
-        No hay fecha de inicio de pago para calcular meses.
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-black text-gray-600 uppercase tracking-wider">
-        Historial por mes
-      </div>
-      <div className="divide-y divide-gray-100">
-        {resumen.map((m) => (
-          <div key={m.key} className="px-4 py-2 flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-bold text-gray-900 truncate">{m.etiqueta}</div>
-              <div className="text-xs text-gray-500">
-                Requerido: {formatearMoneda(m.requerido)}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-sm font-bold text-emerald-700">{formatearMoneda(m.pagado)}</div>
-              <div className="text-sm font-bold text-red-600">{formatearMoneda(m.saldo)}</div>
-              <div
-                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                  m.estatus === "Pagado"
-                    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                    : m.estatus === "Parcial"
-                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                      : "bg-red-50 text-red-700 border-red-200"
-                }`}
-              >
-                {m.estatus}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  comentarios: string;
+  estatus: string;
+  fechaInscripcion: string;
+  createdAt: string;
 }
 
+interface Grupo {
+  IdGrupo: string;
+  nombreCurso: string;
+  diaClase: string;
+  horaClase: string;
+  nombreProfesor: string;
+  CapacidadMaxima: number;
+  alumnosInscritos?: number;
+}
+
+// ----------------------------- COMPONENTE PRINCIPAL -----------------------------
 export function AlumnosPage() {
-  const [searchParams] = useSearchParams();
-  const grupoIdParam = searchParams.get('grupoId');
-  const accionParam = searchParams.get('accion');
-
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [busqueda, setBusqueda] = useState("");
-
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
-  const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
-  const [pagos, setPagos] = useState<PagoConEstatus[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroEstatus, setFiltroEstatus] = useState<'Activo' | 'Inactivo' | 'Todos'>('Activo');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Alumno; direction: 'asc' | 'desc' } | null>(null);
 
-  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
-  const [notasDraft, setNotasDraft] = useState<Record<string, string>>({});
-  const [guardandoNota, setGuardandoNota] = useState<Record<string, boolean>>({});
-  const [alumnoDraft, setAlumnoDraft] = useState<Record<string, any>>({});
+  const [alumnoExpandido, setAlumnoExpandido] = useState<string | null>(null);
+  const [inscripciones, setInscripciones] = useState<Record<string, Inscripcion[]>>({});
+  const [cargandoInscripciones, setCargandoInscripciones] = useState<Record<string, boolean>>({});
+
+  const [mostrarModalMover, setMostrarModalMover] = useState(false);
+  const [inscripcionSeleccionada, setInscripcionSeleccionada] = useState<Inscripcion | null>(null);
+  const [nuevoGrupoId, setNuevoGrupoId] = useState('');
+  const [gruposDisponibles, setGruposDisponibles] = useState<Grupo[]>([]);
+  const [alumnoActual, setAlumnoActual] = useState<Alumno | null>(null);
+
+  const [todosLosGrupos, setTodosLosGrupos] = useState<Grupo[]>([]);
+  const [showInscripcionForm, setShowInscripcionForm] = useState(false);
+  const [alumnoParaInscripcion, setAlumnoParaInscripcion] = useState<{ idAlumno: string; nombreAlumno: string; telefono?: string; email?: string; fechaNacimiento?: string; tutor?: string; descuento?: number; notasInternas?: string; observaciones?: string } | null>(null);
+
+  const [alumnoDraft, setAlumnoDraft] = useState<Record<string, Partial<Alumno>>>({});
   const [guardandoAlumno, setGuardandoAlumno] = useState<Record<string, boolean>>({});
-  const [showInscripcion, setShowInscripcion] = useState(false);
-  const [filtroVista, setFiltroVista] = useState<FiltroVistaAlumnos>("activos");
-  const [alumnoParaInscripcion, setAlumnoParaInscripcion] = useState<{
-    idAlumno: string;
-    nombreAlumno?: string;
-    nombre?: string;
-  } | null>(null);
-  const [grupoPreSeleccionado, setGrupoPreSeleccionado] = useState<string | null>(null);
 
-  // 👇 NUEVO: Abrir formulario de inscripción si viene de redirección
-  useEffect(() => {
-    if (grupoIdParam && accionParam === 'inscribir') {
-      setShowInscripcion(true);
-      setGrupoPreSeleccionado(grupoIdParam);
-      // Limpiar los parámetros de la URL para evitar que se reabra al recargar
-      // Esto es opcional, pero puedes usar navigate para limpiar la URL
-      // navigate('/alumnos', { replace: true });
-    }
-  }, [grupoIdParam, accionParam]);
-
-  const abrirInscripcion = (
-    alumno?: { idAlumno: string; nombreAlumno?: string; nombre?: string } | null
-  ) => {
-    setAlumnoParaInscripcion(alumno || null);
-    setShowInscripcion(true);
-  };
-
-  const recargar = useCallback(async () => {
+  // ----------------------------- CARGA DE DATOS -----------------------------
+  const cargarAlumnos = async () => {
     try {
       setCargando(true);
-      setError("");
-      const [alumnosResp, gruposResp, inscResp, pagosResp] = await Promise.all([
-        getAlumnos(""),
-        getGrupos(),
-        getInscripciones(),
-        getPagosConEstatus(),
-      ]);
-
-      setAlumnos(alumnosResp || []);
-      setGrupos(gruposResp || []);
-      setInscripciones(inscResp || []);
-      setPagos(pagosResp || []);
-    } catch (e: any) {
-      setError(e.message || "Error al cargar alumnos inscritos");
+      const res = await apiFetch('/alumnos');
+      const data = await res.json();
+      setAlumnos(data);
+    } catch (error) {
+      toast.error('Error al cargar alumnos');
     } finally {
       setCargando(false);
     }
-  }, []);
+  };
+
+  const cargarTodosLosGrupos = async () => {
+    try {
+      const res = await apiFetch('/grupos/con-ocupacion');
+      if (!res.ok) throw new Error('Error al cargar grupos');
+      const data = await res.json();
+      setTodosLosGrupos(data);
+    } catch (error) {
+      console.error('Error al cargar grupos:', error);
+    }
+  };
 
   useEffect(() => {
-    recargar();
-  }, [recargar]);
+    cargarAlumnos();
+    cargarTodosLosGrupos();
+  }, []);
 
-  useSyncDataReload(recargar);
+  useSyncDataReload(cargarAlumnos);
 
-  const gruposMap = useMemo(() => {
-    const map = new Map<string, Grupo>();
-    for (const g of grupos) {
-      const id = (g.IdGrupo || g.idGrupo || g.GrupoId || "").toString();
-      if (!id) continue;
-      map.set(normalizar(id), g);
+  // ----------------------------- FUNCIONES UI -----------------------------
+  const toggleExpandirAlumno = async (idAlumno: string) => {
+    if (alumnoExpandido === idAlumno) {
+      setAlumnoExpandido(null);
+      return;
     }
-    return map;
-  }, [grupos]);
+    setAlumnoExpandido(idAlumno);
+    if (inscripciones[idAlumno]) return;
 
-  const alumnosMap = useMemo(() => {
-    const map = new Map<string, Alumno>();
-    for (const a of alumnos) {
-      if (!a?.idAlumno) continue;
-      map.set(normalizar(a.idAlumno), a);
-    }
-    return map;
-  }, [alumnos]);
-
-  const pagosMap = useMemo(() => buildPagosMap(pagos), [pagos]);
-
-  const alumnosInscritos = useMemo(() => {
-    const porAlumno = new Map<string, { alumnoId: string; nombre: string; cursos: any[] }>();
-
-    for (const ins of inscripciones) {
-      const idAlumno = String(ins.idAlumno || "").trim();
-      const grupoId = String(ins.grupoId || "").trim();
-      if (!idAlumno || !grupoId) continue;
-
-      const alumnoDb = alumnosMap.get(normalizar(idAlumno));
-      const nombre = (alumnoDb?.nombreAlumno || alumnoDb?.nombre || ins.nombreAlumno || idAlumno).toString();
-
-      const grupo = gruposMap.get(normalizar(grupoId));
-      const nombreCurso = (grupo?.nombreCurso || "Curso").toString();
-
-      const pago = resolverPagoParaInscripcion(
-        pagosMap,
-        {
-          idAlumno,
-          grupoId,
-          montoMensualidad: ins.montoMensualidad,
-          diaPago: ins.diaPago,
-          fechaInicioPago: ins.fechaInicioPago,
-          estatus: ins.estatus,
-        },
-        nombreCurso
-      );
-
-      const keyAlumno = normalizar(idAlumno);
-      if (!porAlumno.has(keyAlumno)) {
-        porAlumno.set(keyAlumno, { alumnoId: idAlumno, nombre, cursos: [] });
-      }
-
-      const montoDesdeIns = Number(
-        ins.montoMensualidad ?? (ins as any).montoPago ?? 0
-      );
-      const montoDesdePago = Number(pago?.montoTotal ?? 0);
-
-      porAlumno.get(keyAlumno)!.cursos.push({
-        idAlumno,
-        grupoId,
-        nombreCurso,
-        modalidad: ins.modalidad || "Presencial",
-        diaPago: ins.diaPago ?? pago?.diaPagoFijo,
-        fechaInicioPago: ins.fechaInicioPago ?? pago?.fechaPago,
-        fechaInscripcion: ins.fechaInscripcion,
-        createdAt: ins.createdAt,
-        estatus: ins.estatus || "Activa",
-        fechaBaja: ins.fechaBaja,
-        montoMensualidad:
-          montoDesdeIns > 0 ? montoDesdeIns : montoDesdePago,
-        comentarios: ins.comentarios || "",
-        pago,
-      });
-    }
-
-    let lista = Array.from(porAlumno.values()).map((item) => {
-      const alumnoDb = alumnosMap.get(normalizar(item.alumnoId));
-      return {
-        ...item,
-        alumnoDb,
-        cursos: item.cursos.sort((a: any, b: any) =>
-          String(a.nombreCurso).localeCompare(String(b.nombreCurso), "es")
-        ),
-      };
-    });
-
-    if (busqueda.trim()) {
-      const q = busqueda.trim().toLowerCase();
-      lista = lista.filter((a) => {
-        const nombre = (a.alumnoDb?.nombreAlumno || a.alumnoDb?.nombre || a.nombre || "").toLowerCase();
-        return nombre.includes(q) || String(a.alumnoId).toLowerCase().includes(q);
-      });
-    }
-
-    lista.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
-
-    if (filtroVista === "activos") {
-      lista = lista.filter((item) =>
-        item.cursos.some((c: any) => !esGrupoInactivo(c.estatus))
-      );
-    } else if (filtroVista === "inactivos") {
-      lista = lista.filter((item) =>
-        item.cursos.some((c: any) => esGrupoInactivo(c.estatus))
-      );
-    }
-
-    return lista;
-  }, [inscripciones, alumnosMap, gruposMap, pagosMap, busqueda, filtroVista]);
-
-  const handleInactivarEnGrupo = async (
-    idAlumno: string,
-    grupoId: string,
-    nombreCurso: string
-  ) => {
-    const confirmado = window.confirm(
-      `¿Inactivar al alumno en este grupo?\n\nAlumno: ${idAlumno}\nGrupo: ${grupoId}\nCurso: ${nombreCurso}\n\nDeja de aparecer en el calendario. Solo se permite si no tiene pagos pendientes.`
-    );
-    if (!confirmado) return;
-
+    setCargandoInscripciones(prev => ({ ...prev, [idAlumno]: true }));
     try {
-      await bajaAlumnoDeGrupo(idAlumno, grupoId);
-      toast.success("Alumno inactivo en este grupo");
-      await recargar();
-    } catch (e: any) {
-      toast.error(e.message || "Error al inactivar en el grupo");
-    }
-  };
-
-  const handleBajaDelSistemaGrupo = async (
-    idAlumno: string,
-    grupoId: string,
-    nombreCurso: string
-  ) => {
-    const confirmado = window.confirm(
-      `¿Dar de baja del sistema este grupo?\n\nCurso: ${nombreCurso}\nGrupo: ${grupoId}\n\nSe borrarán la inscripción y los pagos de este grupo. Esta acción no se puede deshacer.`
-    );
-    if (!confirmado) return;
-
-    try {
-      await eliminarHistorialCursoBaja(idAlumno, grupoId);
-      toast.success("Grupo dado de baja del sistema");
-      await recargar();
-    } catch (e: any) {
-      toast.error(e.message || "Error al dar de baja del sistema");
-    }
-  };
-
-  const handleGuardarNotaAlumno = async (idAlumno: string) => {
-    const key = normalizar(idAlumno);
-    const observaciones = notasDraft[key] ?? "";
-
-    try {
-      setGuardandoNota((prev) => ({ ...prev, [key]: true }));
-      await guardarNotasAlumno({ idAlumno, observaciones });
-      toast.success("Notas del alumno guardadas");
-      await recargar();
-    } catch (e: any) {
-      toast.error(e.message || "Error al guardar notas");
+      const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
+      const data = await res.json();
+      setInscripciones(prev => ({ ...prev, [idAlumno]: data }));
+    } catch (error) {
+      toast.error('Error al cargar inscripciones');
     } finally {
-      setGuardandoNota((prev) => ({ ...prev, [key]: false }));
+      setCargandoInscripciones(prev => ({ ...prev, [idAlumno]: false }));
     }
   };
 
   const handleGuardarDatosAlumno = async (idAlumno: string) => {
-    const key = normalizar(idAlumno);
-    const draft = alumnoDraft[key] || {};
-
+    const draft = alumnoDraft[idAlumno] || {};
+    if (!draft.nombreAlumno && !draft.telefono && !draft.tutor) {
+      toast.info('No hay cambios para guardar');
+      return;
+    }
     try {
-      setGuardandoAlumno((prev) => ({ ...prev, [key]: true }));
+      setGuardandoAlumno((prev) => ({ ...prev, [idAlumno]: true }));
       await actualizarAlumno(idAlumno, {
+        nombreAlumno: draft.nombreAlumno,
         telefono: draft.telefono,
         tutor: draft.tutor,
       });
-      toast.success("Datos del alumno actualizados");
-      await recargar();
+      toast.success('✅ Datos del alumno actualizados');
+      setAlumnoDraft((prev) => ({ ...prev, [idAlumno]: {} }));
+      await cargarAlumnos();
+      if (alumnoExpandido === idAlumno) {
+        const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
+        const data = await res.json();
+        setInscripciones(prev => ({ ...prev, [idAlumno]: data }));
+      }
     } catch (e: any) {
-      toast.error(e.message || "Error al actualizar alumno");
+      toast.error(e.message || 'Error al actualizar alumno');
     } finally {
-      setGuardandoAlumno((prev) => ({ ...prev, [key]: false }));
+      setGuardandoAlumno((prev) => ({ ...prev, [idAlumno]: false }));
     }
   };
 
-  const handleReactivarCurso = async (
-    idAlumno: string,
-    grupoId: string,
-    nombreCurso: string
-  ) => {
-    const confirmado = window.confirm(
-      `¿Reactivar al alumno en este grupo?\n\nCurso: ${nombreCurso}\n\nSe mantienen las fechas de inicio de clases y de cobro. Para cambiar el día de pago, usa Control de pagos.`
-    );
-    if (!confirmado) return;
+  const handleDraftChange = (idAlumno: string, field: keyof Alumno, value: string) => {
+    setAlumnoDraft((prev) => ({
+      ...prev,
+      [idAlumno]: {
+        ...(prev[idAlumno] || {}),
+        [field]: value,
+      },
+    }));
+  };
 
+  const desactivarAlumno = async (idAlumno: string) => {
+    if (!confirm('¿Estás seguro de desactivar este alumno? Se darán de baja todas sus inscripciones activas.')) return;
     try {
-      await reactivarInscripcion(idAlumno, grupoId);
-      toast.success("Curso reactivado");
-      await recargar();
-    } catch (e: any) {
-      toast.error(e.message || "Error al reactivar curso");
+      const res = await apiFetch(`/alumnos/${idAlumno}/desactivar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: 'Desactivado manualmente' })
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al desactivar');
+      }
+      toast.success('Alumno desactivado correctamente');
+      cargarAlumnos();
+      setAlumnoExpandido(null);
+      setInscripciones(prev => {
+        const newState = { ...prev };
+        delete newState[idAlumno];
+        return newState;
+      });
+    } catch (error: any) {
+      toast.error(error.message || 'Error al desactivar');
     }
   };
 
+  const reactivarAlumno = async (idAlumno: string) => {
+    if (!confirm('¿Reactivar este alumno? Sus inscripciones anteriores permanecerán como baja; deberá reinscribirlo manualmente si desea que continúe.')) return;
+    try {
+      const res = await apiFetch(`/alumnos/${idAlumno}/reactivar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al reactivar');
+      }
+      toast.success('Alumno reactivado correctamente');
+      cargarAlumnos();
+      setAlumnoExpandido(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al reactivar');
+    }
+  };
+
+  const abrirModalMover = async (inscripcion: Inscripcion, alumno: Alumno) => {
+    setInscripcionSeleccionada(inscripcion);
+    setAlumnoActual(alumno);
+    try {
+      const res = await apiFetch('/grupos/con-ocupacion');
+      if (!res.ok) throw new Error('Error al cargar grupos');
+      const data = await res.json();
+      const gruposFiltrados = data.filter((g: Grupo) => g.IdGrupo !== inscripcion.grupoId);
+      setGruposDisponibles(gruposFiltrados);
+    } catch (error) {
+      toast.error('Error al cargar grupos');
+    }
+    setNuevoGrupoId('');
+    setMostrarModalMover(true);
+  };
+
+  const handleMoverAlumno = async () => {
+    if (!inscripcionSeleccionada || !nuevoGrupoId || !alumnoActual) {
+      toast.error('Selecciona un grupo destino');
+      return;
+    }
+    try {
+      const res = await apiFetch(`/inscripciones/${alumnoActual.idAlumno}/mover`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nuevoGrupoId,
+          grupoActualId: inscripcionSeleccionada.grupoId,
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al mover');
+      }
+      const data = await res.json();
+      if (data.fusionado) {
+        toast.info('♻️ Inscripción duplicada fusionada automáticamente');
+      } else {
+        toast.success('✅ Alumno movido correctamente');
+      }
+      setMostrarModalMover(false);
+      const resIns = await apiFetch(`/inscripciones/alumno/${alumnoActual.idAlumno}`);
+      const dataIns = await resIns.json();
+      setInscripciones(prev => ({ ...prev, [alumnoActual.idAlumno]: dataIns }));
+      cargarAlumnos();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al mover');
+    }
+  };
+
+  const obtenerInfoGrupo = (grupoId: string) => {
+    return todosLosGrupos.find(g => g.IdGrupo === grupoId);
+  };
+
+  const abrirInscripcionNueva = () => {
+    setAlumnoParaInscripcion(null);
+    setShowInscripcionForm(true);
+  };
+
+  const abrirInscripcionParaAlumno = (alumno: Alumno) => {
+    setAlumnoParaInscripcion({
+      idAlumno: alumno.idAlumno,
+      nombreAlumno: alumno.nombreAlumno,
+      telefono: alumno.telefono,
+      email: alumno.email,
+      tutor: alumno.tutor,
+    });
+    setShowInscripcionForm(true);
+  };
+
+  // ----------------------------- ORDENAMIENTO -----------------------------
+  const requestSort = (key: keyof Alumno) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: keyof Alumno) => {
+    if (!sortConfig || sortConfig.key !== key) return '⇅';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  // ----------------------------- FILTRADO Y ORDEN -----------------------------
+  const alumnosFiltrados = alumnos
+    .filter(a => {
+      if (filtroEstatus === 'Activo') return a.estatus === 'Activo';
+      if (filtroEstatus === 'Inactivo') return a.estatus === 'Inactivo';
+      return true;
+    })
+    .filter(a => a.nombreAlumno.toLowerCase().includes(busqueda.toLowerCase()));
+
+  const alumnosOrdenados = useMemo(() => {
+    if (!sortConfig) return alumnosFiltrados;
+    const sorted = [...alumnosFiltrados];
+    sorted.sort((a, b) => {
+      const aVal = a[sortConfig.key] ?? '';
+      const bVal = b[sortConfig.key] ?? '';
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [alumnosFiltrados, sortConfig]);
+
+  // ----------------------------- RENDER -----------------------------
   if (cargando) {
     return (
-      <div className="min-h-screen bg-gray-50 p-10 text-center">
-        Cargando alumnos inscritos...
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center text-white">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#F8B50E] mx-auto mb-4"></div>
+          <p className="text-lg font-bold">🚀 Cargando alumnos...</p>
+        </div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-10 text-center text-red-600">
-        Error: {error}
-      </div>
-    );
-  }
+  const decorativeVideos: { src: string; position: any }[] = [];
+
+  const getModalidadColor = (modalidad: string) => {
+    const colors = {
+      'presencial': 'border-l-[#26AAA3]',
+      'en línea': 'border-l-[#67A934]',
+      'mixta': 'border-l-[#F8B50E]',
+    };
+    return colors[modalidad as keyof typeof colors] || 'border-l-gray-400';
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
-        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-black leading-none text-[#0078D7]">
-              Alumnos inscritos
+    <>
+      <BackgroundVideo 
+        videoSrc="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4" 
+        decorativeVideos={decorativeVideos}
+      >
+        {/* Contenedor principal - margen superior de 3cm (30px) debajo del header */}
+        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
+          {/* Cabecera */}
+          <div className="flex flex-col md:flex-row items-center justify-between mb-3 gap-2 flex-shrink-0">
+            <h1 className="text-lg md:text-xl font-extrabold text-white drop-shadow-lg flex items-center gap-2">
+              <span className="bg-gradient-to-r from-[#F8B50E] to-[#67A934] p-1.5 rounded-full shadow-lg text-sm inline-flex items-center justify-center w-8 h-8">
+                👨‍🚀
+              </span>
+              <span className="bg-gradient-to-r from-[#F8B50E] via-[#26AAA3] to-[#67A934] text-transparent bg-clip-text">
+                Gestión de Alumnos
+              </span>
             </h1>
-            <p className="mt-1 text-sm font-black text-[#003B73]">
-              Por cada grupo: Activo → Inactivo → Baja del sistema
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="border-2 border-white/30 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/80 backdrop-blur-sm w-32 sm:w-44 transition-all"
+                />
+              </div>
+              <select
+                value={filtroEstatus}
+                onChange={(e) => setFiltroEstatus(e.target.value as any)}
+                className="border-2 border-white/30 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/80 backdrop-blur-sm cursor-pointer"
+              >
+                <option value="Activo">🟢 Activos</option>
+                <option value="Inactivo">🔴 Inactivos</option>
+                <option value="Todos">👥 Todos</option>
+              </select>
+              <button
+                onClick={abrirInscripcionNueva}
+                className="px-4 py-1.5 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 rounded-full text-sm font-bold hover:scale-105 transition-all shadow-lg hover:shadow-xl flex items-center gap-1.5"
+              >
+                <span>🚀</span> Inscribir
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap justify-end">
-            <button
-              type="button"
-              onClick={() => abrirInscripcion(null)}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#0078D7] px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#0066b8] transition-colors"
-            >
-              <UserPlus className="w-4 h-4" />
-              Inscribir a curso
-            </button>
-            <div className="inline-flex rounded-xl border border-cyan-100 bg-white p-1 text-xs font-bold">
-              {(
-                [
-                  { id: "activos" as const, label: "Activos" },
-                  { id: "inactivos" as const, label: "Inactivos" },
-                  { id: "todos" as const, label: "Todos" },
-                ] as const
-              ).map((opcion) => (
-                <button
-                  key={opcion.id}
-                  type="button"
-                  onClick={() => setFiltroVista(opcion.id)}
-                  className={`rounded-lg px-3 py-2 transition-colors ${
-                    filtroVista === opcion.id
-                      ? opcion.id === "inactivos"
-                        ? "bg-amber-50 text-amber-900 shadow-sm ring-1 ring-amber-100"
-                        : "bg-cyan-50 text-cyan-800 shadow-sm ring-1 ring-cyan-100"
-                      : "text-gray-500 hover:bg-gray-50"
-                  }`}
-                >
-                  {opcion.label}
-                </button>
-              ))}
-            </div>
-            <input
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por alumno o ID..."
-              className="w-[280px] rounded-xl border border-cyan-100 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-cyan-300"
-            />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-none px-6 py-8 lg:px-10">
-        <div className="mb-6 rounded-2xl border border-cyan-100 bg-white px-5 py-4 text-sm text-gray-700 shadow-sm">
-          <p className="font-black text-gray-900 mb-2">Flujo por grupo inscrito</p>
-          <ol className="list-decimal list-inside space-y-1 font-medium">
-            <li>
-              <span className="font-black text-emerald-700">Activo</span> — inscrito
-              al grupo (aparece en calendario y pagos).
-            </li>
-            <li>
-              <span className="font-black text-amber-800">Inactivo</span> — baja del
-              grupo con «Inactivar en este grupo» (deja de aparecer en calendario).
-            </li>
-            <li>
-              <span className="font-black text-red-700">Baja del sistema</span> — elimina
-              por completo ese grupo con «Dar de baja del sistema» (solo cuando ya está
-              inactivo).
-            </li>
-          </ol>
-        </div>
-
-        <div className="space-y-4">
-          {alumnosInscritos.length === 0 ? (
-            <div className="py-20 text-center bg-white rounded-2xl border-2 border-dashed border-gray-200">
-              <p className="text-gray-400 font-medium">
-                {filtroVista === "inactivos"
-                  ? "No hay alumnos con grupos inactivos."
-                  : filtroVista === "activos"
-                    ? "No hay alumnos con grupos activos."
-                    : "No hay alumnos inscritos (o no coinciden con la búsqueda)."}
-              </p>
-            </div>
-          ) : (
-            alumnosInscritos.map((a) => {
-              const idAlumno = a.alumnoId;
-              const alumnoDb = a.alumnoDb as Alumno | undefined;
-              const nombre = alumnoDb?.nombreAlumno || alumnoDb?.nombre || a.nombre;
-              const isOpen = Boolean(expandido[normalizar(idAlumno)]);
-              const keyAlumno = normalizar(idAlumno);
-              const draftDatos = alumnoDraft[keyAlumno] || {};
-              const telefonoValue =
-                draftDatos.telefono ?? alumnoDb?.telefono ?? "";
-              const tutorValue = draftDatos.tutor ?? alumnoDb?.tutor ?? "";
-              const gruposActivos = a.cursos.filter(
-                (c: any) => !esGrupoInactivo(c.estatus)
-              );
-              const gruposInactivos = a.cursos.filter((c: any) =>
-                esGrupoInactivo(c.estatus)
-              );
-              const soloGruposInactivos =
-                gruposActivos.length === 0 && gruposInactivos.length > 0;
-
-              const cursosVisibles =
-                filtroVista === "inactivos"
-                  ? gruposInactivos
-                  : filtroVista === "activos"
-                    ? gruposActivos
-                    : a.cursos;
-
-              const etiquetaEstatus =
-                gruposActivos.length > 0 && gruposInactivos.length > 0
-                  ? {
-                      texto: "Activo e inactivo",
-                      clase:
-                        "bg-amber-50 text-amber-800 border-amber-200",
-                    }
-                  : soloGruposInactivos
-                    ? {
-                        texto: "Inactivo",
-                        clase:
-                          "bg-amber-50 text-amber-800 border-amber-200",
-                      }
-                    : {
-                        texto: "Activo",
-                        clase:
-                          "bg-emerald-50 text-emerald-700 border-emerald-200",
-                      };
-
-              return (
-                <div key={idAlumno} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandido((prev) => ({
-                        ...prev,
-                        [normalizar(idAlumno)]: !prev[normalizar(idAlumno)],
-                      }))
-                    }
-                    className="w-full px-6 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="min-w-0 text-left">
-                      <div className="text-base font-black text-gray-900 truncate">
-                        {nombre}
+          {/* Tabla - altura h-[60vh] para mostrar ~16 alumnos */}
+          <div className="bg-white/60 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-white/20 flex-1 flex flex-col min-h-0 h-[60vh]">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
+              <table className="w-full table-auto divide-y divide-gray-200 text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white">
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('idAlumno')}>
+                        ID <span className="opacity-70">{getSortIcon('idAlumno')}</span>
                       </div>
-                      <div className="text-xs text-gray-500 font-bold">
-                        ID: {idAlumno}
-                        {alumnoDb?.telefono ? ` · Tel: ${alumnoDb.telefono}` : ""}
-                        {alumnoDb?.tutor ? ` · Tutor: ${alumnoDb.tutor}` : ""}
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap min-w-[100px]">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('nombreAlumno')}>
+                        Nombre <span className="opacity-70">{getSortIcon('nombreAlumno')}</span>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`text-[10px] font-black uppercase tracking-wider rounded-full px-3 py-1 border ${etiquetaEstatus.clase}`}
-                      >
-                        {etiquetaEstatus.texto}
-                      </span>
-                      <span className="text-xs font-black text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-3 py-1">
-                        {gruposActivos.length} activo
-                        {gruposActivos.length === 1 ? "" : "s"}
-                        {gruposInactivos.length > 0
-                          ? ` · ${gruposInactivos.length} inactivo${gruposInactivos.length === 1 ? "" : "s"}`
-                          : ""}
-                      </span>
-                      {isOpen ? (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-500" />
-                      )}
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="px-6 pb-6">
-                      {gruposActivos.length > 0 && (
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              abrirInscripcion({
-                                idAlumno,
-                                nombreAlumno: nombre,
-                              });
-                            }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800 hover:bg-cyan-100"
-                          >
-                            <UserPlus className="w-4 h-4" />
-                            Inscribir a otro curso
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                            Teléfono
-                          </div>
-                          <input
-                            value={telefonoValue}
-                            onChange={(e) =>
-                              setAlumnoDraft((prev) => ({
-                                ...prev,
-                                [keyAlumno]: {
-                                  ...(prev[keyAlumno] || {}),
-                                  telefono: e.target.value,
-                                },
-                              }))
-                            }
-                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-cyan-300"
-                          />
-                        </div>
-
-                        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                          <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                            Tutor
-                          </div>
-                          <input
-                            value={tutorValue}
-                            onChange={(e) =>
-                              setAlumnoDraft((prev) => ({
-                                ...prev,
-                                [keyAlumno]: {
-                                  ...(prev[keyAlumno] || {}),
-                                  tutor: e.target.value,
-                                },
-                              }))
-                            }
-                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-cyan-300"
-                          />
-                        </div>
-
-                        <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 flex flex-col justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleGuardarDatosAlumno(idAlumno)}
-                            disabled={Boolean(guardandoAlumno[keyAlumno])}
-                            className={`rounded-xl px-4 py-2 text-xs font-black transition-colors ${
-                              Boolean(guardandoAlumno[keyAlumno])
-                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                : "bg-cyan-500 text-white hover:bg-cyan-600"
-                            }`}
-                          >
-                            {Boolean(guardandoAlumno[keyAlumno])
-                              ? "Guardando..."
-                              : "Guardar datos"}
-                          </button>
-                        </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('telefono')}>
+                        Teléfono <span className="opacity-70">{getSortIcon('telefono')}</span>
                       </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('estatus')}>
+                        Estatus <span className="opacity-70">{getSortIcon('estatus')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('cursosActivos')}>
+                        Cursos <span className="opacity-70">{getSortIcon('cursosActivos')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-right text-sm font-bold uppercase tracking-wider whitespace-nowrap">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white/50 divide-y divide-gray-200">
+                  {alumnosOrdenados.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500 italic">
+                        🧐 No hay alumnos que coincidan con tu búsqueda
+                      </td>
+                    </tr>
+                  ) : (
+                    alumnosOrdenados.map((alumno, index) => {
+                      const inscripcionesAlumno = inscripciones[alumno.idAlumno] || [];
+                      const activas = inscripcionesAlumno.filter(i => i.estatus === 'Activa');
+                      const cursosActivos = alumno.cursosActivos ?? activas.length;
+                      const draft = alumnoDraft[alumno.idAlumno] || {};
+                      const estaGuardando = guardandoAlumno[alumno.idAlumno] || false;
 
-                      {(() => {
-                        const notaActual = alumnoDb?.observaciones || "";
-                        const draft = notasDraft[keyAlumno] ?? notaActual;
-
-                        return (
-                          <div className="mb-4 rounded-2xl border border-gray-200 overflow-hidden">
-                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-                              <StickyNote className="w-4 h-4 text-gray-600" />
-                              <div className="text-xs font-black text-gray-600 uppercase tracking-wider">
-                                Notas del alumno
-                              </div>
-                            </div>
-                            <div className="p-4 space-y-3">
-                              <textarea
-                                value={draft}
-                                onChange={(e) =>
-                                  setNotasDraft((prev) => ({
-                                    ...prev,
-                                    [keyAlumno]: e.target.value,
-                                  }))
-                                }
-                                rows={4}
-                                placeholder="Notas generales del alumno..."
-                                className="w-full resize-y rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-cyan-300"
+                      return (
+                        <React.Fragment key={alumno.idAlumno}>
+                          <tr className={`hover:bg-white/60 transition-all duration-200 hover:shadow-md hover:scale-[1.002] ${index % 2 === 0 ? 'bg-white/30' : 'bg-white/10'}`}>
+                            <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-gray-700">{alumno.idAlumno}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <input
+                                type="text"
+                                value={draft.nombreAlumno ?? alumno.nombreAlumno}
+                                onChange={(e) => handleDraftChange(alumno.idAlumno, 'nombreAlumno', e.target.value)}
+                                className="w-full max-w-full bg-transparent border-b-2 border-transparent hover:border-[#26AAA3]/50 focus:border-[#26AAA3] focus:outline-none text-sm font-medium text-gray-900 transition-colors truncate"
+                                placeholder="Nombre"
                               />
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => handleGuardarNotaAlumno(idAlumno)}
-                                  disabled={
-                                    Boolean(guardandoNota[keyAlumno]) ||
-                                    draft.trim() === String(notaActual).trim()
-                                  }
-                                  className={`rounded-xl px-4 py-2 text-xs font-black transition-colors ${
-                                    Boolean(guardandoNota[keyAlumno]) ||
-                                    draft.trim() === String(notaActual).trim()
-                                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                      : "bg-cyan-500 text-white hover:bg-cyan-600"
-                                  }`}
-                                >
-                                  {Boolean(guardandoNota[keyAlumno])
-                                    ? "Guardando..."
-                                    : "Guardar notas"}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      <div className="space-y-4">
-                        {cursosVisibles.length === 0 ? (
-                          <p className="text-sm text-gray-500 py-4 text-center">
-                            No hay cursos en esta vista para este alumno.
-                          </p>
-                        ) : null}
-                        {cursosVisibles.map((c: any) => {
-                          const pago = c.pago as PagoConEstatus | undefined;
-                          const fechaAltaSistema = c.createdAt || null;
-                          const fechaInicioClases = c.fechaInscripcion || null;
-                          const fechaBaja = c.fechaBaja || null;
-                          const esInactivo = esGrupoInactivo(c.estatus);
-
-                          return (
-                            <div
-                              key={`${c.grupoId}`}
-                              className={`rounded-2xl border overflow-hidden ${
-                                esInactivo
-                                  ? "border-amber-200 bg-amber-50/30"
-                                  : "border-gray-200"
-                              }`}
-                            >
-                              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="text-sm font-black text-gray-900 truncate">
-                                    {c.nombreCurso}
-                                  </div>
-                                  <div className="text-xs text-gray-500 font-bold">
-                                    Grupo: {c.grupoId} · Modalidad: {c.modalidad}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <div className="text-xs font-black text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1">
-                                    Día pago: {c.diaPago}
-                                  </div>
-                                  <div
-                                    className="text-xs font-black text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1"
-                                    title="Fecha en que se registró la inscripción en el sistema"
-                                  >
-                                    Alta en sistema:{" "}
-                                    {fechaAltaSistema
-                                      ? new Date(fechaAltaSistema).toLocaleDateString(
-                                          "es-MX"
-                                        )
-                                      : "—"}
-                                  </div>
-                                  {fechaInicioClases ? (
-                                    <div
-                                      className="text-xs font-bold text-cyan-800 bg-cyan-50 border border-cyan-100 rounded-full px-3 py-1"
-                                      title="Fecha desde la que aparece en el calendario"
-                                    >
-                                      Inicio clases:{" "}
-                                      {new Date(fechaInicioClases).toLocaleDateString(
-                                        "es-MX"
-                                      )}
-                                    </div>
-                                  ) : null}
-                                  {esInactivo ? (
-                                    <div className="text-xs font-black uppercase text-amber-900 bg-amber-100 border border-amber-200 rounded-full px-3 py-1">
-                                      Inactivo
-                                      {fechaBaja
-                                        ? ` · ${new Date(fechaBaja).toLocaleDateString("es-MX")}`
-                                        : ""}
-                                    </div>
-                                  ) : (
-                                    <div className="text-xs font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1">
-                                      Activo
-                                    </div>
-                                  )}
-                                  <div className="text-xs font-black text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1">
-                                    Mensualidad: {formatearMoneda(c.montoMensualidad)}
-                                  </div>
-                                  {pago?.status ? (
-                                    <div
-                                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                                        pago.status === "Pagado"
-                                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                                          : pago.status === "Parcial"
-                                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                                            : "bg-red-50 text-red-700 border-red-200"
-                                      }`}
-                                    >
-                                      {pago.status}
-                                    </div>
-                                  ) : null}
-
-                                  {!esInactivo ? (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleInactivarEnGrupo(
-                                          c.idAlumno,
-                                          c.grupoId,
-                                          c.nombreCurso
-                                        )
-                                      }
-                                      className="inline-flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2 text-xs font-black text-amber-900 hover:bg-amber-100 transition-colors"
-                                    >
-                                      <UserMinus className="w-4 h-4" />
-                                      Inactivar en este grupo
-                                    </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleReactivarCurso(
-                                            c.idAlumno,
-                                            c.grupoId,
-                                            c.nombreCurso
-                                          )
-                                        }
-                                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-50 border border-cyan-200 px-4 py-2 text-xs font-black text-cyan-800 hover:bg-cyan-100 transition-colors"
-                                      >
-                                        Reactivar en este grupo
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleBajaDelSistemaGrupo(
-                                            c.idAlumno,
-                                            c.grupoId,
-                                            c.nombreCurso
-                                          )
-                                        }
-                                        className="inline-flex items-center gap-2 rounded-xl border border-red-300 bg-white px-4 py-2 text-xs font-black text-red-800 hover:bg-red-100 transition-colors"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                        Dar de baja del sistema
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="p-4 space-y-4">
-                                {pago ? (
-                                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                                        Pagado total
-                                      </div>
-                                      <div className="text-base font-black text-gray-900">
-                                        {formatearMoneda(Number(pago.montoPagado || 0))}
-                                      </div>
-                                    </div>
-                                    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                                        Saldo
-                                      </div>
-                                      <div className="text-base font-black text-red-600">
-                                        {formatearMoneda(Number(pago.saldo || 0))}
-                                      </div>
-                                    </div>
-                                    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                                        Inicio de cobro
-                                      </div>
-                                      <div className="text-base font-black text-gray-900">
-                                        {pago.fechaPago ? new Date(pago.fechaPago).toLocaleDateString("es-MX") : "—"}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                                    No hay registro de pago para este curso (pagoId: {crearPagoId(c.idAlumno, c.grupoId)}).
-                                  </div>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <input
+                                type="text"
+                                value={draft.telefono ?? alumno.telefono ?? ''}
+                                onChange={(e) => handleDraftChange(alumno.idAlumno, 'telefono', e.target.value)}
+                                className="w-full max-w-full bg-transparent border-b-2 border-transparent hover:border-[#26AAA3]/50 focus:border-[#26AAA3] focus:outline-none text-sm text-gray-700 transition-colors truncate"
+                                placeholder="Teléfono"
+                              />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                alumno.estatus === 'Activo' 
+                                  ? 'bg-emerald-100/80 text-emerald-700' 
+                                  : 'bg-rose-100/80 text-rose-700'
+                              }`}>
+                                {alumno.estatus === 'Activo' ? '🟢 Activo' : '🔴 Inactivo'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <button
+                                onClick={() => toggleExpandirAlumno(alumno.idAlumno)}
+                                className="relative inline-flex items-center justify-center w-8 h-8 bg-[#26AAA3]/20 hover:bg-[#26AAA3]/40 rounded-full transition-all duration-300 group"
+                              >
+                                <span className="text-sm font-bold text-[#26AAA3] group-hover:scale-110 transition-transform">
+                                  {cursosActivos}
+                                </span>
+                                {cursosActivos > 0 && (
+                                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#67A934] rounded-full animate-pulse"></span>
                                 )}
-
-                                {pago ? <HistorialMensual pago={pago} /> : null}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => handleGuardarDatosAlumno(alumno.idAlumno)}
+                                  disabled={estaGuardando}
+                                  className={`p-1.5 rounded-lg text-sm font-bold transition-all ${
+                                    estaGuardando 
+                                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                                      : 'bg-[#26AAA3]/10 hover:bg-[#26AAA3]/20 text-[#26AAA3] hover:scale-110'
+                                  }`}
+                                  title="Guardar cambios"
+                                >
+                                  {estaGuardando ? '⏳' : '💾'}
+                                </button>
+                                <button
+                                  onClick={() => toggleExpandirAlumno(alumno.idAlumno)}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100/50 transition-all hover:scale-110"
+                                >
+                                  {alumnoExpandido === alumno.idAlumno ? '▲' : '▼'}
+                                </button>
+                                {alumno.estatus === 'Activo' ? (
+                                  <button
+                                    onClick={() => desactivarAlumno(alumno.idAlumno)}
+                                    className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-all hover:scale-110 text-sm font-medium"
+                                    title="Desactivar alumno"
+                                  >
+                                    ⛔
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => reactivarAlumno(alumno.idAlumno)}
+                                    className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-all hover:scale-110 text-sm font-medium"
+                                    title="Reactivar alumno"
+                                  >
+                                    🔄
+                                  </button>
+                                )}
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                            </td>
+                          </tr>
+
+                          {alumnoExpandido === alumno.idAlumno && (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-3 bg-gradient-to-r from-gray-50/80 to-white/50">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2">
+                                      <span className="inline-block w-1 h-4 bg-[#F8B50E] rounded-full"></span>
+                                      📚 Inscripciones activas
+                                    </h4>
+                                    <button
+                                      onClick={() => abrirInscripcionParaAlumno(alumno)}
+                                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-bold transition-all hover:scale-105 flex items-center gap-1"
+                                    >
+                                      <span>➕</span> Agregar curso
+                                    </button>
+                                  </div>
+                                  {cargandoInscripciones[alumno.idAlumno] ? (
+                                    <div className="flex justify-center py-4">
+                                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#26AAA3]"></div>
+                                    </div>
+                                  ) : activas.length === 0 ? (
+                                    <p className="text-sm text-gray-500 italic py-2">✨ Sin inscripciones activas.</p>
+                                  ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      {activas.map((ins) => {
+                                        const grupoInfo = obtenerInfoGrupo(ins.grupoId);
+                                        const colorBorder = getModalidadColor(ins.modalidad);
+                                        return (
+                                          <div 
+                                            key={ins._id} 
+                                            className={`bg-white/90 p-3 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 ${colorBorder}`}
+                                          >
+                                            <div className="flex justify-between items-start">
+                                              <div className="flex-1 space-y-1">
+                                                <p className="font-bold text-sm text-gray-900 flex items-center gap-1">
+                                                  {grupoInfo ? (
+                                                    <>
+                                                      {grupoInfo.nombreCurso}
+                                                      <span className="text-xs font-normal text-gray-400 ml-1">
+                                                        ({ins.grupoId})
+                                                      </span>
+                                                    </>
+                                                  ) : (
+                                                    `Grupo: ${ins.grupoId}`
+                                                  )}
+                                                </p>
+                                                {grupoInfo && (
+                                                  <>
+                                                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                                                      <span>📅</span> {grupoInfo.diaClase} {grupoInfo.horaClase}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                                                      <span>👨‍🏫</span> {grupoInfo.nombreProfesor}
+                                                    </p>
+                                                  </>
+                                                )}
+                                                <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                                                  <span className="flex items-center gap-1">
+                                                    <span>🎯</span> {ins.modalidad}
+                                                  </span>
+                                                  <span className="flex items-center gap-1">
+                                                    <span>💰</span> ${ins.montoMensualidad}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <div className="flex flex-col items-end gap-1 ml-2">
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                  ins.estatus === 'Activa' 
+                                                    ? 'bg-emerald-100/80 text-emerald-700' 
+                                                    : 'bg-gray-100/80 text-gray-600'
+                                                }`}>
+                                                  {ins.estatus === 'Activa' ? '✅ Activa' : '⏸️ Inactiva'}
+                                                </span>
+                                                <button
+                                                  onClick={() => abrirModalMover(ins, alumno)}
+                                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline transition-all"
+                                                >
+                                                  🔄 Mover
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Modal Mover */}
+          {mostrarModalMover && inscripcionSeleccionada && alumnoActual && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border-4 border-[#F8B50E] animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#26AAA3] to-[#67A934] rounded-full flex items-center justify-center text-2xl">
+                    🚀
+                  </div>
+                  <h3 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#26AAA3] to-[#67A934]">
+                    Mover alumno
+                  </h3>
                 </div>
-              );
-            })
+                <p className="text-sm text-gray-700 mb-4 font-medium">
+                  <span className="text-[#26AAA3]">{alumnoActual.nombreAlumno}</span> 
+                  <span className="text-gray-400 ml-2">→</span>
+                  <span className="text-gray-600 ml-2">{inscripcionSeleccionada.grupoId}</span>
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">🎯 Grupo destino</label>
+                  <select
+                    value={nuevoGrupoId}
+                    onChange={(e) => setNuevoGrupoId(e.target.value)}
+                    className="w-full border-2 border-[#26AAA3]/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                  >
+                    <option value="">Selecciona un grupo</option>
+                    {gruposDisponibles.map((g) => (
+                      <option key={g.IdGrupo} value={g.IdGrupo}>
+                        {g.IdGrupo} - {g.nombreCurso} ({g.diaClase} {g.horaClase}) - {g.nombreProfesor} ({g.alumnosInscritos || 0}/{g.CapacidadMaxima || 20})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex justify-end gap-3 mt-4 pt-4 border-t-2 border-gray-100">
+                  <button
+                    onClick={() => setMostrarModalMover(false)}
+                    className="px-5 py-2 border-2 border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all hover:scale-105"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleMoverAlumno}
+                    disabled={!nuevoGrupoId}
+                    className={`px-6 py-2 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl ${
+                      !nuevoGrupoId ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+                    }`}
+                  >
+                    Mover ➜
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
-      </main>
+      </BackgroundVideo>
 
-      {showInscripcion && (
+      {/* Modal del formulario de inscripción */}
+      {showInscripcionForm && (
         <InscripcionForm
-          alumnoInicial={alumnoParaInscripcion}
-          grupoIdInicial={grupoPreSeleccionado}
-          onClose={() => {
-            setShowInscripcion(false);
-            setAlumnoParaInscripcion(null);
-            setGrupoPreSeleccionado(null);
+          onClose={() => setShowInscripcionForm(false)}
+          onSuccess={() => {
+            cargarAlumnos();
+            setInscripciones({});
           }}
-          onSuccess={async () => {
-            setShowInscripcion(false);
-            setAlumnoParaInscripcion(null);
-            setGrupoPreSeleccionado(null);
-            await recargar();
-          }}
+          alumnoInicial={alumnoParaInscripcion || undefined}
         />
       )}
-    </div>
+    </>
   );
 }

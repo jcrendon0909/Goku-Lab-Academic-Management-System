@@ -1,39 +1,18 @@
 import mongoose from "mongoose";
 
-const profesorSchema = new mongoose.Schema(
-  {
-    idProfesor: { type: String, required: true, unique: true },
-    nombre: { type: String, required: true },
-    estatus: { type: String, default: "Activo" },
-    fechaNacimiento: {
-      type: Date,
-      required: false,
-      default: null
-    },
-    // Pago por hora (existente)
-    salarioPorHora: {
-      type: Number,
-      required: false,
-      min: 0,
-      default: 0
-    },
-    // ===== NUEVOS CAMPOS PARA PAGO FIJO =====
-    tipoPago: {
-      type: String,
-      enum: ['por_hora', 'fijo_mensual'],
-      default: 'por_hora'
-    },
-    salarioMensual: {
-      type: Number,
-      required: false,
-      min: 0,
-      default: 0
-    }
-  },
-  {
-    collection: "profesores",
-  }
-);
+const profesorSchema = new mongoose.Schema({
+  idProfesor: { type: String, required: true, unique: true },
+  nombre: { type: String, required: true },
+  telefono: { type: String, default: "" },
+  email: { type: String, default: "" },
+  fechaNacimiento: { type: Date, default: null },
+  tipoPago: { type: String, enum: ['por_hora', 'fijo_mensual'], default: 'fijo_mensual' },
+  salarioPorHora: { type: Number, default: 0 },
+  salarioMensual: { type: Number, default: 0 },
+  estatus: { type: String, enum: ['Activo', 'Inactivo'], default: 'Activo' },
+}, { 
+  timestamps: true,
+  collection: 'profesores' // 👈 FORZAR EL NOMBRE DE LA COLECCIÓN
+});
 
-const Profesor = mongoose.model("Profesor", profesorSchema);
-export default Profesor;
+export default mongoose.model('Profesor', profesorSchema);

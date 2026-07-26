@@ -1,372 +1,536 @@
-import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Plus, CheckCircle2, XCircle, Trash2, Pencil, Check, X } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
-import {
-    getCursos,
-    crearCurso,
-    actualizarEstatusCurso,
-    eliminarCurso,
-    renombrarCurso,
-} from '../../services/api';
 import { useSyncDataReload } from '../../utils/dataSync';
+import BackgroundVideo from './BackgroundVideo';
 
 interface Curso {
-    _id?: string;
-    idCurso: string;
-    nombreCurso: string;
-    estatus: string;
+  idCurso: string;
+  nombreCurso: string;
+  precioMensualidad: number;
+  duracionMeses: number;
+  nivel: string;
+  categoria: string;
+  estatus: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export function CursosPage() {
-    const [cursos, setCursos] = useState<Curso[]>([]);
-    const [cargando, setCargando] = useState(true);
-    const [nombre, setNombre] = useState('');
-    const [guardando, setGuardando] = useState(false);
-    const [actualizandoId, setActualizandoId] = useState<string | null>(null);
-    const [filtro, setFiltro] = useState<'todos' | 'activos' | 'inactivos'>('todos');
-    const [editandoId, setEditandoId] = useState<string | null>(null);
-    const [nombreEditado, setNombreEditado] = useState('');
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [cursoEditando, setCursoEditando] = useState<Curso | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showModalCrear, setShowModalCrear] = useState(false);
+  const [nuevoCurso, setNuevoCurso] = useState<Partial<Curso>>({
+    nombreCurso: '',
+    precioMensualidad: 0,
+    duracionMeses: 1,
+    nivel: 'Básico',
+    categoria: '',
+    estatus: 'Activo',
+  });
 
-    const cargarDatos = useCallback(() => {
-        setCargando(true);
-        getCursos()
-            .then((data) => setCursos(Array.isArray(data) ? data : []))
-            .catch((err) => {
-                console.error('Error al traer cursos:', err);
-                toast.error('No se pudieron cargar los cursos');
-            })
-            .finally(() => setCargando(false));
-    }, []);
+  // Estados para búsqueda, filtro y ordenamiento
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroEstatus, setFiltroEstatus] = useState<'Activo' | 'Inactivo' | 'Todos'>('Todos');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Curso; direction: 'asc' | 'desc' } | null>(null);
 
-    useEffect(() => {
-        cargarDatos();
-    }, [cargarDatos]);
+  const cargarCursos = async () => {
+    try {
+      setCargando(true);
+      const res = await apiFetch('/cursos');
+      const data = await res.json();
+      setCursos(data);
+    } catch (error) {
+      toast.error('Error al cargar cursos');
+    } finally {
+      setCargando(false);
+    }
+  };
 
-    useSyncDataReload(cargarDatos);
+  useEffect(() => {
+    cargarCursos();
+  }, []);
 
-    const handleCrear = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const limpio = nombre.trim();
-        if (!limpio) {
-            toast.error('Escribe el nombre del curso');
-            return;
+  useSyncDataReload(cargarCursos);
+
+  const handleEditar = (curso: Curso) => {
+    setCursoEditando({ ...curso });
+    setShowModal(true);
+  };
+
+  const handleGuardar = async () => {
+    if (!cursoEditando) return;
+
+    if (!cursoEditando.nombreCurso || cursoEditando.nombreCurso.trim() === '') {
+      toast.error('El nombre del curso es obligatorio');
+      return;
+    }
+    if (cursoEditando.precioMensualidad < 0) {
+      toast.error('El precio no puede ser negativo');
+      return;
+    }
+    if (cursoEditando.duracionMeses < 1) {
+      toast.error('La duración debe ser al menos 1 mes');
+      return;
+    }
+
+    try {
+      const res = await apiFetch(`/cursos/${cursoEditando.idCurso}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombreCurso: cursoEditando.nombreCurso.trim(),
+          precioMensualidad: cursoEditando.precioMensualidad,
+          duracionMeses: cursoEditando.duracionMeses,
+          nivel: cursoEditando.nivel,
+          categoria: cursoEditando.categoria,
+          estatus: cursoEditando.estatus,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al actualizar curso');
+      }
+
+      toast.success('✅ Curso actualizado correctamente');
+      setShowModal(false);
+      cargarCursos();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al actualizar curso');
+    }
+  };
+
+  // Funciones para ordenamiento
+  const requestSort = (key: keyof Curso) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: keyof Curso) => {
+    if (!sortConfig || sortConfig.key !== key) return '⇅';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  // Filtrado y ordenamiento
+  const cursosFiltrados = useMemo(() => {
+    let resultado = [...cursos];
+
+    if (filtroEstatus !== 'Todos') {
+      resultado = resultado.filter(c => c.estatus === filtroEstatus);
+    }
+
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase();
+      resultado = resultado.filter(c =>
+        c.nombreCurso.toLowerCase().includes(q) ||
+        c.idCurso.toLowerCase().includes(q) ||
+        (c.categoria && c.categoria.toLowerCase().includes(q))
+      );
+    }
+
+    if (sortConfig) {
+      resultado.sort((a, b) => {
+        let aVal: any = a[sortConfig.key];
+        let bVal: any = b[sortConfig.key];
+        if (aVal === undefined || aVal === null) aVal = '';
+        if (bVal === undefined || bVal === null) bVal = '';
+        if (sortConfig.key === 'precioMensualidad' || sortConfig.key === 'duracionMeses') {
+          aVal = Number(aVal);
+          bVal = Number(bVal);
         }
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
 
-        setGuardando(true);
-        try {
-            await crearCurso(limpio);
-            toast.success('Curso dado de alta correctamente');
-            setNombre('');
-            cargarDatos();
-        } catch (err: any) {
-            toast.error(err.message || 'Error al dar de alta el curso');
-        } finally {
-            setGuardando(false);
-        }
-    };
+    return resultado;
+  }, [cursos, filtroEstatus, busqueda, sortConfig]);
 
-    const handleCambiarEstatus = async (curso: Curso) => {
-        const activo = String(curso.estatus).toLowerCase() === 'activo';
-        const nuevoEstatus = activo ? 'Inactivo' : 'Activo';
-
-        setActualizandoId(curso.idCurso);
-        try {
-            await actualizarEstatusCurso(curso.idCurso, nuevoEstatus);
-            toast.success(
-                nuevoEstatus === 'Activo'
-                    ? 'Curso activado (ya aparece en el catálogo)'
-                    : 'Curso inactivado (oculto del catálogo)'
-            );
-            cargarDatos();
-        } catch (err: any) {
-            toast.error(err.message || 'Error al actualizar el curso');
-        } finally {
-            setActualizandoId(null);
-        }
-    };
-
-    const handleEliminar = async (curso: Curso) => {
-        if (
-            !window.confirm(
-                `¿Borrar del sistema el curso "${curso.nombreCurso}"?\n\n` +
-                    'Se eliminará por completo. Si tiene grupos asignados, esas clases quedarán SIN curso asignado.'
-            )
-        ) {
-            return;
-        }
-
-        setActualizandoId(curso.idCurso);
-        try {
-            const resultado = await eliminarCurso(curso.idCurso);
-            const afectados = resultado?.gruposAfectados || 0;
-            if (afectados > 0) {
-                toast.warning(
-                    `Curso borrado. ${afectados} clase(s) quedaron sin curso asignado.`
-                );
-            } else {
-                toast.success('Curso borrado del sistema');
-            }
-            cargarDatos();
-        } catch (err: any) {
-            toast.error(err.message || 'Error al borrar el curso');
-        } finally {
-            setActualizandoId(null);
-        }
-    };
-
-    const iniciarEdicion = (curso: Curso) => {
-        setEditandoId(curso.idCurso);
-        setNombreEditado(curso.nombreCurso);
-    };
-
-    const cancelarEdicion = () => {
-        setEditandoId(null);
-        setNombreEditado('');
-    };
-
-    const handleGuardarNombre = async (curso: Curso) => {
-        const limpio = nombreEditado.trim();
-        if (!limpio) {
-            toast.error('El nombre no puede estar vacío');
-            return;
-        }
-        if (limpio === curso.nombreCurso) {
-            cancelarEdicion();
-            return;
-        }
-
-        setActualizandoId(curso.idCurso);
-        try {
-            await renombrarCurso(curso.idCurso, limpio);
-            toast.success('Nombre actualizado');
-            cancelarEdicion();
-            cargarDatos();
-        } catch (err: any) {
-            toast.error(err.message || 'Error al editar el curso');
-        } finally {
-            setActualizandoId(null);
-        }
-    };
-
-    const esActivo = (c: Curso) => String(c.estatus).toLowerCase() === 'activo';
-
-    const cursosFiltrados = cursos.filter((c) => {
-        if (filtro === 'activos') return esActivo(c);
-        if (filtro === 'inactivos') return !esActivo(c);
-        return true;
-    });
-
-    const totalActivos = cursos.filter(esActivo).length;
-    const totalInactivos = cursos.length - totalActivos;
-
+  if (cargando) {
     return (
-        <div className="min-h-screen bg-[linear-gradient(135deg,#e9f8ff_0%,#f8fcff_45%,#e7f7ff_100%)] pt-12"> {/* 👈 Ajuste de padding */}
-            <main className="mx-auto w-full max-w-5xl px-6 py-8">
-                <header className="mb-8 flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500 text-white shadow-md">
-                        <BookOpen className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-gray-900">Cursos</h1>
-                        <p className="text-sm font-medium text-gray-500">
-                            Da de alta cursos y administra su disponibilidad.
-                        </p>
-                    </div>
-                </header>
-
-                {/* Explicación del flujo */}
-                <div className="mb-6 rounded-2xl border border-cyan-100 bg-cyan-50/60 p-4 text-sm text-cyan-900">
-                    <p className="font-bold">¿Cómo funcionan los estados?</p>
-                    <ul className="mt-2 space-y-1">
-                        <li>
-                            <span className="font-black">Activo:</span> aparece en el catálogo
-                            al crear o asignar el curso de un grupo.
-                        </li>
-                        <li>
-                            <span className="font-black">Inactivo:</span> no aparece en el
-                            catálogo, pero se conserva en el sistema (puedes reactivarlo).
-                        </li>
-                        <li>
-                            <span className="font-black">Borrar del sistema:</span> se elimina
-                            por completo. Si tenía grupos, esas clases quedan sin curso asignado.
-                        </li>
-                    </ul>
-                </div>
-
-                {/* Formulario para dar de alta */}
-                <form
-                    onSubmit={handleCrear}
-                    className="mb-8 rounded-2xl border border-cyan-100 bg-white p-5 shadow-sm"
-                >
-                    <label className="mb-2 block text-xs font-black uppercase tracking-wide text-cyan-700">
-                        Dar de alta nuevo curso
-                    </label>
-                    <div className="flex flex-col gap-3 sm:flex-row">
-                        <input
-                            type="text"
-                            value={nombre}
-                            onChange={(e) => setNombre(e.target.value)}
-                            placeholder="Nombre del curso"
-                            className="h-12 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
-                        />
-                        <button
-                            type="submit"
-                            disabled={guardando}
-                            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0047B8] px-6 text-sm font-black text-white shadow-md transition-colors hover:bg-[#003A96] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <Plus className="h-4 w-4" />
-                            {guardando ? 'Guardando...' : 'Dar de alta'}
-                        </button>
-                    </div>
-                </form>
-
-                {/* Filtros */}
-                <div className="mb-4 inline-flex rounded-xl border border-cyan-100 bg-white p-1 text-xs font-bold">
-                    {([
-                        { id: 'activos', label: `Activos (${totalActivos})` },
-                        { id: 'inactivos', label: `Inactivos (${totalInactivos})` },
-                        { id: 'todos', label: `Todos (${cursos.length})` },
-                    ] as const).map((opcion) => (
-                        <button
-                            key={opcion.id}
-                            type="button"
-                            onClick={() => setFiltro(opcion.id)}
-                            className={`rounded-lg px-3 py-2 transition-colors ${
-                                filtro === opcion.id
-                                    ? opcion.id === 'inactivos'
-                                        ? 'bg-amber-50 text-amber-900 shadow-sm ring-1 ring-amber-100'
-                                        : 'bg-cyan-50 text-cyan-800 shadow-sm ring-1 ring-cyan-100'
-                                    : 'text-gray-500 hover:bg-gray-50'
-                            }`}
-                        >
-                            {opcion.label}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Lista */}
-                <div className="rounded-2xl border border-cyan-100 bg-white shadow-sm">
-                    {cargando ? (
-                        <p className="p-8 text-center text-sm font-medium text-gray-500">
-                            Cargando cursos...
-                        </p>
-                    ) : cursosFiltrados.length === 0 ? (
-                        <p className="p-8 text-center text-sm font-medium text-gray-500">
-                            No hay cursos para mostrar.
-                        </p>
-                    ) : (
-                        <ul className="divide-y divide-gray-100">
-                            {cursosFiltrados.map((curso) => {
-                                const activo = esActivo(curso);
-                                return (
-                                    <li
-                                        key={curso.idCurso}
-                                        className="flex items-center justify-between gap-4 px-5 py-4"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            {editandoId === curso.idCurso ? (
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        autoFocus
-                                                        value={nombreEditado}
-                                                        onChange={(e) => setNombreEditado(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') handleGuardarNombre(curso);
-                                                            if (e.key === 'Escape') cancelarEdicion();
-                                                        }}
-                                                        className="h-9 w-full max-w-sm rounded-lg border border-cyan-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-cyan-200"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleGuardarNombre(curso)}
-                                                        disabled={actualizandoId === curso.idCurso}
-                                                        title="Guardar"
-                                                        className="rounded-lg border border-green-200 bg-green-50 p-2 text-green-700 hover:bg-green-100 disabled:opacity-60"
-                                                    >
-                                                        <Check className="h-4 w-4" />
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={cancelarEdicion}
-                                                        title="Cancelar"
-                                                        className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-gray-500 hover:bg-gray-100"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate font-bold text-gray-900">
-                                                            {curso.nombreCurso}
-                                                        </p>
-                                                        <p className="text-xs font-medium text-gray-400">
-                                                            {curso.idCurso}
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => iniciarEdicion(curso)}
-                                                        title="Editar nombre"
-                                                        className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-400 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
-                                                    >
-                                                        <Pencil className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex flex-shrink-0 items-center gap-3">
-                                            <span
-                                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black ${
-                                                    activo
-                                                        ? 'bg-green-50 text-green-700'
-                                                        : 'bg-gray-100 text-gray-500'
-                                                }`}
-                                            >
-                                                {activo ? (
-                                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                                ) : (
-                                                    <XCircle className="h-3.5 w-3.5" />
-                                                )}
-                                                {activo ? 'Activo' : 'Inactivo'}
-                                            </span>
-
-                                            <button
-                                                type="button"
-                                                disabled={actualizandoId === curso.idCurso}
-                                                onClick={() => handleCambiarEstatus(curso)}
-                                                className={`rounded-lg px-4 py-2 text-xs font-black transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                                    activo
-                                                        ? 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                                        : 'border border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                                                }`}
-                                            >
-                                                {actualizandoId === curso.idCurso
-                                                    ? 'Guardando...'
-                                                    : activo
-                                                    ? 'Inactivar'
-                                                    : 'Activar'}
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                disabled={actualizandoId === curso.idCurso}
-                                                onClick={() => handleEliminar(curso)}
-                                                title="Borrar del sistema (eliminar)"
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-black text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                                Borrar del sistema
-                                            </button>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </div>
-            </main>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center text-white">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#F8B50E] mx-auto mb-4"></div>
+          <p className="text-lg font-bold">🚀 Cargando cursos...</p>
         </div>
+      </div>
     );
+  }
+
+  // Función para obtener color según nivel
+  const getNivelColor = (nivel: string) => {
+    const colors = {
+      'Básico': 'bg-emerald-100 text-emerald-800',
+      'Intermedio': 'bg-yellow-100 text-yellow-800',
+      'Avanzado': 'bg-rose-100 text-rose-800',
+    };
+    return colors[nivel as keyof typeof colors] || 'bg-gray-100 text-gray-600';
+  };
+
+  const decorativeVideos: { src: string; position: any }[] = [];
+
+  return (
+    <>
+      <BackgroundVideo
+        videoSrc="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4"
+        decorativeVideos={decorativeVideos}
+      >
+        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
+          {/* Cabecera */}
+          <div className="flex flex-col md:flex-row items-center justify-between mb-3 gap-2 flex-shrink-0">
+            <h1 className="text-lg md:text-xl font-extrabold text-white drop-shadow-lg flex items-center gap-2">
+              <span className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] p-1.5 rounded-full shadow-lg text-sm inline-flex items-center justify-center w-8 h-8">
+                🎓
+              </span>
+              <span className="bg-gradient-to-r from-[#F8B50E] via-[#FFD700] to-[#FFA500] text-transparent bg-clip-text">
+                Gestión de Cursos
+              </span>
+            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="border-2 border-white/30 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/80 backdrop-blur-sm w-32 sm:w-44 transition-all"
+                />
+              </div>
+              <select
+                value={filtroEstatus}
+                onChange={(e) => setFiltroEstatus(e.target.value as any)}
+                className="border-2 border-white/30 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/80 backdrop-blur-sm cursor-pointer"
+              >
+                <option value="Todos">👥 Todos</option>
+                <option value="Activo">🟢 Activos</option>
+                <option value="Inactivo">🔴 Inactivos</option>
+              </select>
+              <button
+                onClick={() => setShowModalCrear(true)}
+                className="px-4 py-1.5 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 rounded-full text-sm font-bold hover:scale-105 transition-all shadow-lg hover:shadow-xl flex items-center gap-1.5"
+              >
+                <span>✨</span> Crear
+              </button>
+            </div>
+          </div>
+
+          {/* Tabla con scroll */}
+          <div className="bg-white/60 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-white/20 flex-1 flex flex-col min-h-0 h-[60vh]">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
+              <table className="w-full table-auto divide-y divide-gray-200 text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900">
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('idCurso')}>
+                        ID <span className="opacity-70">{getSortIcon('idCurso')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap min-w-[130px]">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('nombreCurso')}>
+                        Nombre <span className="opacity-70">{getSortIcon('nombreCurso')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('precioMensualidad')}>
+                        Precio <span className="opacity-70">{getSortIcon('precioMensualidad')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('duracionMeses')}>
+                        Duración <span className="opacity-70">{getSortIcon('duracionMeses')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('nivel')}>
+                        Nivel <span className="opacity-70">{getSortIcon('nivel')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('categoria')}>
+                        Categoría <span className="opacity-70">{getSortIcon('categoria')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-sm font-bold uppercase tracking-wider cursor-pointer hover:bg-white/20 transition-colors whitespace-nowrap">
+                      <div className="flex items-center gap-1" onClick={() => requestSort('estatus')}>
+                        Estatus <span className="opacity-70">{getSortIcon('estatus')}</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-right text-sm font-bold uppercase tracking-wider whitespace-nowrap">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white/50 divide-y divide-gray-200">
+                  {cursosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 italic">
+                        🧐 No hay cursos que coincidan con tu búsqueda
+                      </td>
+                    </tr>
+                  ) : (
+                    cursosFiltrados.map((curso, index) => (
+                      <tr key={curso.idCurso} className={`hover:bg-white/60 transition-all duration-200 hover:shadow-md hover:scale-[1.002] ${index % 2 === 0 ? 'bg-white/30' : 'bg-white/10'}`}>
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-gray-700">{curso.idCurso}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900">{curso.nombreCurso}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">
+                          ${Number(curso.precioMensualidad || 0).toLocaleString('es-MX')}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">
+                          {curso.duracionMeses || 1} {curso.duracionMeses === 1 ? 'mes' : 'meses'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getNivelColor(curso.nivel)}`}>
+                            {curso.nivel || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">
+                          {curso.categoria || '-'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            curso.estatus === 'Activo'
+                              ? 'bg-emerald-100/80 text-emerald-700'
+                              : 'bg-rose-100/80 text-rose-700'
+                          }`}>
+                            {curso.estatus === 'Activo' ? '🟢 Activo' : '🔴 Inactivo'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right">
+                          <button
+                            onClick={() => handleEditar(curso)}
+                            className="p-1.5 rounded-lg bg-[#F8B50E]/10 hover:bg-[#F8B50E]/20 text-[#F8B50E] transition-all hover:scale-110 text-sm font-bold"
+                            title="Editar curso"
+                          >
+                            ✏️
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Modal Editar */}
+          {showModal && cursoEditando && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border-4 border-[#F8B50E] animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#F8B50E] to-[#FFD700] rounded-full flex items-center justify-center text-2xl">
+                    ✏️
+                  </div>
+                  <h3 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#F8B50E] to-[#FFA500]">
+                    Editar Curso
+                  </h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">ID del curso</label>
+                    <input
+                      type="text"
+                      value={cursoEditando.idCurso}
+                      disabled
+                      className="w-full border-2 border-gray-300 bg-gray-100 rounded-xl px-4 py-3 text-sm text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre del curso *</label>
+                    <input
+                      type="text"
+                      value={cursoEditando.nombreCurso}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, nombreCurso: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="Ej. Python Avanzado"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Precio mensualidad (MXN) *</label>
+                    <input
+                      type="number"
+                      value={cursoEditando.precioMensualidad}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, precioMensualidad: parseFloat(e.target.value) || 0 })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="1500"
+                      min="0"
+                      step="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Duración (meses) *</label>
+                    <input
+                      type="number"
+                      value={cursoEditando.duracionMeses}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, duracionMeses: parseInt(e.target.value) || 1 })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="1"
+                      min="1"
+                      step="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nivel</label>
+                    <select
+                      value={cursoEditando.nivel}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, nivel: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                    >
+                      <option value="Básico">Básico</option>
+                      <option value="Intermedio">Intermedio</option>
+                      <option value="Avanzado">Avanzado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Categoría</label>
+                    <input
+                      type="text"
+                      value={cursoEditando.categoria}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, categoria: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="Ej. Programación, Robótica"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Estatus</label>
+                    <select
+                      value={cursoEditando.estatus}
+                      onChange={(e) => setCursoEditando({ ...cursoEditando, estatus: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                    >
+                      <option value="Activo">Activo</option>
+                      <option value="Inactivo">Inactivo</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t-2 border-gray-100">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="px-5 py-2 border-2 border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all hover:scale-105"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleGuardar}
+                    className="px-6 py-2 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Crear */}
+          {showModalCrear && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border-4 border-[#F8B50E] animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#F8B50E] to-[#FFD700] rounded-full flex items-center justify-center text-2xl">
+                    ✨
+                  </div>
+                  <h3 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#F8B50E] to-[#FFA500]">
+                    Crear nuevo curso
+                  </h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre del curso *</label>
+                    <input
+                      type="text"
+                      value={nuevoCurso.nombreCurso}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, nombreCurso: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="Ej. Python Avanzado"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Precio mensualidad (MXN) *</label>
+                    <input
+                      type="number"
+                      value={nuevoCurso.precioMensualidad}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, precioMensualidad: parseFloat(e.target.value) || 0 })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="1500"
+                      min="0"
+                      step="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Duración (meses) *</label>
+                    <input
+                      type="number"
+                      value={nuevoCurso.duracionMeses}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, duracionMeses: parseInt(e.target.value) || 1 })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="1"
+                      min="1"
+                      step="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nivel</label>
+                    <select
+                      value={nuevoCurso.nivel}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, nivel: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                    >
+                      <option value="Básico">Básico</option>
+                      <option value="Intermedio">Intermedio</option>
+                      <option value="Avanzado">Avanzado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Categoría</label>
+                    <input
+                      type="text"
+                      value={nuevoCurso.categoria}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, categoria: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                      placeholder="Ej. Programación, Robótica"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Estatus</label>
+                    <select
+                      value={nuevoCurso.estatus}
+                      onChange={(e) => setNuevoCurso({ ...nuevoCurso, estatus: e.target.value })}
+                      className="w-full border-2 border-[#F8B50E]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
+                    >
+                      <option value="Activo">Activo</option>
+                      <option value="Inactivo">Inactivo</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t-2 border-gray-100">
+                  <button
+                    onClick={() => setShowModalCrear(false)}
+                    className="px-5 py-2 border-2 border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all hover:scale-105"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Aquí implementarías la lógica de creación, pero como no está en el original, lo dejamos como placeholder
+                      toast.info('Función de crear curso no implementada aún.');
+                      setShowModalCrear(false);
+                    }}
+                    className="px-6 py-2 bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                  >
+                    Crear curso
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </BackgroundVideo>
+    </>
+  );
 }

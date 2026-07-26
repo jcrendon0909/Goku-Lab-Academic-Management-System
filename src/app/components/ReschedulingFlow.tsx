@@ -1,390 +1,364 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, User, AlertCircle, MessageCircle, Check } from 'lucide-react';
-import { Button } from './ui/button';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
-import { Label } from './ui/label';
-import { useClasses } from '../context/ClassContext';
-import { getProfesores } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import * as API from '../../services/api';
 import { toast } from 'sonner';
+import BackgroundVideo from './BackgroundVideo';
+import { Calendar, RefreshCw, User, BookOpen, Clock, Repeat, Trash2, Search, Filter } from 'lucide-react';
+import ReagendacionForm from './ReagendacionForm';
 
-interface Teacher {
-  id: string;
-  nombre: string;
+interface Reagendacion {
+  _id: string;
+  ReagendacionId: string;
+  idAlumno: string;
+  nombreAlumno: string;
+  idGrupoOrigen: string;
+  idGrupoNuevo: string;
+  nombreCurso: string;
+  profesorOriginal: string;
+  profesorNuevo: string;
+  fechaHoraOriginal: string;
+  fechaHoraNueva: string;
+  tipoReagendacion: 'temporal' | 'permanente';
+  modalidad: string;
   estatus: string;
+  createdAt: string;
+}
+
+interface Alumno {
+  idAlumno: string;
+  nombreAlumno: string;
+}
+
+interface Grupo {
+  IdGrupo: string;
+  nombreCurso: string;
+  nombreProfesor: string;
+  diaClase: string;
+  horaClase: string;
 }
 
 export function ReschedulingFlow() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { classes, rescheduleClass } = useClasses();
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loadingTeachers, setLoadingTeachers] = useState(true);
-  
-  const classId = searchParams.get('classId');
-  const studentId = searchParams.get('studentId');
-  const studentName = searchParams.get('studentName');
-  
-  const classData = classes.find(c => c.id === classId);
+  const location = useLocation();
+  const [reagendaciones, setReagendaciones] = useState<Reagendacion[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState('');
+  const [filtro, setFiltro] = useState('');
+  const [dataForm, setDataForm] = useState<any>(null);
 
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
-  const [selectedDuration, setSelectedDuration] = useState('2');
-  const [isConfirming, setIsConfirming] = useState(false);
-
-  // Cargar profesores reales desde el backend
+  // Cargar datos al montar
   useEffect(() => {
-    const loadTeachers = async () => {
-      try {
-        setLoadingTeachers(true);
-        const data = await getProfesores();
-        setTeachers(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error('Error cargando profesores:', error);
-        toast.error('No se pudieron cargar los profesores');
-      } finally {
-        setLoadingTeachers(false);
-      }
-    };
-    loadTeachers();
+    cargarReagendaciones();
+    cargarCatalogos();
+
+    // Si viene de un enlace con parámetros (ej. desde calendario)
+    const params = new URLSearchParams(location.search);
+    const classId = params.get('classId');
+    const studentId = params.get('studentId');
+    const studentName = params.get('studentName');
+    if (classId && studentId) {
+      toast.info('Precargando datos para reagendación');
+    }
   }, []);
 
-  // Profesores disponibles (activos)
-  const availableTeachers = teachers.filter(t => t.estatus === 'Activo');
-  const unavailableTeachers = teachers.filter(t => t.estatus !== 'Activo');
-
-  // El profesor original de la clase (si existe)
-  const originalTeacherId = classData?.teacher?.id;
-
-  const handleSendWhatsApp = () => {
-    toast.success('Mensaje grupal de WhatsApp enviado a todos los profesores');
+  const cargarReagendaciones = async () => {
+    try {
+      setCargando(true);
+      const res = await API.apiFetch('/reagendaciones');
+      if (!res.ok) throw new Error('Error al cargar reagendaciones');
+      const data = await res.json();
+      setReagendaciones(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al cargar reagendaciones');
+    } finally {
+      setCargando(false);
+    }
   };
 
-  const handleConfirmReschedule = async () => {
-    if (!selectedTeacher || !selectedDate || !selectedTime || !classId || !studentId || !studentName) {
-      toast.error('Por favor completa todos los campos');
+  const cargarCatalogos = async () => {
+    try {
+      const [alumnosRes, gruposRes] = await Promise.all([
+        API.getAlumnos(),
+        API.getGrupos(),
+      ]);
+      setAlumnos(alumnosRes);
+      setGrupos(gruposRes);
+    } catch (error) {
+      toast.error('Error al cargar catálogos');
+    }
+  };
+
+  const eliminarReagendacion = async (id: string) => {
+    if (!confirm('¿Eliminar esta reagendación?')) return;
+    try {
+      const res = await API.apiFetch(`/reagendaciones/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
+      toast.success('Reagendación eliminada');
+      cargarReagendaciones();
+    } catch (error: any) {
+      toast.error(error.message || 'Error al eliminar');
+    }
+  };
+
+  const abrirFormulario = () => {
+    if (!alumnoSeleccionado || !grupoSeleccionado) {
+      toast.warning('Selecciona un alumno y un grupo');
+      return;
+    }
+    const alumno = alumnos.find(a => a.idAlumno === alumnoSeleccionado);
+    const grupo = grupos.find(g => g.IdGrupo === grupoSeleccionado);
+    if (!alumno || !grupo) {
+      toast.error('Datos no encontrados');
       return;
     }
 
-    setIsConfirming(true);
-    try {
-      console.log('📤 Enviando reagendación:', {
-        classId,
-        studentId,
-        studentName,
-        newDate: selectedDate,
-        newTime: selectedTime,
-        newTeacher: selectedTeacher,
-        duration: parseFloat(selectedDuration),
-      });
-      
-      await rescheduleClass(classId, studentId, {
-        newDate: selectedDate,
-        newTime: selectedTime,
-        newTeacher: { id: selectedTeacher.id, name: selectedTeacher.nombre },
-        studentName: studentName,
-        duration: parseFloat(selectedDuration),
-      });
-      toast.success('Clase reprogramada exitosamente');
-      navigate('/dashboard');
-    } catch (error: any) {
-      console.error('❌ Error al reagendar:', error);
-      toast.error(error.message || 'Error al reagendar');
-    } finally {
-      setIsConfirming(false);
-    }
+    // Construir objeto "clase" para el formulario
+    const clase = {
+      id: grupo.IdGrupo,
+      title: grupo.nombreCurso,
+      nombreCurso: grupo.nombreCurso,
+      profesor: grupo.nombreProfesor,
+      teacher: { name: grupo.nombreProfesor },
+      nombreProfesor: grupo.nombreProfesor,
+      idProfesor: '',
+      startTime: grupo.horaClase,
+      diaClase: grupo.diaClase,
+      date: new Date(),
+      duracion: '2 horas',
+      idGrupo: grupo.IdGrupo,
+    };
+
+    const data = {
+      alumno: {
+        idAlumno: alumno.idAlumno,
+        nombreAlumno: alumno.nombreAlumno,
+        modalidad: 'Presencial',
+      },
+      clase,
+    };
+
+    setDataForm(data);
+    setMostrarForm(true);
   };
 
-  if (!classData) {
+  // Filtrar reagendaciones
+  const reagendacionesFiltradas = reagendaciones.filter(r => {
+    if (!filtro) return true;
+    const q = filtro.toLowerCase();
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600">Clase no encontrada</p>
-          <Button onClick={() => navigate('/dashboard')} className="mt-4">
-            Volver al dashboard
-          </Button>
+      r.nombreAlumno.toLowerCase().includes(q) ||
+      r.nombreCurso.toLowerCase().includes(q) ||
+      r.ReagendacionId.toLowerCase().includes(q)
+    );
+  });
+
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center text-white">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#F8B50E] mx-auto mb-4"></div>
+          <p className="text-lg font-bold">📅 Cargando reagendaciones...</p>
         </div>
       </div>
     );
   }
 
-  // 👇 Función auxiliar para mostrar la fecha sin desfase horario
-  const formatearFechaLocal = (fechaStr: string) => {
-    // Interpretar la fecha como UTC (sin conversión a local)
-    const fecha = new Date(fechaStr + 'T00:00:00Z');
-    return fecha.toLocaleDateString('es-ES', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      timeZone: 'UTC'
-    });
-  };
+  const decorativeVideos: { src: string; position: any }[] = [];
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto">
-          <Link to="/dashboard" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver al dashboard
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reprogramación de Clase</h1>
-            <p className="text-cyan-600 mt-2 text-lg font-medium">
-              Para: {studentName}
-            </p>
+    <BackgroundVideo
+      videoSrc="https://media.gokulab.mx/Galery/videos/lummyanimado.mp4"
+      decorativeVideos={decorativeVideos}
+    >
+      <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
+        {/* Cabecera */}
+        <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-3 flex-shrink-0">
+          <h1 className="text-2xl md:text-3xl font-extrabold text-white drop-shadow-lg flex items-center gap-3">
+            <span className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] p-2 rounded-full shadow-lg inline-flex items-center justify-center">
+              <Repeat className="h-6 w-6 text-gray-900" />
+            </span>
+            <span className="bg-gradient-to-r from-[#F8B50E] via-[#FFD700] to-white text-transparent bg-clip-text">
+              Reagendaciones
+            </span>
+          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cargarReagendaciones}
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-full hover:bg-white/30 transition-all border border-white/20"
+              title="Recargar"
+            >
+              <RefreshCw className="h-5 w-5 text-white" />
+            </button>
+            <button
+              onClick={() => {
+                setAlumnoSeleccionado('');
+                setGrupoSeleccionado('');
+                setDataForm(null);
+                setMostrarForm(true);
+              }}
+              className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900 px-5 py-2 rounded-full font-bold hover:scale-105 transition-all shadow-lg flex items-center gap-2"
+            >
+              <Repeat className="h-5 w-5" />
+              Nueva Reagendación
+            </button>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-6">
-        {/* Clase Original */}
-        <Card className="p-6 mb-6 rounded-xl shadow-sm bg-gray-50">
-          <h2 className="font-semibold text-gray-900 mb-4">Clase Original</h2>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Materia</div>
-              <div className="font-medium text-gray-900">{classData.title}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Profesor</div>
-              <div className="font-medium text-gray-900">{classData.teacher.name}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Horario Original</div>
-              <div className="font-medium text-gray-900">
-                {classData.startTime} - {classData.endTime}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Selección de Profesor */}
-        <Card className="p-6 mb-6 rounded-xl shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <User className="h-5 w-5 text-gray-700" />
-            <h2 className="font-semibold text-gray-900">Disponibilidad de Profesores</h2>
-            {loadingTeachers ? (
-              <Badge variant="outline" className="ml-auto rounded-lg bg-gray-50 text-gray-500">
-                Cargando...
-              </Badge>
-            ) : (
-              <>
-                <Badge variant="outline" className="ml-auto rounded-lg bg-green-50 text-green-700 border-green-200">
-                  {availableTeachers.length} disponibles
-                </Badge>
-                <Badge variant="outline" className="rounded-lg bg-red-50 text-red-700 border-red-200">
-                  {unavailableTeachers.length} no disponibles
-                </Badge>
-              </>
-            )}
-          </div>
-
-          {!loadingTeachers && (
-            <div className="space-y-3 mb-4">
-              {availableTeachers.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    Disponibles
-                  </h3>
-                  <div className="space-y-2">
-                    {availableTeachers.map((teacher) => (
-                      <button
-                        key={teacher.id}
-                        onClick={() => setSelectedTeacher(teacher)}
-                        className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
-                          selectedTeacher?.id === teacher.id
-                            ? 'border-cyan-500 bg-cyan-50'
-                            : 'border-green-200 hover:border-cyan-300 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                              <User className="h-5 w-5 text-green-700" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900 flex items-center gap-2">
-                                {teacher.nombre}
-                                {teacher.id === originalTeacherId && (
-                                  <Badge className="bg-blue-100 text-blue-700 text-xs">
-                                    Profesor Original
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-500">{teacher.id}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className="rounded-lg bg-green-100 text-green-700">
-                              Disponible
-                            </Badge>
-                            {selectedTeacher?.id === teacher.id && (
-                              <div className="h-6 w-6 rounded-full bg-cyan-500 flex items-center justify-center">
-                                <Check className="h-4 w-4 text-white" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {unavailableTeachers.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2 mt-4">
-                    <div className="h-2 w-2 rounded-full bg-red-500"></div>
-                    No Disponibles
-                  </h3>
-                  <div className="space-y-2">
-                    {unavailableTeachers.map((teacher) => (
-                      <div
-                        key={teacher.id}
-                        className="w-full p-4 rounded-lg border-2 border-red-200 bg-gray-50 opacity-75"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                              <User className="h-5 w-5 text-red-700" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900">{teacher.nombre}</div>
-                              <div className="text-sm text-gray-500">{teacher.id}</div>
-                            </div>
-                          </div>
-                          <Badge className="rounded-lg bg-red-100 text-red-700">
-                            No disponible
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="pt-4 border-t border-gray-200">
-            {availableTeachers.length === 0 && !loadingTeachers && (
-              <Card className="p-4 bg-amber-50 border-amber-200 rounded-lg mb-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-amber-900">Ningún profesor disponible</h3>
-                    <p className="text-sm text-amber-800 mt-1">
-                      Envía un mensaje grupal para solicitar disponibilidad.
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
-            <Button
-              onClick={handleSendWhatsApp}
-              className="w-full bg-green-500 hover:bg-green-600 text-white rounded-lg h-12"
+        {/* Selectores rápidos */}
+        <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 mb-4 border border-white/20 flex flex-wrap items-center gap-3 flex-shrink-0">
+          <div className="flex-1 min-w-[150px]">
+            <label className="block text-xs text-white/80 font-medium mb-1">Alumno</label>
+            <select
+              value={alumnoSeleccionado}
+              onChange={(e) => setAlumnoSeleccionado(e.target.value)}
+              className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E]"
             >
-              <MessageCircle className="mr-2 h-5 w-5" />
-              Enviar Mensaje
-            </Button>
+              <option value="">Seleccionar...</option>
+              {alumnos.map(a => (
+                <option key={a.idAlumno} value={a.idAlumno} className="text-gray-900">
+                  {a.idAlumno} - {a.nombreAlumno}
+                </option>
+              ))}
+            </select>
           </div>
-        </Card>
-
-        {/* Selección de Fecha y Hora */}
-        {availableTeachers.length > 0 && (
-          <Card className="p-6 mb-6 rounded-xl shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="h-5 w-5 text-gray-700" />
-              <h2 className="font-semibold text-gray-900">Nueva Fecha, Hora y Duración</h2>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="date" className="text-sm font-medium text-gray-700">
-                  Fecha
-                </Label>
-                <input
-                  id="date"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div>
-                <Label htmlFor="time" className="text-sm font-medium text-gray-700">
-                  Hora de Inicio
-                </Label>
-                <input
-                  id="time"
-                  type="time"
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-              <div>
-                <Label htmlFor="duration" className="text-sm font-medium text-gray-700">
-                  Duración
-                </Label>
-                <select
-                  id="duration"
-                  value={selectedDuration}
-                  onChange={(e) => setSelectedDuration(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
-                >
-                  <option value="0.5">30 minutos</option>
-                  <option value="1">1 hora</option>
-                  <option value="1.5">1.5 horas</option>
-                  <option value="2">2 horas</option>
-                  <option value="2.5">2.5 horas</option>
-                  <option value="3">3 horas</option>
-                  <option value="4">4 horas</option>
-                </select>
-              </div>
-            </div>
-
-            {selectedTeacher && selectedDate && selectedTime && (
-              <Card className="mt-4 p-4 bg-green-50 border-green-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div className="text-sm text-green-900">
-                    <span className="font-medium">Nueva clase programada: </span>
-                    {formatearFechaLocal(selectedDate)} a las {selectedTime} con {selectedTeacher.nombre}
-                    <span className="font-medium"> • Duración: {selectedDuration === '0.5' ? '30 minutos' : selectedDuration === '1' ? '1 hora' : selectedDuration === '1.5' ? '1.5 horas' : `${selectedDuration} horas`}</span>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </Card>
-        )}
-
-        {/* Confirmación */}
-        {availableTeachers.length > 0 && (
-          <Button
-            onClick={handleConfirmReschedule}
-            disabled={!selectedTeacher || !selectedDate || !selectedTime || isConfirming}
-            className="w-full bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg h-14 text-lg font-medium shadow-lg"
+          <div className="flex-1 min-w-[150px]">
+            <label className="block text-xs text-white/80 font-medium mb-1">Grupo / Clase</label>
+            <select
+              value={grupoSeleccionado}
+              onChange={(e) => setGrupoSeleccionado(e.target.value)}
+              className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E]"
+            >
+              <option value="">Seleccionar...</option>
+              {grupos.map(g => (
+                <option key={g.IdGrupo} value={g.IdGrupo} className="text-gray-900">
+                  {g.IdGrupo} - {g.nombreCurso} ({g.diaClase} {g.horaClase})
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={abrirFormulario}
+            className="bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white px-6 py-2 rounded-full font-bold hover:scale-105 transition-all shadow-lg mt-2 md:mt-0"
           >
-            {isConfirming ? (
-              <>
-                <div className="mr-2 h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Confirmando...
-              </>
-            ) : (
-              <>
-                <Check className="mr-2 h-5 w-5" />
-                Confirmar Reprogramación
-              </>
-            )}
-          </Button>
-        )}
-      </main>
-    </div>
+            <Repeat className="h-4 w-4 inline mr-1" />
+            Crear
+          </button>
+        </div>
+
+        {/* Filtro de búsqueda */}
+        <div className="mb-4 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/50" />
+            <input
+              type="text"
+              placeholder="Buscar por alumno, curso o ID..."
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              className="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl pl-10 pr-4 py-2 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-[#F8B50E]"
+            />
+          </div>
+        </div>
+
+        {/* Tabla de reagendaciones */}
+        <div className="bg-white/20 backdrop-blur-md rounded-2xl overflow-hidden border border-white/20 shadow-xl flex-1 flex flex-col min-h-0">
+          <div className="overflow-x-auto overflow-y-auto flex-1">
+            <table className="w-full table-auto divide-y divide-white/10 text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-gradient-to-r from-[#F8B50E] to-[#FFD700] text-gray-900">
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">ID</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Alumno</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Curso</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Origen</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Destino</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Fecha Nueva</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Tipo</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Modalidad</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {reagendacionesFiltradas.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-white/60 italic">
+                      🧐 No hay reagendaciones registradas
+                    </td>
+                  </tr>
+                ) : (
+                  reagendacionesFiltradas.map((r, index) => (
+                    <tr
+                      key={r._id}
+                      className={`hover:bg-white/10 transition-colors ${
+                        index % 2 === 0 ? 'bg-white/5' : 'bg-white/0'
+                      }`}
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-white/90">{r.ReagendacionId}</td>
+                      <td className="px-3 py-2 whitespace-nowrap font-medium text-white">{r.nombreAlumno}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-white/80">{r.nombreCurso}</td>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-white/60">{r.idGrupoOrigen}</td>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-sm text-white/60">{r.idGrupoNuevo}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-white/80">
+                        {new Date(r.fechaHoraNueva).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${
+                          r.tipoReagendacion === 'temporal' ? 'bg-blue-500/80 text-white' : 'bg-green-500/80 text-white'
+                        }`}>
+                          {r.tipoReagendacion === 'temporal' ? '⏰ Temporal' : '♻️ Permanente'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          r.modalidad === 'Virtual' ? 'bg-purple-500/80 text-white' : 'bg-emerald-500/80 text-white'
+                        }`}>
+                          {r.modalidad}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right">
+                        <button
+                          onClick={() => eliminarReagendacion(r._id)}
+                          className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-rose-400 hover:text-rose-300 transition-all hover:scale-110"
+                          title="Eliminar reagendación"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Pie de página */}
+        <div className="mt-2 flex justify-between items-center text-xs text-white/50 flex-shrink-0">
+          <span>📋 {reagendacionesFiltradas.length} reagendaciones</span>
+          <span>
+            🔄 {reagendacionesFiltradas.filter(r => r.tipoReagendacion === 'temporal').length} temporales
+            • ♻️ {reagendacionesFiltradas.filter(r => r.tipoReagendacion === 'permanente').length} permanentes
+          </span>
+        </div>
+      </div>
+
+      {/* Modal del formulario */}
+      {mostrarForm && (
+        <ReagendacionForm
+          data={dataForm}
+          onClose={() => {
+            setMostrarForm(false);
+            setDataForm(null);
+          }}
+          onSuccess={() => {
+            setMostrarForm(false);
+            setDataForm(null);
+            cargarReagendaciones();
+            toast.success('Reagendación creada exitosamente');
+          }}
+        />
+      )}
+    </BackgroundVideo>
   );
 }

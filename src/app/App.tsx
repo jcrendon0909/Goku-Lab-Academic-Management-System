@@ -4,7 +4,7 @@ import { Dashboard } from './components/Dashboard';
 import { ReschedulingFlow } from './components/ReschedulingFlow';
 import { PagosPage } from './components/PagosPage';
 import { AlumnosPage } from './components/AlumnosPage';
-import { MaestrosPage } from './components/MaestrosPage';
+import { ProfesoresPage } from './components/ProfesoresPage';
 import { CursosPage } from './components/CursosPage';
 import { LoginPage } from './components/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -14,7 +14,13 @@ import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
-import { ReporteCobranza } from './components/ReporteCobranza'; // 👈 Importa el componente
+import { ReporteCobranza } from './components/ReporteCobranza';
+import { GruposPage } from './components/GruposPage';
+import { AsistenciaPage } from './components/AsistenciaPage';
+import { CursosVeranoPage } from './components/CursosVeranoPage';
+import { CursoVeranoForm } from './components/CursoVeranoForm'; // 👈 NUEVA IMPORTACIÓN
+import { CursoVeranoDetalle } from './components/CursoVeranoDetalle';
+import { RentabilidadCursoVerano } from './components/RentabilidadCursoVerano';
 
 export const router = createBrowserRouter([
   {
@@ -36,12 +42,23 @@ export const router = createBrowserRouter([
       { path: '/reschedule', element: <ReschedulingFlow /> },
       { path: '/pagos', element: <PagosPage /> },
       { path: '/alumnos', element: <AlumnosPage /> },
-      { path: '/maestros', element: <MaestrosPage /> },
+      { path: '/maestros', element: <ProfesoresPage /> },
       { path: '/cursos', element: <CursosPage /> },
+      { path: '/grupos', element: <GruposPage /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
-      { path: '/reportes/cobranza', element: <ReporteCobranza /> }, // 👈 Ruta nueva
+      { path: '/reportes/cobranza', element: <ReporteCobranza /> },
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
+      { path: '/asistencia', element: <AsistenciaPage /> },
+      // ============================================================
+      // 🆕 RUTAS DE CURSOS DE VERANO
+      // ============================================================
+      { path: '/cursos-verano', element: <CursosVeranoPage /> },
+      { path: '/cursos-verano/nuevo', element: <CursoVeranoForm /> },
+      { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
+      { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
+      { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
+      { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
     ],
   },
 ]);
