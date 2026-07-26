@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -27,6 +27,12 @@ export function ReporteCobranza() {
   const [anio, setAnio] = useState('');
   const [totalGeneral, setTotalGeneral] = useState(0);
 
+  // 🔍 NUEVO: Estado para filtro por alumno
+  const [filtroAlumno, setFiltroAlumno] = useState('');
+
+  // 🔄 NUEVO: Estado para ordenamiento
+  const [ordenConfig, setOrdenConfig] = useState<{ key: keyof Abono; direccion: 'asc' | 'desc' } | null>(null);
+
   const cargarReporte = async () => {
     try {
       setCargando(true);
@@ -52,8 +58,44 @@ export function ReporteCobranza() {
     cargarReporte();
   }, []);
 
+  // 🔍 NUEVO: Filtrar abonos por alumno
+  const abonosFiltrados = useMemo(() => {
+    if (!filtroAlumno.trim()) return abonos;
+    const busqueda = filtroAlumno.toLowerCase().trim();
+    return abonos.filter(a => a.estudiante.toLowerCase().includes(busqueda));
+  }, [abonos, filtroAlumno]);
+
+  // 🔄 NUEVO: Ordenar abonos
+  const abonosOrdenados = useMemo(() => {
+    if (!ordenConfig) return abonosFiltrados;
+    const { key, direccion } = ordenConfig;
+    const sorted = [...abonosFiltrados];
+    sorted.sort((a, b) => {
+      let aVal: any = a[key as keyof Abono];
+      let bVal: any = b[key as keyof Abono];
+      if (aVal === undefined || aVal === null) aVal = '';
+      if (bVal === undefined || bVal === null) bVal = '';
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal < bVal) return direccion === 'asc' ? -1 : 1;
+      if (aVal > bVal) return direccion === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [abonosFiltrados, ordenConfig]);
+
+  // 🔄 NUEVO: Manejar clic en encabezado para ordenar
+  const handleSort = (key: keyof Abono) => {
+    setOrdenConfig(prev => {
+      if (prev?.key === key) {
+        return { key, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direccion: 'asc' };
+    });
+  };
+
   const exportarExcel = () => {
-    const data = abonos.map(a => ({
+    const data = abonosOrdenados.map(a => ({
       Fecha: new Date(a.fecha).toLocaleDateString(),
       Estudiante: a.estudiante,
       Monto: a.monto,
@@ -70,12 +112,14 @@ export function ReporteCobranza() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Cobranza');
-    XLSX.writeFile(wb, `Reporte_Cobranza_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_Cobranza_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const limpiarFiltros = () => {
     setMes('');
     setAnio('');
+    setFiltroAlumno('');
+    setOrdenConfig(null);
     cargarReporte();
   };
 
@@ -92,10 +136,16 @@ export function ReporteCobranza() {
 
   const decorativeVideos: { src: string; position: any }[] = [];
 
+  // 🔄 NUEVO: Helper para mostrar ícono de orden
+  const getSortIcon = (key: keyof Abono) => {
+    if (ordenConfig?.key !== key) return '⇅';
+    return ordenConfig.direccion === 'asc' ? '↑' : '↓';
+  };
+
   return (
     <>
       <BackgroundVideo
-        videoSrc="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4"
+        videoSrc="https://media.gokulab.mx/Galery/videos/lummyanimado.mp4"
         decorativeVideos={decorativeVideos}
       >
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
@@ -131,6 +181,17 @@ export function ReporteCobranza() {
                   min="2020"
                 />
               </div>
+              {/* 🔍 NUEVO: Filtro por alumno */}
+              <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 border border-white/20">
+                <span className="text-white text-xs font-medium">👤</span>
+                <input
+                  type="text"
+                  placeholder="Alumno..."
+                  value={filtroAlumno}
+                  onChange={(e) => setFiltroAlumno(e.target.value)}
+                  className="w-24 sm:w-32 bg-transparent text-white placeholder-white/60 text-sm focus:outline-none"
+                />
+              </div>
               <button
                 onClick={cargarReporte}
                 className="px-4 py-1.5 bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white rounded-full text-sm font-bold hover:scale-105 transition-all shadow-lg hover:shadow-xl flex items-center gap-1.5"
@@ -152,56 +213,44 @@ export function ReporteCobranza() {
             </div>
           </div>
 
-          {/* Tarjetas de totales - Estilo financiero y cool */}
+          {/* Tarjetas de totales por mes */}
           {totales.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 flex-shrink-0">
               {totales.map((t, i) => {
-                // Paleta de colores financieros
                 const paletas = [
                   'from-blue-600 via-blue-500 to-cyan-400',
                   'from-emerald-600 via-emerald-500 to-green-400',
                   'from-purple-600 via-purple-500 to-pink-400',
                   'from-amber-600 via-orange-500 to-yellow-400'
                 ];
-                const iconos = ['💰', '📈', '📊', '🏦'];
+                const iconos = ['📊', '💰', '📈', '💳'];
                 const index = i % paletas.length;
                 return (
                   <div
                     key={i}
-                    className={`bg-gradient-to-br ${paletas[index]} p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 text-white`}
+                    className={`bg-gradient-to-br ${paletas[index]} p-4 rounded-2xl shadow-lg text-white transform hover:scale-105 transition-all duration-300`}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium uppercase tracking-wider opacity-90">
-                        {t._id.mes}/{t._id.anio}
-                      </p>
-                      <span className="text-xl opacity-80">{iconos[index]}</span>
-                    </div>
-                    <p className="text-2xl font-bold mt-2">
+                    <p className="text-xs font-medium uppercase tracking-wider opacity-80">
+                      {iconos[index]} {t._id.mes}/{t._id.anio}
+                    </p>
+                    <p className="text-2xl font-bold mt-1">
                       ${Number(t.total).toFixed(2)}
                     </p>
                     <p className="text-xs opacity-80 mt-1">{t.cantidad} movimientos</p>
                   </div>
                 );
               })}
-              
-              {/* Total General - Estilo dorado/ejecutivo */}
+              {/* Total general */}
               {abonos.length > 0 && (
-                <div className="bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-400 p-4 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 text-white relative overflow-hidden">
-                  {/* Efectos de brillo */}
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/20 rounded-full blur-2xl animate-pulse"></div>
-                  <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold uppercase tracking-wider opacity-90">
-                        📊 Total General
-                      </p>
-                      <span className="text-xl opacity-80">⭐</span>
-                    </div>
-                    <p className="text-3xl font-extrabold mt-2 drop-shadow-lg">
-                      ${totalGeneral.toFixed(2)}
-                    </p>
-                    <p className="text-xs opacity-80 mt-1">{abonos.length} movimientos</p>
-                  </div>
+                <div className="bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 p-4 rounded-2xl shadow-lg text-white transform hover:scale-105 transition-all duration-300 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-white/10 animate-pulse-slow"></div>
+                  <p className="text-xs font-medium uppercase tracking-wider opacity-80 flex items-center gap-1">
+                    <span>⭐</span> Total General
+                  </p>
+                  <p className="text-2xl font-bold mt-1">
+                    ${totalGeneral.toFixed(2)}
+                  </p>
+                  <p className="text-xs opacity-80 mt-1">{abonos.length} movimientos</p>
                 </div>
               )}
             </div>
@@ -213,26 +262,47 @@ export function ReporteCobranza() {
               <table className="w-full table-auto divide-y divide-gray-200 text-sm">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white">
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Fecha
+                    <th
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('fecha')}
+                    >
+                      Fecha {getSortIcon('fecha')}
                     </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap min-w-[120px]">
-                      Estudiante
+                    <th
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap min-w-[120px] cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('estudiante')}
+                    >
+                      Estudiante {getSortIcon('estudiante')}
                     </th>
-                    <th className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Monto
+                    <th
+                      className="px-4 py-2.5 text-right text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('monto')}
+                    >
+                      Monto {getSortIcon('monto')}
                     </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Método
+                    <th
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('metodoPago')}
+                    >
+                      Método {getSortIcon('metodoPago')}
                     </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Concepto
+                    <th
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('concepto')}
+                    >
+                      Concepto {getSortIcon('concepto')}
                     </th>
-                    <th className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Factura
+                    <th
+                      className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('factura')}
+                    >
+                      Factura {getSortIcon('factura')}
                     </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      Recibido por
+                    <th
+                      className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-white/10 transition-colors"
+                      onClick={() => handleSort('recibidoPor')}
+                    >
+                      Recibido por {getSortIcon('recibidoPor')}
                     </th>
                     <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap min-w-[150px]">
                       Observaciones
@@ -240,14 +310,14 @@ export function ReporteCobranza() {
                   </tr>
                 </thead>
                 <tbody className="bg-white/50 divide-y divide-gray-200">
-                  {abonos.length === 0 ? (
+                  {abonosOrdenados.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-gray-500 italic">
                         🧐 No hay movimientos para el período seleccionado.
                       </td>
                     </tr>
                   ) : (
-                    abonos.map((a, i) => (
+                    abonosOrdenados.map((a, i) => (
                       <tr
                         key={i}
                         className={`hover:bg-white/60 transition-all duration-200 hover:shadow-md ${
@@ -307,12 +377,22 @@ export function ReporteCobranza() {
           {/* Pie de página */}
           {abonos.length > 0 && (
             <div className="mt-2 flex justify-between items-center text-xs text-white/80 flex-shrink-0">
-              <span>📋 Mostrando {abonos.length} movimientos</span>
+              <span>📋 Mostrando {abonosOrdenados.length} de {abonos.length} movimientos</span>
               <span className="font-bold">Total: ${totalGeneral.toFixed(2)}</span>
             </div>
           )}
         </div>
       </BackgroundVideo>
+
+      <style>{`
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.6; }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
+      `}</style>
     </>
   );
 }
