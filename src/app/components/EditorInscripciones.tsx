@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import BackgroundVideo from './BackgroundVideo';
-import { RefreshCw, Save, Search, Check, X, Edit2, Calendar, DollarSign, Tag, Clock, User } from 'lucide-react';
+import { RefreshCw, Save, Search, Check, X, Edit2 } from 'lucide-react';
 
 interface Inscripcion {
   _id: string;
@@ -16,7 +16,6 @@ interface Inscripcion {
   comentarios: string;
   fechaInscripcion: string;
   estatus: string;
-  // Marcador manual
   correcto?: boolean;
 }
 
@@ -204,7 +203,7 @@ export function EditorInscripciones() {
           <span className="text-white/60 text-sm">{inscripciones.length} inscripciones</span>
         </div>
 
-        {/* Tabla editable - todos los campos */}
+        {/* Tabla editable */}
         <div className="bg-white/20 backdrop-blur-md rounded-2xl overflow-hidden border border-white/20 shadow-xl flex-1 flex flex-col min-h-0">
           <div className="overflow-x-auto overflow-y-auto flex-1">
             <table className="w-full table-auto divide-y divide-white/10 text-sm">

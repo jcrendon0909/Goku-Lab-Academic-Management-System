@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
   Laptop, LogOut, LayoutDashboard, Calendar, Users, 
   DollarSign, BarChart, BookOpen, ClipboardCheck, UserCog, 
-  Users2, Repeat, LineChart, Sun, Eye, Edit2  // ✅ Agregar Edit2
+  Users2, Repeat, LineChart, Sun, Eye, Edit2
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -48,9 +48,9 @@ export function Header() {
           </div>
         </Link>
 
-        {/* Navegación central */}
-        <div className="flex items-center gap-4 overflow-x-auto hide-scrollbar px-2">
-          <nav className="flex items-center gap-4">
+        {/* Navegación central - Ajuste de gap para ahorrar espacio */}
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-2">
+          <nav className="flex items-center gap-3">
             {/* Panel */}
             <Link
               to="/dashboard"
@@ -177,7 +177,7 @@ export function Header() {
               Calendario
             </Link>
 
-            {/* 👇 Reagendaciones - SOLO ICONO (sin texto) */}
+            {/* 👇 Reagendaciones - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/reschedule"
@@ -192,7 +192,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* 👇 Usuarios - SOLO ICONO (sin texto) */}
+            {/* 👇 Usuarios - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/admin/usuarios"
@@ -207,7 +207,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* 👇 Cursos Verano - SOLO ICONO (sin texto) */}
+            {/* 👇 Cursos Verano - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/cursos-verano"
@@ -222,7 +222,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* ✅ NUEVO: Consulta de Inscripciones - SOLO ICONO */}
+            {/* ✅ Consulta de Inscripciones - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/inscripciones-consulta"
