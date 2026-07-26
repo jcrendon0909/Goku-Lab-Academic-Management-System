@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
   Laptop, LogOut, LayoutDashboard, Calendar, Users, 
   DollarSign, BarChart, BookOpen, ClipboardCheck, UserCog, 
-  Users2, Repeat, LineChart, Sun, Eye  // ✅ Agregamos Eye
+  Users2, Repeat, LineChart, Sun, Eye
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -176,18 +176,23 @@ export function Header() {
               <Calendar className="w-3 h-3" />
               Calendario
             </Link>
-            <Link
-              to="/reschedule"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/reschedule')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <Repeat className="w-3 h-3" />
-              Reagendaciones
-            </Link>
-            {/* 👇 Usuarios - SOLO ICONO (sin texto, sin campana) */}
+
+            {/* 👇 Reagendaciones - SOLO ICONO (sin texto) */}
+            {isAdmin && (
+              <Link
+                to="/reschedule"
+                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
+                  isActive('/reschedule')
+                    ? 'text-[#26AAA3] font-bold'
+                    : 'text-gray-500 hover:text-[#26AAA3]'
+                }`}
+                title="Reagendaciones"
+              >
+                <Repeat className="w-3 h-3" />
+              </Link>
+            )}
+
+            {/* 👇 Usuarios - SOLO ICONO (sin texto) */}
             {isAdmin && (
               <Link
                 to="/admin/usuarios"
@@ -201,6 +206,8 @@ export function Header() {
                 <Users2 className="w-3 h-3" />
               </Link>
             )}
+
+            {/* 👇 Cursos Verano - con texto (por ahora) */}
             {isAdmin && (
               <Link
                 to="/cursos-verano"
@@ -214,6 +221,7 @@ export function Header() {
                 Cursos Verano
               </Link>
             )}
+
             {/* ✅ NUEVO: Consulta de Inscripciones - SOLO ICONO */}
             {isAdmin && (
               <Link
@@ -231,7 +239,7 @@ export function Header() {
           </nav>
         </div>
 
-        {/* Área de usuario - SIN CAMPANA DE NOTIFICACIONES */}
+        {/* Área de usuario */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="flex items-center gap-2 pl-1">
             <div className="flex flex-col items-end">
