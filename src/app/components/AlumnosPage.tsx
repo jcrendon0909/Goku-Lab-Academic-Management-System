@@ -63,7 +63,17 @@ export function AlumnosPage() {
 
   const [todosLosGrupos, setTodosLosGrupos] = useState<Grupo[]>([]);
   const [showInscripcionForm, setShowInscripcionForm] = useState(false);
-  const [alumnoParaInscripcion, setAlumnoParaInscripcion] = useState<{ idAlumno: string; nombreAlumno: string; telefono?: string; email?: string; fechaNacimiento?: string; tutor?: string; descuento?: number; notasInternas?: string; observaciones?: string } | null>(null);
+  const [alumnoParaInscripcion, setAlumnoParaInscripcion] = useState<{ 
+    idAlumno: string; 
+    nombreAlumno: string; 
+    telefono?: string; 
+    email?: string; 
+    fechaNacimiento?: string; 
+    tutor?: string; 
+    descuento?: number; 
+    notasInternas?: string; 
+    observaciones?: string 
+  } | null>(null);
 
   const [alumnoDraft, setAlumnoDraft] = useState<Record<string, Partial<Alumno>>>({});
   const [guardandoAlumno, setGuardandoAlumno] = useState<Record<string, boolean>>({});
@@ -118,6 +128,19 @@ export function AlumnosPage() {
       toast.error('Error al cargar inscripciones');
     } finally {
       setCargandoInscripciones(prev => ({ ...prev, [idAlumno]: false }));
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: recargar inscripciones de un alumno específico
+  const recargarInscripcionesAlumno = async (idAlumno: string) => {
+    try {
+      const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
+      if (!res.ok) throw new Error('Error al recargar inscripciones');
+      const data = await res.json();
+      setInscripciones(prev => ({ ...prev, [idAlumno]: data }));
+    } catch (error) {
+      toast.error('Error al recargar inscripciones');
+      console.error(error);
     }
   };
 
@@ -323,22 +346,13 @@ export function AlumnosPage() {
 
   const decorativeVideos: { src: string; position: any }[] = [];
 
-  const getModalidadColor = (modalidad: string) => {
-    const colors = {
-      'presencial': 'border-l-[#26AAA3]',
-      'en línea': 'border-l-[#67A934]',
-      'mixta': 'border-l-[#F8B50E]',
-    };
-    return colors[modalidad as keyof typeof colors] || 'border-l-gray-400';
-  };
-
   return (
     <>
       <BackgroundVideo 
         videoSrc="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4" 
         decorativeVideos={decorativeVideos}
       >
-        {/* Contenedor principal - margen superior de 3cm (30px) debajo del header */}
+        {/* Contenedor principal alineado con header */}
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
           {/* Cabecera */}
           <div className="flex flex-col md:flex-row items-center justify-between mb-3 gap-2 flex-shrink-0">
@@ -378,7 +392,7 @@ export function AlumnosPage() {
             </div>
           </div>
 
-          {/* Tabla - altura h-[60vh] para mostrar ~16 alumnos */}
+          {/* Tabla */}
           <div className="bg-white/60 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-white/20 flex-1 flex flex-col min-h-0 h-[60vh]">
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full table-auto divide-y divide-gray-200 text-sm">
@@ -540,6 +554,14 @@ export function AlumnosPage() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                       {activas.map((ins) => {
                                         const grupoInfo = obtenerInfoGrupo(ins.grupoId);
+                                        const getModalidadColor = (modalidad: string) => {
+                                          const colors = {
+                                            'presencial': 'border-l-[#26AAA3]',
+                                            'en línea': 'border-l-[#67A934]',
+                                            'mixta': 'border-l-[#F8B50E]',
+                                          };
+                                          return colors[modalidad as keyof typeof colors] || 'border-l-gray-400';
+                                        };
                                         const colorBorder = getModalidadColor(ins.modalidad);
                                         return (
                                           <div 
@@ -668,13 +690,21 @@ export function AlumnosPage() {
         </div>
       </BackgroundVideo>
 
-      {/* Modal del formulario de inscripción */}
+      {/* Modal del formulario de inscripción - MODIFICADO */}
       {showInscripcionForm && (
         <InscripcionForm
           onClose={() => setShowInscripcionForm(false)}
           onSuccess={() => {
+            // ✅ Recargar la lista de alumnos (para actualizar el contador de cursos activos)
             cargarAlumnos();
-            setInscripciones({});
+            
+            // ✅ Recargar las inscripciones del alumno que acaba de ser inscrito
+            if (alumnoParaInscripcion?.idAlumno) {
+              recargarInscripcionesAlumno(alumnoParaInscripcion.idAlumno);
+            }
+            
+            // ✅ Limpiar el estado del alumno seleccionado
+            setAlumnoParaInscripcion(null);
           }}
           alumnoInicial={alumnoParaInscripcion || undefined}
         />
