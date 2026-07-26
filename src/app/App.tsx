@@ -22,6 +22,8 @@ import { CursoVeranoForm } from './components/CursoVeranoForm';
 import { CursoVeranoDetalle } from './components/CursoVeranoDetalle';
 import { RentabilidadCursoVerano } from './components/RentabilidadCursoVerano';
 import { ConsultaInscripciones } from './components/ConsultaInscripciones';
+// ✅ NUEVO: Importar el editor de inscripciones
+import { EditorInscripciones } from './components/EditorInscripciones';
 
 export const router = createBrowserRouter([
   {
@@ -61,6 +63,8 @@ export const router = createBrowserRouter([
       { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
       // ✅ Ruta para consulta de inscripciones (solo admin)
       { path: '/inscripciones-consulta', element: <ConsultaInscripciones /> },
+      // ✅ NUEVO: Ruta para el editor de inscripciones (solo admin)
+      { path: '/admin/editor-inscripciones', element: <EditorInscripciones /> },
     ],
   },
 ]);

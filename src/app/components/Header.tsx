@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
   Laptop, LogOut, LayoutDashboard, Calendar, Users, 
   DollarSign, BarChart, BookOpen, ClipboardCheck, UserCog, 
-  Users2, Repeat, LineChart, Sun, Eye
+  Users2, Repeat, LineChart, Sun, Eye, Edit2  // ✅ Agregar Edit2
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -177,7 +177,7 @@ export function Header() {
               Calendario
             </Link>
 
-            {/* 👇 Reagendaciones - SOLO ICONO */}
+            {/* 👇 Reagendaciones - SOLO ICONO (sin texto) */}
             {isAdmin && (
               <Link
                 to="/reschedule"
@@ -192,7 +192,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* 👇 Usuarios - SOLO ICONO */}
+            {/* 👇 Usuarios - SOLO ICONO (sin texto) */}
             {isAdmin && (
               <Link
                 to="/admin/usuarios"
@@ -234,6 +234,21 @@ export function Header() {
                 title="Inscripciones"
               >
                 <Eye className="w-3 h-3" />
+              </Link>
+            )}
+
+            {/* ✅ NUEVO: Editor de Inscripciones - SOLO ICONO */}
+            {isAdmin && (
+              <Link
+                to="/admin/editor-inscripciones"
+                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
+                  isActive('/admin/editor-inscripciones')
+                    ? 'text-[#26AAA3] font-bold'
+                    : 'text-gray-500 hover:text-[#26AAA3]'
+                }`}
+                title="Editor de Inscripciones"
+              >
+                <Edit2 className="w-3 h-3" />
               </Link>
             )}
           </nav>

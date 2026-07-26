@@ -55,6 +55,10 @@ console.log("  ✅ asistenciaRoutes importado");
 import cursosVeranoRoutes from "./routes/cursosVerano.js";
 console.log("  ✅ cursosVeranoRoutes importado");
 
+// ✅ NUEVO: Importar rutas de administración
+import adminRoutes from "./routes/admin.js";
+console.log("  ✅ adminRoutes importado");
+
 // ============================================================
 // WHATSAPP Y CRON (opcional)
 // ============================================================
@@ -153,6 +157,10 @@ console.log("  ✅ /asistencia montada");
 
 app.use("/cursos-verano", cursosVeranoRoutes);
 console.log("  ✅ /cursos-verano montada");
+
+// ✅ NUEVO: Montar rutas de administración
+app.use("/admin", adminRoutes);
+console.log("  ✅ /admin montada");
 
 // ============================================================
 // RUTAS ADICIONALES
