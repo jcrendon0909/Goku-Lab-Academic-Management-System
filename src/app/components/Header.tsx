@@ -177,7 +177,7 @@ export function Header() {
               Calendario
             </Link>
 
-            {/* 👇 Reagendaciones - SOLO ICONO (sin texto) */}
+            {/* 👇 Reagendaciones - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/reschedule"
@@ -192,7 +192,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* 👇 Usuarios - SOLO ICONO (sin texto) */}
+            {/* 👇 Usuarios - SOLO ICONO */}
             {isAdmin && (
               <Link
                 to="/admin/usuarios"
@@ -207,7 +207,7 @@ export function Header() {
               </Link>
             )}
 
-            {/* 👇 Cursos Verano - con texto (por ahora) */}
+            {/* 👇 Cursos Verano - SOLO ICONO (sin texto) */}
             {isAdmin && (
               <Link
                 to="/cursos-verano"
@@ -216,9 +216,9 @@ export function Header() {
                     ? 'text-[#26AAA3] font-bold'
                     : 'text-gray-500 hover:text-[#26AAA3]'
                 }`}
+                title="Cursos Verano"
               >
                 <Sun className="w-3 h-3" />
-                Cursos Verano
               </Link>
             )}
 
