@@ -18,9 +18,10 @@ import { ReporteCobranza } from './components/ReporteCobranza';
 import { GruposPage } from './components/GruposPage';
 import { AsistenciaPage } from './components/AsistenciaPage';
 import { CursosVeranoPage } from './components/CursosVeranoPage';
-import { CursoVeranoForm } from './components/CursoVeranoForm'; // 👈 NUEVA IMPORTACIÓN
+import { CursoVeranoForm } from './components/CursoVeranoForm';
 import { CursoVeranoDetalle } from './components/CursoVeranoDetalle';
 import { RentabilidadCursoVerano } from './components/RentabilidadCursoVerano';
+import { ConsultaInscripciones } from './components/ConsultaInscripciones';
 
 export const router = createBrowserRouter([
   {
@@ -58,7 +59,8 @@ export const router = createBrowserRouter([
       { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
       { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
-      { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
+      // ✅ Ruta para consulta de inscripciones (solo admin)
+      { path: '/inscripciones-consulta', element: <ConsultaInscripciones /> },
     ],
   },
 ]);

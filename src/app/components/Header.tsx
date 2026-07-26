@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
   Laptop, LogOut, LayoutDashboard, Calendar, Users, 
   DollarSign, BarChart, BookOpen, ClipboardCheck, UserCog, 
-  Users2, Repeat, LineChart, Sun
+  Users2, Repeat, LineChart, Sun, Eye  // ✅ Agregamos Eye
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -212,6 +212,20 @@ export function Header() {
               >
                 <Sun className="w-3 h-3" />
                 Cursos Verano
+              </Link>
+            )}
+            {/* ✅ NUEVO: Consulta de Inscripciones - SOLO ICONO */}
+            {isAdmin && (
+              <Link
+                to="/inscripciones-consulta"
+                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
+                  isActive('/inscripciones-consulta')
+                    ? 'text-[#26AAA3] font-bold'
+                    : 'text-gray-500 hover:text-[#26AAA3]'
+                }`}
+                title="Inscripciones"
+              >
+                <Eye className="w-3 h-3" />
               </Link>
             )}
           </nav>
