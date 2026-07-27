@@ -50,6 +50,17 @@ export function CursoVeranoDetalle() {
   const [mostrarFormInscripcion, setMostrarFormInscripcion] = useState(false);
   const [asignacionEditando, setAsignacionEditando] = useState<Asignacion | null>(null);
 
+  // Estados para edición inline de inscripciones
+  const [inscripcionEditando, setInscripcionEditando] = useState<string | null>(null);
+  const [formularioInscripcion, setFormularioInscripcion] = useState({
+    nombreAlumno: '',
+    montoPago: 0,
+    semanasPagadas: 0,
+    fechaInicio: '',
+    fechaFin: '',
+    notas: ''
+  });
+
   const cargarDatos = async () => {
     if (!id) return;
     try {
@@ -113,6 +124,46 @@ export function CursoVeranoDetalle() {
     }
   };
 
+  // === Funciones para edición inline de inscripciones ===
+  const iniciarEdicionInscripcion = (inscripcion: Inscripcion) => {
+    setInscripcionEditando(inscripcion._id);
+    // Convertir fechas a formato YYYY-MM-DD sin desfase horario
+    const fechaInicio = inscripcion.fechaInicio ? new Date(inscripcion.fechaInicio) : null;
+    const fechaFin = inscripcion.fechaFin ? new Date(inscripcion.fechaFin) : null;
+    setFormularioInscripcion({
+      nombreAlumno: inscripcion.nombreAlumno || '',
+      montoPago: inscripcion.montoPago || 0,
+      semanasPagadas: inscripcion.semanasPagadas || 0,
+      fechaInicio: fechaInicio ? fechaInicio.toISOString().split('T')[0] : '',
+      fechaFin: fechaFin ? fechaFin.toISOString().split('T')[0] : '',
+      notas: inscripcion.notas || ''
+    });
+  };
+
+  const guardarInscripcion = async () => {
+    try {
+      const res = await apiFetch(`/cursos-verano/inscripciones/${inscripcionEditando}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formularioInscripcion)
+      });
+      if (!res.ok) throw new Error('Error al actualizar');
+      toast.success('Inscripción actualizada');
+      setInscripcionEditando(null);
+      cargarDatos();
+    } catch (error) {
+      toast.error('Error al guardar cambios');
+      console.error(error);
+    }
+  };
+
+  // Formateo de fecha sin desfase
+  const formatFechaLocal = (fecha: string) => {
+    if (!fecha) return '';
+    const date = new Date(fecha);
+    return date.toLocaleDateString('es-MX', { timeZone: 'UTC' });
+  };
+
   // ✅ Eliminar videos decorativos - array vacío
   const decorativeVideos: { src: string; position: any }[] = [];
 
@@ -126,8 +177,8 @@ export function CursoVeranoDetalle() {
 
   return (
     <BackgroundVideo
-      videoSrc="https://media.gokulab.mx/Galery/videos/codyanimado.mp4"  // ✅ Nuevo video de fondo
-      decorativeVideos={decorativeVideos}  // ✅ Sin videos decorativos
+      videoSrc="https://media.gokulab.mx/Galery/videos/codyanimado.mp4"
+      decorativeVideos={decorativeVideos}
     >
       <div className="p-4 md:p-6 w-full max-w-5xl mx-auto">
         <Link
@@ -147,7 +198,7 @@ export function CursoVeranoDetalle() {
                 {curso.modalidad === 'verano' ? '☀️ Verano' : '🌊 Preverano'} - {curso.año}
               </p>
               <p className="text-sm text-gray-600">
-                📅 {new Date(curso.fechaInicio).toLocaleDateString()} - {new Date(curso.fechaFin).toLocaleDateString()}
+                📅 {new Date(curso.fechaInicio).toLocaleDateString('es-MX')} - {new Date(curso.fechaFin).toLocaleDateString('es-MX')}
               </p>
               <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${
                 curso.estatus === 'activo' ? 'bg-green-100 text-green-700' :
@@ -231,7 +282,7 @@ export function CursoVeranoDetalle() {
             </div>
           )}
 
-          {/* Alumnos inscritos */}
+          {/* Alumnos inscritos con edición inline */}
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -265,23 +316,106 @@ export function CursoVeranoDetalle() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {inscripciones.map((ins) => (
-                      <tr key={ins._id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{ins.nombreAlumno}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">${ins.montoPago}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{ins.semanasPagadas}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{new Date(ins.fechaInicio).toLocaleDateString()}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{new Date(ins.fechaFin).toLocaleDateString()}</td>
-                        <td className="px-4 py-2 text-right text-sm">
-                          <button
-                            onClick={() => eliminarInscripcion(ins._id)}
-                            className="text-red-600 hover:text-red-800 transition"
-                          >
-                            <Trash2 className="h-4 w-4 inline" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {inscripciones.map((ins) => {
+                      const esEditando = inscripcionEditando === ins._id;
+                      return (
+                        <tr key={ins._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 text-sm">
+                            {esEditando ? (
+                              <input
+                                type="text"
+                                value={formularioInscripcion.nombreAlumno}
+                                onChange={(e) => setFormularioInscripcion({...formularioInscripcion, nombreAlumno: e.target.value})}
+                                className="border rounded px-2 py-1 w-full text-sm"
+                              />
+                            ) : (
+                              <span className="font-medium text-gray-900">{ins.nombreAlumno}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {esEditando ? (
+                              <input
+                                type="number"
+                                value={formularioInscripcion.montoPago}
+                                onChange={(e) => setFormularioInscripcion({...formularioInscripcion, montoPago: Number(e.target.value)})}
+                                className="border rounded px-2 py-1 w-24 text-sm"
+                              />
+                            ) : (
+                              <span className="text-gray-600">${ins.montoPago}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {esEditando ? (
+                              <input
+                                type="number"
+                                value={formularioInscripcion.semanasPagadas}
+                                onChange={(e) => setFormularioInscripcion({...formularioInscripcion, semanasPagadas: Number(e.target.value)})}
+                                className="border rounded px-2 py-1 w-16 text-sm"
+                              />
+                            ) : (
+                              <span className="text-gray-600">{ins.semanasPagadas}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {esEditando ? (
+                              <input
+                                type="date"
+                                value={formularioInscripcion.fechaInicio}
+                                onChange={(e) => setFormularioInscripcion({...formularioInscripcion, fechaInicio: e.target.value})}
+                                className="border rounded px-2 py-1 text-sm"
+                              />
+                            ) : (
+                              <span className="text-gray-600">{formatFechaLocal(ins.fechaInicio)}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {esEditando ? (
+                              <input
+                                type="date"
+                                value={formularioInscripcion.fechaFin}
+                                onChange={(e) => setFormularioInscripcion({...formularioInscripcion, fechaFin: e.target.value})}
+                                className="border rounded px-2 py-1 text-sm"
+                              />
+                            ) : (
+                              <span className="text-gray-600">{formatFechaLocal(ins.fechaFin)}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right text-sm space-x-2">
+                            {esEditando ? (
+                              <>
+                                <button
+                                  onClick={guardarInscripcion}
+                                  className="text-green-600 hover:text-green-800 font-medium"
+                                >
+                                  💾 Guardar
+                                </button>
+                                <button
+                                  onClick={() => setInscripcionEditando(null)}
+                                  className="text-gray-500 hover:text-gray-700"
+                                >
+                                  ✖ Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => iniciarEdicionInscripcion(ins)}
+                                  className="text-blue-600 hover:text-blue-800 font-medium mr-2"
+                                >
+                                  ✏️ Editar
+                                </button>
+                                <button
+                                  onClick={() => eliminarInscripcion(ins._id)}
+                                  className="text-red-600 hover:text-red-800 transition"
+                                >
+                                  <Trash2 className="h-4 w-4 inline" />
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
