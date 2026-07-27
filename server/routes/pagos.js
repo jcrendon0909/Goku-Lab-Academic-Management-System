@@ -12,6 +12,10 @@ import {
 
 const router = express.Router();
 
+// ============================================================
+// FUNCIÓN PARA SINCRONIZAR PAGOS DESDE INSCRIPCIONES
+// (ACTUALIZADA PARA ACTUALIZAR PAGOS EXISTENTES)
+// ============================================================
 async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
         estatus: { $ne: "Baja" },
@@ -33,25 +37,32 @@ async function sincronizarPagosDesdeInscripciones() {
         if (!idAlumno || !grupoId) continue;
 
         const pagoId = crearPagoId(idAlumno, grupoId);
-        const existe = await Pago.findOne({ pagoId }).lean();
-        if (existe) continue;
-
         const grupo = gruposMap.get(grupoId.toUpperCase());
-        await crearOActualizarPagoDeInscripcion({
-            idAlumno,
-            nombreAlumno: ins.nombreAlumno || idAlumno,
-            grupoId,
-            nombreCurso: grupo?.nombreCurso || "Curso",
-            datosPago: {
-                montoMensualidad: Number(ins.montoMensualidad),
-                diaPago: Number(ins.diaPago) || 1,
-                fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
-                comentarios: ins.comentarios || "",
+
+        // ✅ ACTUALIZAR O CREAR (upsert) para mantener consistencia
+        await Pago.updateOne(
+            { pagoId },
+            {
+                $set: {
+                    idAlumno,
+                    nombreAlumno: ins.nombreAlumno || idAlumno,
+                    grupoId,
+                    nombreCurso: grupo?.nombreCurso || "Curso",
+                    diaPago: Number(ins.diaPago) || 1,
+                    montoPago: Number(ins.montoMensualidad),
+                    fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
+                    activo: true,
+                    fechaBaja: null,
+                },
             },
-        });
+            { upsert: true }
+        );
     }
 }
 
+// ============================================================
+// GET /lista-completa - CON FILTRO DE PAGOS ACTIVOS
+// ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
         await sincronizarPagosDesdeInscripciones();
@@ -59,6 +70,12 @@ router.get("/lista-completa", async (req, res) => {
         const hoy = new Date();
 
         const respuestaProcesada = await Pago.aggregate([
+            // 🔥 CORRECCIÓN: FILTRAR SOLO PAGOS ACTIVOS
+            {
+                $match: {
+                    activo: true,
+                },
+            },
             {
                 $lookup: {
                     from: "abonos",
@@ -163,8 +180,6 @@ router.get("/lista-completa", async (req, res) => {
             const fechaInicio = p.fechaPago ? new Date(p.fechaPago) : null;
             const programado = fechaInicio && cobroAunNoInicia(fechaInicio, hoy);
 
-            // AQUÍ ESTABA EL ERROR: Cambiamos mesesFuturosVisibles de 0 a 3
-            // Esto permite que el dinero sobrante fluya hacia Julio, Agosto y Septiembre
             const periodosMensuales = construirPeriodosMensuales({
                 fechaInicioCobro: fechaInicio,
                 diaPagoFijo: diaPago,
@@ -221,8 +236,32 @@ router.get("/lista-completa", async (req, res) => {
     }
 });
 
+// ============================================================
+// PATCH /actualizar-dia/:id - (SIN CAMBIOS)
+// ============================================================
 router.patch("/actualizar-dia/:id", async (req, res) => {
-    // ... (Se mantiene intacto tu código de actualizar día) ...
+    try {
+        const { id } = req.params;
+        const { nuevoDia } = req.body;
+
+        if (!nuevoDia || nuevoDia < 1 || nuevoDia > 31) {
+            return res.status(400).json({ error: "Día de pago inválido (debe ser 1-31)" });
+        }
+
+        const pago = await Pago.findOne({ pagoId: id });
+        if (!pago) {
+            return res.status(404).json({ error: "Pago no encontrado" });
+        }
+
+        pago.diaPago = nuevoDia;
+        pago.updatedAt = new Date();
+        await pago.save();
+
+        res.json({ ok: true, mensaje: "Día de pago actualizado", data: pago });
+    } catch (error) {
+        console.error("Error PATCH /actualizar-dia:", error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 export default router;
