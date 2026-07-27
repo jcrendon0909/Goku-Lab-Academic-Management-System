@@ -71,7 +71,7 @@ export function PagosPage() {
                             };
                         }
                         // Sumamos la tarifa requerida de este mes para todas sus materias
-                        alum.periodosMap[mesKey].monto += (Number(mes.monto) || 0);
+                        alum.periodosMap[mesKey].monto = (Number(mes.monto) || 0);
                     });
                 });
 
