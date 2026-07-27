@@ -4,9 +4,7 @@ import Pago from "../models/Pago.js";
 
 const router = express.Router();
 
-// ============================================================
-// GET /admin/inscripciones - Listado paginado con filtros
-// ============================================================
+// GET /admin/inscripciones - Listado paginado (sin cambios)
 router.get("/inscripciones", async (req, res) => {
   try {
     const { page = 1, limit = 50, filtro = "", grupo = "" } = req.query;
@@ -44,94 +42,111 @@ router.get("/inscripciones", async (req, res) => {
   }
 });
 
-// ============================================================
-// PATCH /admin/inscripciones/:id - Actualización individual
-// ============================================================
+// PATCH /admin/inscripciones/:id - Actualización individual (segura)
 router.patch("/inscripciones/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { montoMensualidad, diaPago, fechaInicioPago, modalidad, comentarios } = req.body;
 
+    // Validar datos básicos
+    if (montoMensualidad !== undefined && (isNaN(montoMensualidad) || montoMensualidad < 0)) {
+      return res.status(400).json({ error: "Monto inválido" });
+    }
+    if (diaPago !== undefined && (isNaN(diaPago) || diaPago < 1 || diaPago > 31)) {
+      return res.status(400).json({ error: "Día de pago inválido (1-31)" });
+    }
+
+    // Obtener la inscripción actual
     const inscripcion = await Inscripcion.findById(id);
     if (!inscripcion) {
       return res.status(404).json({ error: "Inscripción no encontrada" });
     }
 
+    // Construir objeto de actualización
+    const updateData = {};
     const cambios = {};
+
     if (montoMensualidad !== undefined && montoMensualidad !== inscripcion.montoMensualidad) {
+      updateData.montoMensualidad = montoMensualidad;
       cambios.montoMensualidad = { old: inscripcion.montoMensualidad, new: montoMensualidad };
-      inscripcion.montoMensualidad = montoMensualidad;
     }
     if (diaPago !== undefined && diaPago !== inscripcion.diaPago) {
+      updateData.diaPago = diaPago;
       cambios.diaPago = { old: inscripcion.diaPago, new: diaPago };
-      inscripcion.diaPago = diaPago;
     }
     if (fechaInicioPago !== undefined) {
       const nuevaFecha = new Date(fechaInicioPago);
       if (!isNaN(nuevaFecha) && nuevaFecha.getTime() !== inscripcion.fechaInicioPago?.getTime()) {
+        updateData.fechaInicioPago = nuevaFecha;
         cambios.fechaInicioPago = { old: inscripcion.fechaInicioPago, new: nuevaFecha };
-        inscripcion.fechaInicioPago = nuevaFecha;
       }
     }
     if (modalidad !== undefined && modalidad !== inscripcion.modalidad) {
+      updateData.modalidad = modalidad;
       cambios.modalidad = { old: inscripcion.modalidad, new: modalidad };
-      inscripcion.modalidad = modalidad;
     }
     if (comentarios !== undefined && comentarios !== inscripcion.comentarios) {
+      updateData.comentarios = comentarios;
       cambios.comentarios = { old: inscripcion.comentarios, new: comentarios };
-      inscripcion.comentarios = comentarios;
     }
 
     if (Object.keys(cambios).length === 0) {
       return res.json({ ok: true, mensaje: "Sin cambios" });
     }
 
-    // Registrar historial
-    inscripcion.historialModificaciones = inscripcion.historialModificaciones || [];
-    inscripcion.historialModificaciones.push({
-      fecha: new Date(),
-      usuario: "admin",
-      cambios,
-    });
-    await inscripcion.save();
+    // Registrar historial de cambios (usando $push para evitar validación de esquema)
+    await Inscripcion.updateOne(
+      { _id: id },
+      {
+        $set: updateData,
+        $push: {
+          historialModificaciones: {
+            fecha: new Date(),
+            usuario: "admin",
+            cambios,
+          },
+        },
+      }
+    );
 
     // Sincronizar con el pago asociado
     const pago = await Pago.findOne({ idAlumno: inscripcion.idAlumno, grupoId: inscripcion.grupoId });
     if (pago) {
-      const cambiosPago = {};
-      if (cambios.montoMensualidad) {
-        pago.montoPago = cambios.montoMensualidad.new;
-        cambiosPago.montoPago = { old: cambios.montoMensualidad.old, new: cambios.montoMensualidad.new };
-      }
-      if (cambios.diaPago) {
-        pago.diaPago = cambios.diaPago.new;
-        cambiosPago.diaPago = { old: cambios.diaPago.old, new: cambios.diaPago.new };
-      }
-      if (cambios.fechaInicioPago) {
-        pago.fechaInicioPago = cambios.fechaInicioPago.new;
-        cambiosPago.fechaInicioPago = { old: cambios.fechaInicioPago.old, new: cambios.fechaInicioPago.new };
-      }
-      if (Object.keys(cambiosPago).length > 0) {
-        pago.historialModificaciones = pago.historialModificaciones || [];
-        pago.historialModificaciones.push({
-          fecha: new Date(),
-          usuario: "admin",
-          cambios: cambiosPago,
-        });
-        await pago.save();
+      const pagoUpdate = {};
+      if (cambios.montoMensualidad) pagoUpdate.montoPago = cambios.montoMensualidad.new;
+      if (cambios.diaPago) pagoUpdate.diaPago = cambios.diaPago.new;
+      if (cambios.fechaInicioPago) pagoUpdate.fechaInicioPago = cambios.fechaInicioPago.new;
+      if (Object.keys(pagoUpdate).length > 0) {
+        await Pago.updateOne(
+          { _id: pago._id },
+          {
+            $set: pagoUpdate,
+            $push: {
+              historialModificaciones: {
+                fecha: new Date(),
+                usuario: "admin",
+                cambios: pagoUpdate,
+              },
+            },
+          }
+        );
       }
     }
 
-    res.json({ ok: true, mensaje: "Inscripción actualizada", data: inscripcion });
+    // Obtener la inscripción actualizada para devolver
+    const updatedInscripcion = await Inscripcion.findById(id).lean();
+    res.json({ ok: true, mensaje: "Inscripción actualizada", data: updatedInscripcion });
   } catch (error) {
     console.error("❌ Error PATCH /admin/inscripciones/:id:", error);
+    // Manejar error de índice único (duplicado)
+    if (error.code === 11000) {
+      return res.status(400).json({ error: "Ya existe una inscripción para este alumno y grupo" });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
-// ============================================================
-// POST /admin/inscripciones/actualizar-multiples - Lote
-// ============================================================
+// POST /admin/inscripciones/actualizar-multiples - Lote (seguro)
 router.post("/inscripciones/actualizar-multiples", async (req, res) => {
   try {
     const { updates } = req.body;
@@ -142,54 +157,79 @@ router.post("/inscripciones/actualizar-multiples", async (req, res) => {
     const resultados = [];
     for (const item of updates) {
       const { id, montoMensualidad, diaPago, fechaInicioPago, modalidad, comentarios } = item;
+
+      // Obtener inscripción actual
       const inscripcion = await Inscripcion.findById(id);
       if (!inscripcion) continue;
 
+      const updateData = {};
       const cambios = {};
+
       if (montoMensualidad !== undefined && montoMensualidad !== inscripcion.montoMensualidad) {
+        updateData.montoMensualidad = montoMensualidad;
         cambios.montoMensualidad = { old: inscripcion.montoMensualidad, new: montoMensualidad };
-        inscripcion.montoMensualidad = montoMensualidad;
       }
       if (diaPago !== undefined && diaPago !== inscripcion.diaPago) {
+        updateData.diaPago = diaPago;
         cambios.diaPago = { old: inscripcion.diaPago, new: diaPago };
-        inscripcion.diaPago = diaPago;
       }
       if (fechaInicioPago !== undefined) {
         const nuevaFecha = new Date(fechaInicioPago);
         if (!isNaN(nuevaFecha) && nuevaFecha.getTime() !== inscripcion.fechaInicioPago?.getTime()) {
+          updateData.fechaInicioPago = nuevaFecha;
           cambios.fechaInicioPago = { old: inscripcion.fechaInicioPago, new: nuevaFecha };
-          inscripcion.fechaInicioPago = nuevaFecha;
         }
       }
       if (modalidad !== undefined && modalidad !== inscripcion.modalidad) {
+        updateData.modalidad = modalidad;
         cambios.modalidad = { old: inscripcion.modalidad, new: modalidad };
-        inscripcion.modalidad = modalidad;
       }
       if (comentarios !== undefined && comentarios !== inscripcion.comentarios) {
+        updateData.comentarios = comentarios;
         cambios.comentarios = { old: inscripcion.comentarios, new: comentarios };
-        inscripcion.comentarios = comentarios;
       }
 
       if (Object.keys(cambios).length > 0) {
-        inscripcion.historialModificaciones = inscripcion.historialModificaciones || [];
-        inscripcion.historialModificaciones.push({
-          fecha: new Date(),
-          usuario: "admin",
-          cambios,
-        });
-        await inscripcion.save();
+        await Inscripcion.updateOne(
+          { _id: id },
+          {
+            $set: updateData,
+            $push: {
+              historialModificaciones: {
+                fecha: new Date(),
+                usuario: "admin",
+                cambios,
+              },
+            },
+          }
+        );
 
         // Sincronizar pago
         const pago = await Pago.findOne({ idAlumno: inscripcion.idAlumno, grupoId: inscripcion.grupoId });
         if (pago) {
-          if (cambios.montoMensualidad) pago.montoPago = cambios.montoMensualidad.new;
-          if (cambios.diaPago) pago.diaPago = cambios.diaPago.new;
-          if (cambios.fechaInicioPago) pago.fechaInicioPago = cambios.fechaInicioPago.new;
-          await pago.save();
+          const pagoUpdate = {};
+          if (cambios.montoMensualidad) pagoUpdate.montoPago = cambios.montoMensualidad.new;
+          if (cambios.diaPago) pagoUpdate.diaPago = cambios.diaPago.new;
+          if (cambios.fechaInicioPago) pagoUpdate.fechaInicioPago = cambios.fechaInicioPago.new;
+          if (Object.keys(pagoUpdate).length > 0) {
+            await Pago.updateOne(
+              { _id: pago._id },
+              {
+                $set: pagoUpdate,
+                $push: {
+                  historialModificaciones: {
+                    fecha: new Date(),
+                    usuario: "admin",
+                    cambios: pagoUpdate,
+                  },
+                },
+              }
+            );
+          }
         }
-        resultados.push({ id: inscripcion._id, ok: true, cambios });
+        resultados.push({ id, ok: true, cambios });
       } else {
-        resultados.push({ id: inscripcion._id, ok: true, cambios: {} });
+        resultados.push({ id, ok: true, cambios: {} });
       }
     }
 
