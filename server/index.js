@@ -2,9 +2,6 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
-import pagosProfesoresRoutes from './routes/pagosProfesores.js';
-// ...
-app.use('/pagos-profesores', pagosProfesoresRoutes);
 
 console.log("🔍 [1] Iniciando servidor...");
 
@@ -58,9 +55,12 @@ console.log("  ✅ asistenciaRoutes importado");
 import cursosVeranoRoutes from "./routes/cursosVerano.js";
 console.log("  ✅ cursosVeranoRoutes importado");
 
-// ✅ NUEVO: Importar rutas de administración
 import adminRoutes from "./routes/admin.js";
 console.log("  ✅ adminRoutes importado");
+
+// ✅ NUEVO: Importar rutas de pagos a profesores
+import pagosProfesoresRoutes from "./routes/pagosProfesores.js";
+console.log("  ✅ pagosProfesoresRoutes importado");
 
 // ============================================================
 // WHATSAPP Y CRON (opcional)
@@ -161,9 +161,12 @@ console.log("  ✅ /asistencia montada");
 app.use("/cursos-verano", cursosVeranoRoutes);
 console.log("  ✅ /cursos-verano montada");
 
-// ✅ NUEVO: Montar rutas de administración
 app.use("/admin", adminRoutes);
 console.log("  ✅ /admin montada");
+
+// ✅ NUEVO: Montar rutas de pagos a profesores
+app.use("/pagos-profesores", pagosProfesoresRoutes);
+console.log("  ✅ /pagos-profesores montada");
 
 // ============================================================
 // RUTAS ADICIONALES
