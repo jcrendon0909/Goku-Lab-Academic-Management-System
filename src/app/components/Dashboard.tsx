@@ -207,7 +207,11 @@ export function Dashboard() {
               color="from-yellow-400 to-orange-500"
               emoji="🏖️"
             />
-
+            <Link to="/gastos" className="...">
+            <DollarSign className="h-8 w-8 text-red-500 mb-3" />
+            <h3 className="text-lg font-semibold text-gray-800">Gastos</h3>
+            <p className="text-sm text-gray-500">Registrar gastos mensuales</p>
+            </Link>
           </div>
 
           {/* Mensaje para profesores */}

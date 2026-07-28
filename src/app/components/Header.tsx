@@ -1,7 +1,15 @@
 import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { LogOut } from "lucide-react"; // Solo mantenemos LogOut de lucide
+import { LogOut, Home, Users, BookOpen, UserCog, Calendar, Repeat, Sun, Eye, Edit2, DollarSign, BarChart, LineChart, ClipboardCheck, CreditCard } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+
+interface NavItem {
+  path: string;
+  icon: React.ReactNode;
+  label: string;
+  adminOnly?: boolean;
+  category?: 'academic' | 'finance' | 'admin' | 'general';
+}
 
 export function Header() {
   const navigate = useNavigate();
@@ -26,16 +34,42 @@ export function Header() {
     return location.pathname.startsWith(path);
   };
 
-  // Función para estilizar el enlace activo
-  const linkClass = (path: string) => `
-    text-xs font-medium transition-all duration-200 flex items-center gap-1 whitespace-nowrap
-    ${isActive(path) 
-      ? 'text-[#26AAA3] font-bold scale-110' 
-      : 'text-gray-500 hover:text-[#26AAA3] hover:scale-110'}
-  `;
+  // Definición de navegación con categorías
+  const navItems: NavItem[] = [
+    // General
+    { path: '/dashboard', icon: <Home className="w-4 h-4" />, label: 'Panel', category: 'general' },
+    
+    // Académico
+    { path: '/alumnos', icon: <Users className="w-4 h-4" />, label: 'Alumnos', category: 'academic' },
+    { path: '/grupos', icon: <BookOpen className="w-4 h-4" />, label: 'Grupos', category: 'academic' },
+    { path: '/cursos', icon: <BookOpen className="w-4 h-4" />, label: 'Cursos', category: 'academic', adminOnly: true },
+    { path: '/maestros', icon: <UserCog className="w-4 h-4" />, label: 'Maestros', category: 'academic', adminOnly: true },
+    
+    // Finanzas
+    { path: '/asistencia', icon: <ClipboardCheck className="w-4 h-4" />, label: 'Asistencia', category: 'finance' },
+    { path: '/pagos', icon: <CreditCard className="w-4 h-4" />, label: 'Pagos', category: 'finance' },
+    { path: '/reportes/cobranza', icon: <BarChart className="w-4 h-4" />, label: 'Cobranza', category: 'finance', adminOnly: true },
+    { path: '/reportes/rentabilidad', icon: <LineChart className="w-4 h-4" />, label: 'Rentabilidad', category: 'finance', adminOnly: true },
+    { path: '/pagos-profesores', icon: <DollarSign className="w-4 h-4" />, label: 'Pagos Profesores', category: 'finance', adminOnly: true },
+    
+    // Administración
+    { path: '/calendario', icon: <Calendar className="w-4 h-4" />, label: 'Calendario', category: 'admin' },
+    { path: '/reschedule', icon: <Repeat className="w-4 h-4" />, label: 'Reagendaciones', category: 'admin', adminOnly: true },
+    { path: '/admin/usuarios', icon: <Users className="w-4 h-4" />, label: 'Usuarios', category: 'admin', adminOnly: true },
+    { path: '/cursos-verano', icon: <Sun className="w-4 h-4" />, label: 'Cursos Verano', category: 'admin', adminOnly: true },
+    { path: '/inscripciones-consulta', icon: <Eye className="w-4 h-4" />, label: 'Inscripciones', category: 'admin', adminOnly: true },
+    { path: '/admin/editor-inscripciones', icon: <Edit2 className="w-4 h-4" />, label: 'Editor', category: 'admin', adminOnly: true },
+  ];
+
+  // Filtrar según rol
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
+
+  // Categorías para separadores
+  const categories = ['general', 'academic', 'finance', 'admin'];
+  let lastCategory = '';
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-gray-100 flex items-center justify-center z-50 shadow-sm">
+    <header className="fixed top-0 left-0 right-0 h-12 bg-white/95 backdrop-blur-sm border-b border-gray-100 flex items-center justify-center z-50 shadow-sm">
       <div className="w-full max-w-[1440px] px-4 flex items-center justify-between">
         {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-shrink-0">
@@ -52,85 +86,45 @@ export function Header() {
           </div>
         </Link>
 
-        {/* Navegación central - con iconos divertidos */}
-        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-2">
-          <nav className="flex items-center gap-2">
-            {/* Panel */}
-            <Link to="/dashboard" className={linkClass('/dashboard')} title="Panel">
-              🚀
-            </Link>
+        {/* Navegación central */}
+        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar px-2">
+          <nav className="flex items-center gap-1">
+            {visibleItems.map((item, index) => {
+              const active = isActive(item.path);
+              const showSeparator = item.category !== lastCategory && index > 0;
+              lastCategory = item.category || '';
 
-            {/* --- Gestión Académica --- */}
-            <Link to="/alumnos" className={linkClass('/alumnos')} title="Alumnos">
-              👨‍🎓
-            </Link>
-            <Link to="/grupos" className={linkClass('/grupos')} title="Grupos">
-              📚
-            </Link>
-            {isAdmin && (
-              <Link to="/cursos" className={linkClass('/cursos')} title="Cursos">
-                📖
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/maestros" className={linkClass('/maestros')} title="Maestros">
-                🧑‍🏫
-              </Link>
-            )}
+              return (
+                <React.Fragment key={item.path}>
+                  {/* Separador entre categorías */}
+                  {showSeparator && (
+                    <span className="w-px h-6 bg-white/20 mx-1 flex-shrink-0" />
+                  )}
 
-            {/* --- Control y Finanzas --- */}
-            <Link to="/asistencia" className={linkClass('/asistencia')} title="Asistencia">
-              ✅
-            </Link>
-            <Link to="/pagos" className={linkClass('/pagos')} title="Pagos">
-              💰
-            </Link>
-            {isAdmin && (
-              <Link to="/reportes/cobranza" className={linkClass('/reportes/cobranza')} title="Cobranza">
-                📊
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/reportes/rentabilidad" className={linkClass('/reportes/rentabilidad')} title="Rentabilidad">
-                📈
-              </Link>
-            )}
-
-            {/* --- Administración --- */}
-            <Link to="/calendario" className={linkClass('/calendario')} title="Calendario">
-              📅
-            </Link>
-            {isAdmin && (
-              <Link to="/reschedule" className={linkClass('/reschedule')} title="Reagendaciones">
-                🔄
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/admin/usuarios" className={linkClass('/admin/usuarios')} title="Usuarios">
-                👥
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/cursos-verano" className={linkClass('/cursos-verano')} title="Cursos Verano">
-                ☀️
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/inscripciones-consulta" className={linkClass('/inscripciones-consulta')} title="Inscripciones">
-                👁️
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/admin/editor-inscripciones" className={linkClass('/admin/editor-inscripciones')} title="Editor Inscripciones">
-                ✏️
-              </Link>
-            )}
-            {/* ✅ NUEVO: Pagos a Profesores */}
-            {isAdmin && (
-              <Link to="/pagos-profesores" className={linkClass('/pagos-profesores')} title="Pagos a Profesores">
-                💵
-              </Link>
-            )}
+                  <Link
+                    to={item.path}
+                    className={`
+                      relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap
+                      ${active 
+                        ? 'text-[#26AAA3] bg-[#26AAA3]/10 font-bold' 
+                        : 'text-gray-500 hover:text-[#26AAA3] hover:bg-[#26AAA3]/5'
+                      }
+                    `}
+                    title={item.label}
+                  >
+                    <span className={`transition-transform duration-200 ${active ? 'scale-110' : ''}`}>
+                      {item.icon}
+                    </span>
+                    <span className="hidden sm:inline">{item.label}</span>
+                    
+                    {/* Indicador activo - subrayado animado */}
+                    {active && (
+                      <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-[#26AAA3] rounded-full animate-pulse" />
+                    )}
+                  </Link>
+                </React.Fragment>
+              );
+            })}
           </nav>
         </div>
 
@@ -141,7 +135,7 @@ export function Header() {
               <span className="text-xs font-bold text-gray-900 leading-none">{nombreUsuario}</span>
               <span className="text-[10px] text-gray-500 capitalize">{rolUsuario || 'Usuario'}</span>
             </div>
-            <div className="w-8 h-8 bg-gray-100 rounded-full border border-gray-200 overflow-hidden shadow-sm">
+            <div className="w-8 h-8 bg-gray-100 rounded-full border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               <ImageWithFallback 
                 src={fotoUrl}
                 alt="Avatar"
@@ -151,7 +145,7 @@ export function Header() {
             </div>
             <button 
               onClick={handleLogout}
-              className="ml-1 p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+              className="ml-1 p-1.5 text-gray-400 hover:text-red-500 transition-colors hover:bg-red-50 rounded-lg"
               title="Cerrar sesión"
             >
               <LogOut className="w-4 h-4" />
@@ -167,6 +161,13 @@ export function Header() {
         .hide-scrollbar {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+          animation: pulse 1.5s ease-in-out infinite;
         }
       `}</style>
     </header>

@@ -619,3 +619,43 @@ export const actualizarModalidadReagendacion = async (
   if (!res.ok) throw new Error(data.error || 'Error al actualizar modalidad');
   return data;
 };
+// ============================================================
+// GASTOS
+// ============================================================
+
+export async function getGastos(filtros?: { mes?: string; anio?: number; categoria?: string }) {
+  const params = new URLSearchParams();
+  if (filtros?.mes) params.append('mes', filtros.mes);
+  if (filtros?.anio) params.append('anio', String(filtros.anio));
+  if (filtros?.categoria) params.append('categoria', filtros.categoria);
+
+  const res = await apiFetch(`/gastos?${params.toString()}`);
+  if (!res.ok) throw new Error('Error al obtener gastos');
+  return res.json();
+}
+
+export async function crearGasto(data: any) {
+  const res = await apiFetch('/gastos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Error al crear gasto');
+  return res.json();
+}
+
+export async function actualizarGasto(id: string, data: any) {
+  const res = await apiFetch(`/gastos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Error al actualizar gasto');
+  return res.json();
+}
+
+export async function eliminarGasto(id: string) {
+  const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Error al eliminar gasto');
+  return res.json();
+}

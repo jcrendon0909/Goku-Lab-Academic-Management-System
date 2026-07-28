@@ -25,6 +25,7 @@ import { ConsultaInscripciones } from './components/ConsultaInscripciones';
 // ✅ NUEVO: Importar el editor de inscripciones
 import { EditorInscripciones } from './components/EditorInscripciones';
 import { PagosProfesoresPage } from './components/PagosProfesoresPage';
+import { GastosPage } from './components/GastosPage';
 
 export const router = createBrowserRouter([
   {
@@ -35,6 +36,14 @@ export const router = createBrowserRouter([
     path: '/reset-password',
     element: <ResetPasswordPage />,
   },
+  {
+  path: '/gastos',
+  element: (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <GastosPage />
+    </ProtectedRoute>
+  ),
+},
   {
     element: (
       <ProtectedRoute>
@@ -79,3 +88,11 @@ export default function App() {
     </ClassProvider>
   );
 }
+{
+  path: '/gastos',
+  element: (
+    <ProtectedRoute allowedRoles={['admin']}>
+      <GastosPage />
+    </ProtectedRoute>
+  ),
+},
