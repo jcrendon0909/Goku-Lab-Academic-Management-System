@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
+import pagosProfesoresRoutes from './routes/pagosProfesores.js';
+// ...
+app.use('/pagos-profesores', pagosProfesoresRoutes);
 
 console.log("🔍 [1] Iniciando servidor...");
 

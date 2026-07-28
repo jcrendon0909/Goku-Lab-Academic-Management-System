@@ -1,10 +1,6 @@
 import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { 
-  Laptop, LogOut, LayoutDashboard, Calendar, Users, 
-  DollarSign, BarChart, BookOpen, ClipboardCheck, UserCog, 
-  Users2, Repeat, LineChart, Sun, Eye, Edit2
-} from "lucide-react";
+import { LogOut } from "lucide-react"; // Solo mantenemos LogOut de lucide
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function Header() {
@@ -30,225 +26,109 @@ export function Header() {
     return location.pathname.startsWith(path);
   };
 
+  // Función para estilizar el enlace activo
+  const linkClass = (path: string) => `
+    text-xs font-medium transition-all duration-200 flex items-center gap-1 whitespace-nowrap
+    ${isActive(path) 
+      ? 'text-[#26AAA3] font-bold scale-110' 
+      : 'text-gray-500 hover:text-[#26AAA3] hover:scale-110'}
+  `;
+
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-gray-100 flex items-center justify-center z-50">
-      <div className="w-full max-w-[1440px] px-8 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 h-12 bg-white border-b border-gray-100 flex items-center justify-center z-50 shadow-sm">
+      <div className="w-full max-w-[1440px] px-4 flex items-center justify-between">
         {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-shrink-0">
-          <div className="w-8 h-8 bg-gradient-to-br from-[#26AAA3] to-[#67A934] rounded-lg flex items-center justify-center shadow-sm shadow-[#26AAA3]/20">
-            <Laptop className="text-white w-4 h-4" />
+          <div className="w-8 h-8 bg-gradient-to-br from-[#26AAA3] to-[#67A934] rounded-lg flex items-center justify-center shadow-md shadow-[#26AAA3]/30">
+            <span className="text-white text-lg font-bold">G</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-base font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#26AAA3] via-[#67A934] to-[#F8B50E] leading-none">
+            <span className="text-sm font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#26AAA3] via-[#67A934] to-[#F8B50E] leading-none">
               GōkuLab
             </span>
-            <span className="text-[9px] uppercase tracking-widest text-[#26AAA3] font-bold">
+            <span className="text-[8px] uppercase tracking-widest text-[#26AAA3] font-bold">
               Algorithmics
             </span>
           </div>
         </Link>
 
-        {/* Navegación central - Ajuste de gap para ahorrar espacio */}
+        {/* Navegación central - con iconos divertidos */}
         <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar px-2">
-          <nav className="flex items-center gap-3">
+          <nav className="flex items-center gap-2">
             {/* Panel */}
-            <Link
-              to="/dashboard"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/dashboard')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <LayoutDashboard className="w-3 h-3" />
-              Panel
+            <Link to="/dashboard" className={linkClass('/dashboard')} title="Panel">
+              🚀
             </Link>
 
             {/* --- Gestión Académica --- */}
-            <Link
-              to="/alumnos"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/alumnos')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <Users className="w-3 h-3" />
-              Alumnos
+            <Link to="/alumnos" className={linkClass('/alumnos')} title="Alumnos">
+              👨‍🎓
             </Link>
-            <Link
-              to="/grupos"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/grupos')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <BookOpen className="w-3 h-3" />
-              Grupos
+            <Link to="/grupos" className={linkClass('/grupos')} title="Grupos">
+              📚
             </Link>
             {isAdmin && (
-              <Link
-                to="/cursos"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/cursos')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-              >
-                <Users2 className="w-3 h-3" />
-                Cursos
+              <Link to="/cursos" className={linkClass('/cursos')} title="Cursos">
+                📖
               </Link>
             )}
             {isAdmin && (
-              <Link
-                to="/maestros"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/maestros')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-              >
-                <UserCog className="w-3 h-3" />
-                Maestros
+              <Link to="/maestros" className={linkClass('/maestros')} title="Maestros">
+                🧑‍🏫
               </Link>
             )}
 
             {/* --- Control y Finanzas --- */}
-            <Link
-              to="/asistencia"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/asistencia')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <ClipboardCheck className="w-3 h-3" />
-              Asistencia
+            <Link to="/asistencia" className={linkClass('/asistencia')} title="Asistencia">
+              ✅
             </Link>
-            <Link
-              to="/pagos"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/pagos')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <DollarSign className="w-3 h-3" />
-              Pagos
+            <Link to="/pagos" className={linkClass('/pagos')} title="Pagos">
+              💰
             </Link>
             {isAdmin && (
-              <Link
-                to="/reportes/cobranza"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/reportes/cobranza')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-              >
-                <BarChart className="w-3 h-3" />
-                Cobranza
+              <Link to="/reportes/cobranza" className={linkClass('/reportes/cobranza')} title="Cobranza">
+                📊
               </Link>
             )}
             {isAdmin && (
-              <Link
-                to="/reportes/rentabilidad"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/reportes/rentabilidad')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-              >
-                <LineChart className="w-3 h-3" />
-                Rentabilidad
+              <Link to="/reportes/rentabilidad" className={linkClass('/reportes/rentabilidad')} title="Rentabilidad">
+                📈
               </Link>
             )}
 
             {/* --- Administración --- */}
-            <Link
-              to="/calendario"
-              className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                isActive('/calendario')
-                  ? 'text-[#26AAA3] font-bold'
-                  : 'text-gray-500 hover:text-[#26AAA3]'
-              }`}
-            >
-              <Calendar className="w-3 h-3" />
-              Calendario
+            <Link to="/calendario" className={linkClass('/calendario')} title="Calendario">
+              📅
             </Link>
-
-            {/* 👇 Reagendaciones - SOLO ICONO */}
             {isAdmin && (
-              <Link
-                to="/reschedule"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/reschedule')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-                title="Reagendaciones"
-              >
-                <Repeat className="w-3 h-3" />
+              <Link to="/reschedule" className={linkClass('/reschedule')} title="Reagendaciones">
+                🔄
               </Link>
             )}
-
-            {/* 👇 Usuarios - SOLO ICONO */}
             {isAdmin && (
-              <Link
-                to="/admin/usuarios"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/admin/usuarios')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-                title="Usuarios"
-              >
-                <Users2 className="w-3 h-3" />
+              <Link to="/admin/usuarios" className={linkClass('/admin/usuarios')} title="Usuarios">
+                👥
               </Link>
             )}
-
-            {/* 👇 Cursos Verano - SOLO ICONO */}
             {isAdmin && (
-              <Link
-                to="/cursos-verano"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/cursos-verano')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-                title="Cursos Verano"
-              >
-                <Sun className="w-3 h-3" />
+              <Link to="/cursos-verano" className={linkClass('/cursos-verano')} title="Cursos Verano">
+                ☀️
               </Link>
             )}
-
-            {/* ✅ Consulta de Inscripciones - SOLO ICONO */}
             {isAdmin && (
-              <Link
-                to="/inscripciones-consulta"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/inscripciones-consulta')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-                title="Inscripciones"
-              >
-                <Eye className="w-3 h-3" />
+              <Link to="/inscripciones-consulta" className={linkClass('/inscripciones-consulta')} title="Inscripciones">
+                👁️
               </Link>
             )}
-
-            {/* ✅ NUEVO: Editor de Inscripciones - SOLO ICONO */}
             {isAdmin && (
-              <Link
-                to="/admin/editor-inscripciones"
-                className={`text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap ${
-                  isActive('/admin/editor-inscripciones')
-                    ? 'text-[#26AAA3] font-bold'
-                    : 'text-gray-500 hover:text-[#26AAA3]'
-                }`}
-                title="Editor de Inscripciones"
-              >
-                <Edit2 className="w-3 h-3" />
+              <Link to="/admin/editor-inscripciones" className={linkClass('/admin/editor-inscripciones')} title="Editor Inscripciones">
+                ✏️
+              </Link>
+            )}
+            {/* ✅ NUEVO: Pagos a Profesores */}
+            {isAdmin && (
+              <Link to="/pagos-profesores" className={linkClass('/pagos-profesores')} title="Pagos a Profesores">
+                💵
               </Link>
             )}
           </nav>
