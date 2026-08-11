@@ -29,7 +29,7 @@ router.get("/test", (req, res) => {
 });
 
 // ============================================================
-// MOVER ALUMNO A OTRO GRUPO (USANDO LA MISMA LÓGICA QUE /buscar)
+// MOVER ALUMNO A OTRO GRUPO
 // ============================================================
 router.patch("/:idAlumno/mover", async (req, res) => {
   try {
@@ -41,14 +41,12 @@ router.patch("/:idAlumno/mover", async (req, res) => {
     console.log('  nuevoGrupoId:', nuevoGrupoId);
     console.log('  grupoActualId:', grupoActualId);
 
-    // Validar datos
     if (!nuevoGrupoId || !grupoActualId) {
       return res.status(400).json({ 
         error: "Faltan datos: nuevoGrupoId y grupoActualId son requeridos" 
       });
     }
 
-    // 1. Buscar la inscripción usando la misma lógica que /buscar
     const inscripcion = await Inscripcion.findOne({
       idAlumno: idAlumno.trim(),
       grupoId: grupoActualId.trim(),
@@ -62,18 +60,11 @@ router.patch("/:idAlumno/mover", async (req, res) => {
       });
     }
 
-    console.log('✅ Inscripción encontrada:', inscripcion._id);
-    console.log('  idAlumno:', inscripcion.idAlumno);
-    console.log('  grupoId actual:', inscripcion.grupoId);
-    console.log('  estatus:', inscripcion.estatus);
-
-    // 2. Verificar que el nuevo grupo exista
     const nuevoGrupo = await Grupo.findOne({ IdGrupo: nuevoGrupoId.trim() }).lean();
     if (!nuevoGrupo) {
       return res.status(404).json({ error: "Grupo destino no encontrado" });
     }
 
-    // 3. Verificar duplicados
     const duplicado = await Inscripcion.findOne({
       idAlumno: idAlumno.trim(),
       grupoId: nuevoGrupoId.trim(),
@@ -87,25 +78,21 @@ router.patch("/:idAlumno/mover", async (req, res) => {
       );
     }
 
-    // 4. Verificar capacidad
     const ocupados = await Inscripcion.countDocuments({
       grupoId: nuevoGrupoId.trim(),
       estatus: { $in: ["Activa", "activa", "ACTIVA"] }
     });
     const capacidad = nuevoGrupo.CapacidadMaxima || 20;
-    console.log(`📊 Ocupación destino: ${ocupados}/${capacidad}`);
     if (ocupados >= capacidad) {
       return res.status(409).json({ error: "El grupo destino está lleno" });
     }
 
-    // 5. Actualizar la inscripción
     await Inscripcion.updateOne(
       { _id: inscripcion._id },
       { $set: { grupoId: nuevoGrupoId.trim() } }
     );
     console.log('✅ Inscripción actualizada');
 
-    // 6. Actualizar pagos y abonos
     await Pago.updateMany(
       { idAlumno: idAlumno.trim(), grupoId: grupoActualId.trim() },
       { $set: { grupoId: nuevoGrupoId.trim() } }
@@ -114,7 +101,6 @@ router.patch("/:idAlumno/mover", async (req, res) => {
       { idAlumno: idAlumno.trim(), grupoId: grupoActualId.trim() },
       { $set: { grupoId: nuevoGrupoId.trim() } }
     );
-    console.log('✅ Pagos y abonos actualizados');
 
     res.status(200).json({
       ok: true,
@@ -128,7 +114,7 @@ router.patch("/:idAlumno/mover", async (req, res) => {
 });
 
 // ============================================================
-// RUTAS EXISTENTES (GET, POST, PATCH, DELETE)
+// GET ALL
 // ============================================================
 router.get("/", async (req, res) => {
   try {
@@ -140,6 +126,9 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ============================================================
+// GET POR ALUMNO
+// ============================================================
 router.get("/alumno/:idAlumno", async (req, res) => {
   try {
     const { idAlumno } = req.params;
@@ -151,17 +140,84 @@ router.get("/alumno/:idAlumno", async (req, res) => {
   }
 });
 
+// ============================================================
+// POST – CREAR INSCRIPCIÓN CON GENERACIÓN DE PAGOS HISTÓRICOS
+// ============================================================
 router.post("/", async (req, res) => {
   try {
-    const nuevaInscripcion = new Inscripcion(req.body);
+    const datos = req.body;
+
+    // Validar campos obligatorios
+    if (!datos.idAlumno || !datos.grupoId) {
+      return res.status(400).json({ error: "idAlumno y grupoId son requeridos" });
+    }
+
+    // Verificar que el grupo exista
+    const grupo = await Grupo.findOne({ IdGrupo: datos.grupoId });
+    if (!grupo) {
+      return res.status(404).json({ error: "Grupo no encontrado" });
+    }
+
+    // Procesar fecha de inscripción
+    const fechaInscripcion = datos.fechaInscripcion ? new Date(datos.fechaInscripcion) : new Date();
+    if (isNaN(fechaInscripcion.getTime())) {
+      return res.status(400).json({ error: "Fecha de inscripción inválida" });
+    }
+
+    // Crear la inscripción
+    const nuevaInscripcion = new Inscripcion({
+      idAlumno: datos.idAlumno.trim(),
+      nombreAlumno: datos.nombreAlumno || "",
+      grupoId: datos.grupoId.trim(),
+      modalidad: datos.modalidad || "Presencial",
+      montoMensualidad: datos.montoMensualidad || grupo.precioMensualidad || 0,
+      diaPago: datos.diaPago || 5,
+      fechaInicioPago: datos.fechaInicioPago || fechaInscripcion,
+      comentarios: datos.comentarios || "",
+      fechaInscripcion: fechaInscripcion,
+      estatus: "Activa",
+    });
+
     await nuevaInscripcion.save();
-    res.status(201).json(nuevaInscripcion);
+
+    // ----- GENERAR PAGOS HISTÓRICOS (si la fecha es anterior a hoy) -----
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fechaIns = new Date(fechaInscripcion);
+    fechaIns.setHours(0, 0, 0, 0);
+
+    if (fechaIns < hoy) {
+      try {
+        // Importación dinámica para evitar errores de carga al inicio
+        const { generarPagosHistoricos } = await import('../utils/pagosHelper.js');
+        const pagosGenerados = await generarPagosHistoricos(nuevaInscripcion, false); // false = quedan Pendientes
+        console.log(`✅ ${pagosGenerados.length} pagos históricos generados para inscripción ${nuevaInscripcion._id}`);
+      } catch (error) {
+        console.error('❌ Error generando pagos históricos:', error);
+        // No interrumpimos la creación
+      }
+    } else {
+      console.log(`ℹ️ Inscripción con fecha actual o futura, no se generan históricos.`);
+    }
+
+    res.status(201).json({
+      ok: true,
+      mensaje: "Inscripción creada exitosamente",
+      inscripcion: nuevaInscripcion
+    });
+
   } catch (error) {
     console.error("Error POST /inscripciones:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({ error: "El alumno ya está inscrito en este grupo" });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
+// ============================================================
+// PATCH – ACTUALIZAR INSCRIPCIÓN
+// ============================================================
 router.patch("/:idAlumno/:grupoId", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
@@ -184,6 +240,9 @@ router.patch("/:idAlumno/:grupoId", async (req, res) => {
   }
 });
 
+// ============================================================
+// DELETE
+// ============================================================
 router.delete("/:idAlumno/:grupoId", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
@@ -198,6 +257,9 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
   }
 });
 
+// ============================================================
+// GET POR GRUPO
+// ============================================================
 router.get("/grupo/:grupoId", async (req, res) => {
   try {
     const { grupoId } = req.params;
@@ -214,8 +276,9 @@ router.get("/grupo/:grupoId", async (req, res) => {
     });
   }
 });
+
 // ============================================================
-// TERMINAR CURSO (marcar inscripción como Baja)
+// TERMINAR CURSO
 // ============================================================
 router.patch("/:inscripcionId/terminar", async (req, res) => {
   try {
@@ -236,12 +299,6 @@ router.patch("/:inscripcionId/terminar", async (req, res) => {
     inscripcion.motivoBaja = motivo || "Curso completado";
     await inscripcion.save();
 
-    // Opcional: actualizar pagos pendientes de esta inscripción (si los hay)
-    // await Pago.updateMany(
-    //   { inscripcionId: inscripcion._id, estatus: "pendiente" },
-    //   { $set: { estatus: "cancelado" } }
-    // );
-
     res.json({
       ok: true,
       mensaje: "Curso terminado correctamente",
@@ -252,36 +309,5 @@ router.patch("/:inscripcionId/terminar", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-// ============================================================
-// TERMINAR CURSO (cambia estatus a "Baja" con fecha de fin)
-// ============================================================
-router.patch("/:inscripcionId/terminar", async (req, res) => {
-  try {
-    const { inscripcionId } = req.params;
-    const { motivo } = req.body;
 
-    const inscripcion = await Inscripcion.findById(inscripcionId);
-    if (!inscripcion) {
-      return res.status(404).json({ error: "Inscripción no encontrada" });
-    }
-
-    if (inscripcion.estatus === "Baja") {
-      return res.status(400).json({ error: "El curso ya está terminado" });
-    }
-
-    inscripcion.estatus = "Baja";
-    inscripcion.fechaBaja = new Date();
-    inscripcion.motivoBaja = motivo || "Curso completado";
-    await inscripcion.save();
-
-    res.json({
-      ok: true,
-      mensaje: "Curso marcado como terminado",
-      inscripcion
-    });
-  } catch (error) {
-    console.error("❌ ERROR TERMINAR CURSO:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
 export default router;

@@ -222,7 +222,6 @@ export async function getAlumnos(busqueda: string = "") {
   return res.json();
 }
 
-// ✅ FUNCIÓN ACTUALIZADA: acepta nombreAlumno
 export async function actualizarAlumno(
   idAlumno: string,
   data: {
@@ -419,12 +418,22 @@ export async function getPagosConEstatus() {
   return res.json();
 }
 
+// ============================================================
+// ✅ FUNCIÓN CORREGIDA: Acepta idAlumno y grupoId
+// ============================================================
 export async function registrarAbono(data: {
   pagoId: string;
   montoAbono: number;
   nombreAlumno: string;
   metodoAbono: string;
+  idAlumno: string;
+  grupoId: string;
+  fechaAbono?: string;
+  nuevoMontoMensual?: number;
 }) {
+  // ✅ El console.log va AQUÍ, dentro del cuerpo
+  console.log('📤 Llamando a /abonos con data:', data);
+
   const res = await apiFetch("/abonos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -529,10 +538,6 @@ export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
   return responseData;
 };
 
-// ============================================================
-// NUEVAS FUNCIONES PARA EL MÓDULO DE RENTABILIDAD Y DATOS EXTRA
-// ============================================================
-
 export async function actualizarDatosExtraProfesor(
   idProfesor: string,
   data: {
@@ -568,10 +573,6 @@ export async function getRentabilidadProfesores(filtros?: {
   return res.json();
 }
 
-// ============================================================
-// FUNCIONES PARA RECUPERACIÓN DE CONTRASEÑA
-// ============================================================
-
 export async function solicitarResetPassword(usuario: string) {
   const res = await apiFetch("/auth/forgot-password", {
     method: "POST",
@@ -603,11 +604,8 @@ export async function resetPasswordPorAdmin(idUsuario: string) {
   return data.token;
 }
 
-// ============================================================
-// 🔥 FUNCIÓN CORREGIDA: Actualizar modalidad de una reagendación
-// ============================================================
 export const actualizarModalidadReagendacion = async (
-  reagendacionId: string, 
+  reagendacionId: string,
   modalidad: string
 ) => {
   const res = await apiFetch(`/reagendaciones/${reagendacionId}`, {
@@ -619,9 +617,6 @@ export const actualizarModalidadReagendacion = async (
   if (!res.ok) throw new Error(data.error || 'Error al actualizar modalidad');
   return data;
 };
-// ============================================================
-// GASTOS
-// ============================================================
 
 export async function getGastos(filtros?: { mes?: string; anio?: number; categoria?: string }) {
   const params = new URLSearchParams();

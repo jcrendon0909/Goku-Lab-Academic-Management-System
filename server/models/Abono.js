@@ -3,10 +3,8 @@ import mongoose from "mongoose";
 const abonoSchema = new mongoose.Schema({
   abonoId: { type: String, required: true, unique: true, index: true },
   pagoId: { type: String, required: true, index: true },
-  // ===== CAMPOS NUEVOS (para facilitar consultas) =====
   idAlumno: { type: String, required: true, index: true },
   grupoId: { type: String, required: true, index: true },
-  // ===== CAMPOS EXISTENTES =====
   nombreAlumno: { type: String, required: true },
   montoAbono: { type: Number, required: true, min: 0 },
   metodoAbono: { type: String, default: 'Efectivo' },

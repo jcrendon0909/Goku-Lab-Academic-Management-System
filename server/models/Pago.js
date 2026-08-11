@@ -13,20 +13,9 @@ const pagoSchema = new mongoose.Schema(
         activo: { type: Boolean, default: true, index: true },
         fechaBaja: { type: Date, default: null },
 
-        mesCorrespondiente: {
-            type: String,
-            enum: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
-            description: "Mes al que corresponde el pago"
-        },
-        periodo: {
-            type: String,
-            default: "Mes",
-            description: "Periodo de pago (ej. 2026-01)"
-        },
-        anio: {
-            type: Number,
-            description: "Año del pago"
-        },
+        mesCorrespondiente: { type: String },
+        periodo: { type: String, default: "Mes" },
+        anio: { type: Number },
 
         fechaPago: { type: Date, default: Date.now },
         metodoPago: { type: String, default: 'Efectivo' },
@@ -43,37 +32,24 @@ const pagoSchema = new mongoose.Schema(
     }
 );
 
-// 👇 MIDDLEWARE pre('save') CORREGIDO
-pagoSchema.pre('save', function(next) {
-    // Si no es nuevo y no se modifican fechas, saltar
-    if (!this.isNew && !this.isModified('fechaInicioPago') && !this.isModified('fechaPago')) {
-        return next();
-    }
+// Middleware pre('save') simplificado y robusto
+// pagoSchema.pre('save', function(next) {
+//     if (!this.isNew && !this.isModified('fechaInicioPago') && !this.isModified('fechaPago')) {
+//         return next();
+//     }
+//     const fecha = this.fechaInicioPago || this.fechaPago || new Date();
+//     const mes = fecha.toLocaleString('es', { month: 'short' });
+//     this.mesCorrespondiente = mes.charAt(0).toUpperCase() + mes.slice(1);
+//     this.anio = fecha.getFullYear();
+//     if (!this.periodo || this.periodo === "Mes") {
+//         this.periodo = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2, '0')}`;
+//     }
+//     if (!this.diaPago) this.diaPago = fecha.getDate();
+//     if (!this.fechaPago) this.fechaPago = new Date();
+//     next();
+// });
 
-    const fecha = this.fechaInicioPago || this.fechaPago || new Date();
-    
-    // Asignar mesCorrespondiente y anio
-    const mes = fecha.toLocaleString('es', { month: 'short' });
-    this.mesCorrespondiente = mes.charAt(0).toUpperCase() + mes.slice(1);
-    this.anio = fecha.getFullYear();
-
-    // Asignar periodo en formato YYYY-MM si es "Mes" o no está definido
-    if (!this.periodo || this.periodo === "Mes") {
-        this.periodo = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2, "0")}`;
-    }
-
-    // Asignar diaPago si no existe
-    if (!this.diaPago) {
-        this.diaPago = fecha.getDate();
-    }
-
-    // Asignar fechaPago si no existe
-    if (!this.fechaPago) this.fechaPago = new Date();
-
-    next();
-});
-
-// Índices
+// Índices adicionales
 pagoSchema.index({ idAlumno: 1, anio: 1, mesCorrespondiente: 1 });
 pagoSchema.index({ grupoId: 1, anio: 1 });
 

@@ -14,15 +14,16 @@ interface InscripcionFormData {
   notasInternas?: string;
   observaciones?: string;
   idCurso: string;
-  idProfesor: string;
   grupoId: string;
-  diaClase: string;
-  horaClase: string;
-  duracionClase: string;
+  idProfesor?: string;
+  diaClase?: string;
+  horaClase?: string;
+  duracionClase?: string;
   modalidad: string;
   montoMensualidad: number;
   diaPago: number;
   fechaInicioPago: string;
+  fechaInscripcion: string;
   comentarios?: string;
 }
 
@@ -46,8 +47,10 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
   const [cursos, setCursos] = useState<any[]>([]);
   const [profesores, setProfesores] = useState<any[]>([]);
   const [grupos, setGrupos] = useState<any[]>([]);
+  const [gruposFiltrados, setGruposFiltrados] = useState<any[]>([]);
   const [cargando, setCargando] = useState(false);
   const [paso, setPaso] = useState(1);
+  const [crearNuevoGrupo, setCrearNuevoGrupo] = useState(false);
 
   const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<InscripcionFormData>({
     defaultValues: {
@@ -61,16 +64,22 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
       notasInternas: alumnoInicial?.notasInternas || '',
       observaciones: alumnoInicial?.observaciones || '',
       modalidad: 'Presencial',
-      diaPago: 1,
+      diaPago: 5,
       fechaInicioPago: new Date().toISOString().split('T')[0],
+      fechaInscripcion: new Date().toISOString().split('T')[0],
       duracionClase: '2 horas',
+      grupoId: '',
+      idCurso: '',
+      idProfesor: '',
+      diaClase: '',
+      horaClase: '',
+      montoMensualidad: 0, // ← inicialmente 0, se actualizará al seleccionar curso
     }
   });
 
   const idCursoSeleccionado = watch('idCurso');
-  const idProfesorSeleccionado = watch('idProfesor');
-  const diaClaseSeleccionado = watch('diaClase');
-  const horaClaseSeleccionada = watch('horaClase');
+  const grupoIdSeleccionado = watch('grupoId');
+  const montoMensualidadWatch = watch('montoMensualidad');
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -87,6 +96,10 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
         setCursos(cursosData);
         setProfesores(profesoresData);
         setGrupos(gruposData);
+        if (idCursoSeleccionado) {
+          const filtrados = gruposData.filter((g: any) => g.idCurso === idCursoSeleccionado);
+          setGruposFiltrados(filtrados);
+        }
       } catch (error) {
         toast.error('Error al cargar datos iniciales');
       }
@@ -94,121 +107,54 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
     cargarDatos();
   }, []);
 
-  // Auto-completar grupo
+  // Filtrar grupos cuando cambia el curso
   useEffect(() => {
-    if (idCursoSeleccionado && idProfesorSeleccionado && diaClaseSeleccionado && horaClaseSeleccionada) {
-      const grupoEncontrado = grupos.find(g => 
-        g.idCurso === idCursoSeleccionado &&
-        g.idProfesor === idProfesorSeleccionado &&
-        g.diaClase === diaClaseSeleccionado &&
-        g.horaClase === horaClaseSeleccionada
-      );
-      if (grupoEncontrado) {
-        setValue('grupoId', grupoEncontrado.IdGrupo);
-        setValue('duracionClase', grupoEncontrado.duracionClase || '2 horas');
+    if (idCursoSeleccionado) {
+      const filtrados = grupos.filter(g => g.idCurso === idCursoSeleccionado);
+      setGruposFiltrados(filtrados);
+      if (filtrados.length > 0) {
+        setValue('grupoId', filtrados[0].IdGrupo);
       } else {
         setValue('grupoId', '');
+        setCrearNuevoGrupo(true);
+      }
+    } else {
+      setGruposFiltrados([]);
+      setValue('grupoId', '');
+    }
+  }, [idCursoSeleccionado, grupos, setValue]);
+
+  // ✅ NUEVO: Cuando se selecciona un curso, actualizar el monto mensual con el precio del curso (solo si está vacío o es 0)
+  useEffect(() => {
+    if (idCursoSeleccionado) {
+      const curso = cursos.find(c => c.idCurso === idCursoSeleccionado);
+      if (curso && curso.precioMensualidad) {
+        const currentValue = watch('montoMensualidad');
+        // Si el campo está vacío o es 0, establecer el precio del curso
+        if (!currentValue || currentValue === 0) {
+          setValue('montoMensualidad', curso.precioMensualidad);
+          console.log(`💰 Precio del curso establecido: ${curso.precioMensualidad}`);
+        }
       }
     }
-  }, [idCursoSeleccionado, idProfesorSeleccionado, diaClaseSeleccionado, horaClaseSeleccionada, grupos, setValue]);
+  }, [idCursoSeleccionado, cursos, setValue, watch]);
+
+  // ✅ NUEVO: Log para ver el valor del campo montoMensualidad cuando cambia
+  useEffect(() => {
+    console.log(`🔄 Monto mensual actual: ${montoMensualidadWatch}`);
+  }, [montoMensualidadWatch]);
 
   const onSubmit = async (data: InscripcionFormData) => {
     setCargando(true);
     try {
-      // Si es alumno existente, solo creamos la inscripción
-      if (alumnoInicial) {
-        let grupoId = data.grupoId;
-        if (!grupoId) {
-          const nuevoGrupo = await apiFetch('/grupos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              idCurso: data.idCurso,
-              nombreCurso: cursos.find(c => c.idCurso === data.idCurso)?.nombreCurso || '',
-              diaClase: data.diaClase,
-              horaClase: data.horaClase,
-              duracionClase: data.duracionClase,
-              idProfesor: data.idProfesor,
-              nombreProfesor: profesores.find(p => p.idProfesor === data.idProfesor)?.nombre || '',
-              capacidadMaxima: 20,
-              Estatus: 'Activo'
-            })
-          });
-          const grupoCreado = await nuevoGrupo.json();
-          grupoId = grupoCreado.IdGrupo;
-        }
+      let alumnoId = data.idAlumno;
 
-        const res = await apiFetch('/inscripciones', {
+      // === PASO 1: Si es alumno NUEVO, lo creamos primero ===
+      if (!alumnoInicial) {
+        const resAlumno = await apiFetch('/alumnos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            idAlumno: alumnoInicial.idAlumno,
-            nombreAlumno: alumnoInicial.nombreAlumno,
-            grupoId: grupoId,
-            modalidad: data.modalidad,
-            montoMensualidad: data.montoMensualidad,
-            diaPago: data.diaPago,
-            fechaInicioPago: data.fechaInicioPago,
-            comentarios: data.comentarios || '',
-            estatus: 'Activa',
-            fechaInscripcion: new Date().toISOString()
-          })
-        });
-
-        if (!res.ok) {
-          const error = await res.json();
-          throw new Error(error.error || 'Error al crear inscripción');
-        }
-
-        toast.success('🎉 ¡Curso agregado correctamente!');
-        onSuccess();
-        onClose();
-        return;
-      }
-
-      // Si es alumno nuevo
-      const cursoNombre = cursos.find(c => c.idCurso === data.idCurso)?.nombreCurso || '';
-      const profesorNombre = profesores.find(p => p.idProfesor === data.idProfesor)?.nombre || '';
-
-      let grupoId = data.grupoId;
-      if (!grupoId) {
-        const nuevoGrupo = await apiFetch('/grupos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            idCurso: data.idCurso,
-            nombreCurso: cursoNombre,
-            diaClase: data.diaClase,
-            horaClase: data.horaClase,
-            duracionClase: data.duracionClase,
-            idProfesor: data.idProfesor,
-            nombreProfesor: profesorNombre,
-            capacidadMaxima: 20,
-            Estatus: 'Activo'
-          })
-        });
-        const grupoCreado = await nuevoGrupo.json();
-        grupoId = grupoCreado.IdGrupo;
-      }
-
-      const res = await apiFetch('/grupos/crear-con-alumno', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fechaInscripcion: new Date().toISOString(),
-          grupo: {
-            idCurso: data.idCurso,
-            nombreCurso: cursoNombre,
-            diaClase: data.diaClase,
-            horaClase: data.horaClase,
-            duracionClase: data.duracionClase,
-            idProfesor: data.idProfesor,
-            nombreProfesor: profesorNombre,
-            comentario: '',
-            capacidadMaxima: 20,
-            Estatus: 'Activo'
-          },
-          alumnoNuevo: {
             nombreAlumno: data.nombreAlumno,
             telefono: data.telefono || '',
             email: data.email || '',
@@ -219,22 +165,83 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
             observaciones: data.observaciones || '',
             estatus: 'Activo',
             modalidad: data.modalidad
-          },
-          datosPago: {
-            montoMensualidad: data.montoMensualidad,
-            diaPago: data.diaPago,
-            fechaInicioPago: data.fechaInicioPago,
-            comentarios: data.comentarios || ''
-          }
-        })
+          })
+        });
+
+        if (!resAlumno.ok) {
+          const error = await resAlumno.json();
+          throw new Error(error.error || 'Error al crear el alumno');
+        }
+
+        const alumnoCreado = await resAlumno.json();
+        alumnoId = alumnoCreado.idAlumno || alumnoCreado._id;
+      }
+
+      // === PASO 2: Obtener o crear el grupo ===
+      let grupoId = data.grupoId;
+      if (!grupoId || crearNuevoGrupo) {
+        const cursoNombre = cursos.find(c => c.idCurso === data.idCurso)?.nombreCurso || '';
+        const profesorNombre = profesores.find(p => p.idProfesor === data.idProfesor)?.nombre || '';
+
+        const resGrupo = await apiFetch('/grupos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idCurso: data.idCurso,
+            nombreCurso: cursoNombre,
+            diaClase: data.diaClase,
+            horaClase: data.horaClase,
+            duracionClase: data.duracionClase,
+            idProfesor: data.idProfesor,
+            nombreProfesor: profesorNombre,
+            capacidadMaxima: 20,
+            Estatus: 'Activo',
+            precioMensualidad: data.montoMensualidad
+          })
+        });
+
+        if (!resGrupo.ok) {
+          const error = await resGrupo.json();
+          throw new Error(error.error || 'Error al crear el grupo');
+        }
+
+        const grupoCreado = await resGrupo.json();
+        grupoId = grupoCreado.IdGrupo || grupoCreado._id;
+      }
+
+      // === PASO 3: Crear la inscripción ===
+      const payload = {
+        idAlumno: alumnoId,
+        nombreAlumno: data.nombreAlumno || alumnoInicial?.nombreAlumno || '',
+        grupoId: grupoId,
+        modalidad: data.modalidad,
+        montoMensualidad: data.montoMensualidad,
+        diaPago: data.diaPago,
+        fechaInicioPago: data.fechaInicioPago,
+        comentarios: data.comentarios || '',
+        estatus: 'Activa',
+        fechaInscripcion: data.fechaInscripcion
+      };
+
+      // ✅ LOG PARA VER QUÉ SE ESTÁ ENVIANDO
+      console.log('📤 Payload a enviar:', {
+        ...payload,
+        montoMensualidad: payload.montoMensualidad,
+        tipo: typeof payload.montoMensualidad
+      });
+
+      const res = await apiFetch('/inscripciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || 'Error al inscribir alumno');
+        throw new Error(error.error || 'Error al crear inscripción');
       }
 
-      toast.success('🎉 ¡Alumno inscrito correctamente!');
+      toast.success('🎉 ¡Inscripción creada correctamente!');
       onSuccess();
       onClose();
     } catch (error: any) {
@@ -250,7 +257,6 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 border-4 border-blue-200 relative">
-        {/* Personaje decorativo */}
         <div className="absolute -top-6 -right-6 w-20 h-20 bg-yellow-300 rounded-full flex items-center justify-center shadow-lg border-4 border-yellow-400">
           <span className="text-4xl">⭐</span>
         </div>
@@ -262,7 +268,6 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
           <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
             {alumnoInicial ? '🌟 Agregar nuevo curso' : '🌟 ¡Inscribir nuevo alumno!'}
           </h2>
-          {/* ✅ Botón de cierre con fondo visible */}
           <button
             onClick={onClose}
             className="w-10 h-10 rounded-full bg-gray-200/80 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-xl transition hover:scale-110"
@@ -271,7 +276,6 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
           </button>
         </div>
 
-        {/* Pasos visuales */}
         <div className="flex justify-center gap-2 mb-6">
           {[1, 2, 3].map((num) => (
             <div
@@ -399,7 +403,7 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
             </div>
           )}
 
-          {/* PASO 2: Datos del curso */}
+          {/* PASO 2: Datos del curso y grupo */}
           {paso === 2 && (
             <div className="space-y-4">
               <div className="bg-pink-50/70 p-4 rounded-2xl border-2 border-pink-200">
@@ -427,81 +431,122 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
                     />
                     {errors.idCurso && <p className="text-xs text-rose-500 mt-1">{errors.idCurso.message}</p>}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Profesor *</label>
-                    <Controller
-                      name="idProfesor"
-                      control={control}
-                      rules={{ required: 'Profesor requerido' }}
-                      render={({ field }) => (
-                        <select
-                          {...field}
-                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
-                        >
-                          <option value="">Seleccionar profesor</option>
-                          {profesores.map(p => (
-                            <option key={p.idProfesor} value={p.idProfesor}>{p.nombre}</option>
-                          ))}
-                        </select>
-                      )}
-                    />
-                    {errors.idProfesor && <p className="text-xs text-rose-500 mt-1">{errors.idProfesor.message}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Día de clase *</label>
-                    <Controller
-                      name="diaClase"
-                      control={control}
-                      rules={{ required: 'Día requerido' }}
-                      render={({ field }) => (
-                        <select
-                          {...field}
-                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
-                        >
-                          <option value="">Seleccionar día</option>
-                          {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      )}
-                    />
-                    {errors.diaClase && <p className="text-xs text-rose-500 mt-1">{errors.diaClase.message}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Hora de clase *</label>
-                    <Controller
-                      name="horaClase"
-                      control={control}
-                      rules={{ required: 'Hora requerida' }}
-                      render={({ field }) => (
-                        <input
-                          type="time"
-                          {...field}
-                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+
+                  {idCursoSeleccionado && gruposFiltrados.length > 0 && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Grupo existente</label>
+                        <Controller
+                          name="grupoId"
+                          control={control}
+                          render={({ field }) => (
+                            <select
+                              {...field}
+                              className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                            >
+                              <option value="">Seleccionar grupo existente</option>
+                              {gruposFiltrados.map(g => (
+                                <option key={g.IdGrupo} value={g.IdGrupo}>
+                                  {g.IdGrupo} - {g.diaClase} {g.horaClase} (Prof. {g.nombreProfesor}) - {g.alumnosInscritos || 0}/{g.CapacidadMaxima}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         />
-                      )}
-                    />
-                    {errors.horaClase && <p className="text-xs text-rose-500 mt-1">{errors.horaClase.message}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Duración</label>
-                    <Controller
-                      name="duracionClase"
-                      control={control}
-                      render={({ field }) => (
-                        <select
-                          {...field}
-                          className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                      </div>
+                      <div className="flex items-center">
+                        <label className="text-sm text-gray-600 mr-2">¿Crear nuevo grupo?</label>
+                        <button
+                          type="button"
+                          onClick={() => setCrearNuevoGrupo(!crearNuevoGrupo)}
+                          className="px-3 py-1 bg-pink-500 text-white rounded-lg text-sm hover:bg-pink-600 transition"
                         >
-                          <option value="1 hora">1 hora</option>
-                          <option value="1:30 hr">1:30 horas</option>
-                          <option value="2 horas">2 horas</option>
-                          <option value="2:30 hr">2:30 horas</option>
-                          <option value="3 horas">3 horas</option>
-                        </select>
-                      )}
-                    />
-                  </div>
+                          {crearNuevoGrupo ? 'Cancelar' : 'Crear nuevo'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {(!gruposFiltrados.length || crearNuevoGrupo) && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Profesor *</label>
+                        <Controller
+                          name="idProfesor"
+                          control={control}
+                          rules={{ required: 'Profesor requerido' }}
+                          render={({ field }) => (
+                            <select
+                              {...field}
+                              className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                            >
+                              <option value="">Seleccionar profesor</option>
+                              {profesores.map(p => (
+                                <option key={p.idProfesor} value={p.idProfesor}>{p.nombre}</option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                        {errors.idProfesor && <p className="text-xs text-rose-500 mt-1">{errors.idProfesor.message}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Día de clase *</label>
+                        <Controller
+                          name="diaClase"
+                          control={control}
+                          rules={{ required: 'Día requerido' }}
+                          render={({ field }) => (
+                            <select
+                              {...field}
+                              className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                            >
+                              <option value="">Seleccionar día</option>
+                              {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                        {errors.diaClase && <p className="text-xs text-rose-500 mt-1">{errors.diaClase.message}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Hora de clase *</label>
+                        <Controller
+                          name="horaClase"
+                          control={control}
+                          rules={{ required: 'Hora requerida' }}
+                          render={({ field }) => (
+                            <input
+                              type="time"
+                              {...field}
+                              className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                            />
+                          )}
+                        />
+                        {errors.horaClase && <p className="text-xs text-rose-500 mt-1">{errors.horaClase.message}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duración</label>
+                        <Controller
+                          name="duracionClase"
+                          control={control}
+                          render={({ field }) => (
+                            <select
+                              {...field}
+                              className="w-full border-2 border-pink-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 bg-white/80"
+                            >
+                              <option value="1 hora">1 hora</option>
+                              <option value="1:30 hr">1:30 horas</option>
+                              <option value="2 horas">2 horas</option>
+                              <option value="2:30 hr">2:30 horas</option>
+                              <option value="3 horas">3 horas</option>
+                            </select>
+                          )}
+                        />
+                      </div>
+                    </>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Modalidad</label>
                     <Controller
@@ -519,11 +564,7 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
                     />
                   </div>
                 </div>
-                {watch('grupoId') && (
-                  <div className="mt-3 bg-emerald-50 p-2 rounded-xl border-2 border-emerald-200">
-                    <p className="text-sm text-emerald-700">✅ ¡Grupo existente encontrado! ID: <span className="font-mono">{watch('grupoId')}</span></p>
-                  </div>
-                )}
+
                 <div className="flex justify-between mt-4">
                   <button type="button" onClick={prevStep} className="px-6 py-2 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-colors font-medium">
                     ← Anterior
@@ -554,6 +595,8 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
                         <input
                           type="number"
                           {...field}
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
                           placeholder="0"
                           className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
                         />
@@ -596,6 +639,29 @@ const InscripcionForm: React.FC<InscripcionFormProps> = ({ onClose, onSuccess, a
                     {errors.fechaInicioPago && <p className="text-xs text-rose-500 mt-1">{errors.fechaInicioPago.message}</p>}
                   </div>
                 </div>
+
+                <div className="mt-4 border-t-2 border-dashed border-green-300 pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    📅 Fecha de inscripción <span className="text-xs text-gray-500">(si es histórica, cámbiala)</span>
+                  </label>
+                  <Controller
+                    name="fechaInscripcion"
+                    control={control}
+                    rules={{ required: 'Fecha de inscripción requerida' }}
+                    render={({ field }) => (
+                      <input
+                        type="date"
+                        {...field}
+                        className="w-full border-2 border-green-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white/80"
+                      />
+                    )}
+                  />
+                  {errors.fechaInscripcion && <p className="text-xs text-rose-500 mt-1">{errors.fechaInscripcion.message}</p>}
+                  <p className="text-xs text-gray-400 mt-1">
+                    Si la inscripción es de un mes anterior, cambia esta fecha. Se generarán automáticamente los pagos desde ese mes.
+                  </p>
+                </div>
+
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Comentarios</label>
                   <Controller

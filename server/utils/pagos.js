@@ -1,6 +1,9 @@
 import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
 
+// ✅ ELIMINA CUALQUIER IMPORTACIÓN DE ESTE MISMO ARCHIVO
+// ❌ NO: import { crearPagoId } from "../utils/pagos.js";
+
 export function parseFechaLocal(valor) {
   if (!valor) return null;
 
@@ -120,7 +123,6 @@ export function indiceMes(fecha) {
   return d.getFullYear() * 12 + d.getMonth();
 }
 
-/** true si aún no corresponde cobrar según fechaInicioPago (mes de inicio) */
 export function cobroAunNoInicia(fechaInicioCobro, hoy = new Date()) {
   const inicio = parseFechaLocal(fechaInicioCobro);
   if (!inicio) return false;
@@ -147,7 +149,6 @@ export function construirPeriodosMensuales({
 
   const periodos = [];
 
-  // Sumamos todo lo que ha pagado históricamente
   let bolsaDeDinero = abonos.reduce(
     (total, abono) => total + Number(abono.montoAbono || 0),
     0
@@ -162,26 +163,24 @@ export function construirPeriodosMensuales({
     const finMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
     const vencimiento = new Date(anio, mes, diaVenc, 23, 59, 59, 999);
 
-    // REPARTIMOS EL DINERO CRONOLÓGICAMENTE 
     let pagadoMes = 0;
     if (bolsaDeDinero >= monto) {
       pagadoMes = monto;
-      bolsaDeDinero -= monto; // Descontamos lo que costó este mes
+      bolsaDeDinero -= monto;
     } else if (bolsaDeDinero > 0) {
       pagadoMes = bolsaDeDinero;
-      bolsaDeDinero = 0; // Se acabó la bolsa en un pago parcial
+      bolsaDeDinero = 0;
     }
 
     const saldoMes = Math.max(monto - pagadoMes, 0);
     let status = "Pendiente";
 
-    // ASIGNAMOS EL ESTATUS 
     if (indice < mesInicio) {
       status = "Programado";
     } else if (saldoMes < 0.01) {
-      status = "Pagado"; 
+      status = "Pagado";
     } else if (indice > mesHoy) {
-      status = "Programado"; 
+      status = "Programado";
     } else if (pagadoMes > 0) {
       status = "Parcial";
     } else if (hoy > vencimiento) {

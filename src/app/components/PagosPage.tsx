@@ -4,8 +4,6 @@ import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
 import { toast } from "sonner";
 import { useSyncDataReload } from '../../utils/dataSync';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 export function PagosPage() {
     const [pagos, setPagos] = useState<any[]>([]);
@@ -23,15 +21,18 @@ export function PagosPage() {
     const cargarDatos = useCallback(() => {
         getPagosConEstatus()
             .then((data) => {
+                // 🔥 Agrupar por idAlumno + grupoId (en lugar de solo nombreAlumno)
                 const alumnosMap: Record<string, any> = {};
 
                 data.forEach((pago: any) => {
-                    const key = pago.nombreAlumno?.trim();
-                    if (!key) return;
-
+                    const key = `${pago.idAlumno}-${pago.grupoId}`;
+                    
                     if (!alumnosMap[key]) {
                         alumnosMap[key] = {
                             id: pago.id || pago.pagoId,
+                            pagoId: pago.pagoId,
+                            idAlumno: pago.idAlumno,
+                            grupoId: pago.grupoId,
                             nombreAlumno: pago.nombreAlumno,
                             cursosLista: [],
                             montoTotal: 0,
@@ -51,7 +52,6 @@ export function PagosPage() {
                         alum.cursosLista.push(pago.nombreCurso);
                     }
 
-                    // Consolidación financiera multi-materia
                     alum.montoTotal += (Number(pago.montoTotal) || 0);
                     alum.montoPagado += (Number(pago.montoPagado) || 0);
                     if (pago.activo !== false) alum.activo = true;
@@ -67,11 +67,19 @@ export function PagosPage() {
                                 monto: 0,
                                 pagado: 0,
                                 saldo: 0,
-                                status: "Pendiente"
+                                status: "Pendiente",
+                                pagoId: mes.pagoId || pago.pagoId,
+                                grupoId: mes.grupoId || pago.grupoId,
+                                fechaPagoReal: mes.fechaPagoReal || null
                             };
                         }
-                        // Sumamos la tarifa requerida de este mes para todas sus materias
                         alum.periodosMap[mesKey].monto = (Number(mes.monto) || 0);
+                        alum.periodosMap[mesKey].pagado = (Number(mes.pagado) || 0);
+                        alum.periodosMap[mesKey].saldo = (Number(mes.saldo) || 0);
+                        alum.periodosMap[mesKey].status = mes.status || "Pendiente";
+                        alum.periodosMap[mesKey].pagoId = mes.pagoId || pago.pagoId;
+                        alum.periodosMap[mesKey].grupoId = mes.grupoId || pago.grupoId;
+                        alum.periodosMap[mesKey].fechaPagoReal = mes.fechaPagoReal || null;
                     });
                 });
 
@@ -80,9 +88,6 @@ export function PagosPage() {
                         return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
                     });
 
-                    // -----------------------------------------------------------------
-                    // ALGORITMO DE DISTRIBUCIÓN EN CASCADA UNIFICADO (FRONTEND)
-                    // -----------------------------------------------------------------
                     let bolsaDinero = alum.montoPagado;
 
                     periodosMensuales.forEach((m: any) => {
@@ -135,278 +140,33 @@ export function PagosPage() {
         setFechaFin('');
     }, [vista]);
 
-    const handleImprimirRecibo = (pago: any, mesEspecifico?: any) => {
-
-        // ── helpers ──────────────────────────────────────────────────────────────
-        const toBase64 = (url: string): Promise<string> =>
-            fetch(url)
-                .then((r) => r.blob())
-                .then(
-                    (blob) =>
-                        new Promise((res, rej) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => res(reader.result as string);
-                            reader.onerror = rej;
-                            reader.readAsDataURL(blob);
-                        })
-                );
-
-        const generarPDF = async (quiereFactura: boolean) => {
-            // ── datos del recibo ────────────────────────────────────────────────────
-            const estadoFacturacion = quiereFactura ? "Solicitada" : "No solicitada";
-
-            const ahora = new Date();
-            const anioActual = ahora.getFullYear();
-            const mesActualNum = String(ahora.getMonth() + 1).padStart(2, "0");
-            const anioMesNomenclatura = `${anioActual}-${mesActualNum}`;
-            const numeroTresDigitos = String(Math.floor(Math.random() * 900) + 100).padStart(3, "0");
-            const folioDocumento = `AL/CF/${anioMesNomenclatura}-R${numeroTresDigitos}`;
-
-            const fechaConsulta = ahora.toLocaleString("es-MX", {
-                year: "numeric", month: "2-digit", day: "2-digit",
-                hour: "2-digit", minute: "2-digit", second: "2-digit",
-            });
-            const fechaPago = ahora.toLocaleDateString("es-MX", {
-                weekday: "long", year: "numeric", month: "long", day: "numeric",
-            });
-
-            const nombreConcepto = mesEspecifico
-                ? `Mensualidad - ${mesEspecifico.nombreMes}`
-                : "Mensualidad";
-
-            const montoAImprimir = mesEspecifico ? mesEspecifico.pagado : pago.montoTotal;
-            const esAbono = mesEspecifico && mesEspecifico.status !== "Pagado";
-
-            // ── colores / tipografía de marca ───────────────────────────────────────
-            const PURPLE: [number, number, number] = [88, 28, 135];   // Algorithmics violeta
-            const DARK: [number, number, number] = [15, 23, 42];
-            const GRAY: [number, number, number] = [100, 116, 139];
-            const LIGHT_BG: [number, number, number] = [248, 250, 252];
-            const BORDER: [number, number, number] = [226, 232, 240];
-
-            // ── documento ───────────────────────────────────────────────────────────
-            const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-            const PW = 210; // page width
-
-            // ── logo ────────────────────────────────────────────────────────────────
-            const logoB64 = await toBase64("/logo-goku-lab.png");
-            doc.addImage(logoB64, "PNG", 15, 8, 22, 22);
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(13);
-            doc.setTextColor(...PURPLE);
-            doc.text("GOKU LAB", 40, 16);
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY);
-            doc.text("Algorithmics", 40, 22);
-
-            // Dirección bajo el logo
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(7.5);
-            doc.setTextColor(...GRAY);
-            doc.text("Av. Vía Adolfo López Mateos 201-local 418 b, MZ 001,", 15, 34);
-            doc.text("Sta Cruz Acatlan, 53150 Naucalpan de Juárez, Méx.", 15, 29);
-
-            // "Recibo" — derecha
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(36);
-            doc.setTextColor(...DARK);
-            doc.text("Recibo", PW - 15, 28, { align: "right" });
-
-            // Línea separadora
-            doc.setDrawColor(...BORDER);
-            doc.setLineWidth(0.4);
-            doc.line(15, 42, PW - 15, 42);
-
-            // ── bloque folio / fechas ───────────────────────────────────────────────
-            const ROW_H = 8;
-            let y = 52;
-
-            const drawRow = (label: string, value: string, yPos: number) => {
-                doc.setFont("Helvetica", "normal");
-                doc.setFontSize(9.5);
-                doc.setTextColor(...GRAY);
-                doc.text(label, 15, yPos);
-                doc.setTextColor(...DARK);
-                doc.setFont("Helvetica", "bold");
-                doc.text(value, PW - 15, yPos, { align: "right" });
-            };
-
-            drawRow("Folio", folioDocumento, y); y += ROW_H;
-            drawRow("Fecha de pago", fechaPago, y); y += ROW_H;
-            drawRow("Fecha de consulta", fechaConsulta, y); y += ROW_H + 4;
-
-            // ── caja DETALLES ───────────────────────────────────────────────────────
-            const boxX = 15, boxW = PW - 30;
-            const boxY = y;
-            const detRows = [
-                ["Estudiante (s)", pago.nombreAlumno || "N/A"],
-                ["Concepto", nombreConcepto],
-                ["Forma de Pago", pago.metodoAbono || "Tarjeta débito/crédito"],
-                ["Facturación", estadoFacturacion],
-                ["Recibido por", "SYSTEM"],
-            ];
-            const boxH = 10 + detRows.length * ROW_H + 2;
-
-            doc.setFillColor(...LIGHT_BG);
-            doc.setDrawColor(...BORDER);
-            doc.setLineWidth(0.3);
-            doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, "FD");
-
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY);
-            doc.text("DETALLES:", boxX + 5, boxY + 7);
-
-            let dy = boxY + 14;
-            detRows.forEach(([lbl, val]) => {
-                doc.setFont("Helvetica", "normal");
-                doc.setFontSize(9.5);
-                doc.setTextColor(...GRAY);
-                doc.text(lbl, boxX + 5, dy);
-                doc.setFont("Helvetica", "bold");
-                doc.setTextColor(...DARK);
-                doc.text(val, boxX + boxW - 5, dy, { align: "right" });
-                dy += ROW_H;
-            });
-
-            y = boxY + boxH + 6;
-
-            // ── línea punteada + Monto / Total ──────────────────────────────────────
-            doc.setDrawColor(...BORDER);
-            doc.setLineDash([1.5, 1.5], 0);
-            doc.line(15, y, PW - 15, y);
-            doc.setLineDash([], 0);
-            y += 8;
-
-            // Observaciones + monto
-            const montoFmt = `$${Number(montoAImprimir || 0).toLocaleString("es-MX", {
-                minimumFractionDigits: 2, maximumFractionDigits: 2,
-            })}`;
-
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(9.5);
-            doc.setTextColor(...GRAY);
-            doc.text("Observaciones", boxX, y);
-
-            if (esAbono) {
-                doc.setFontSize(8);
-                doc.setTextColor(180, 83, 9); // amber
-                doc.text("ABONO PARCIAL", boxX + 35, y);
-            }
-
-            doc.setFont("Helvetica", "normal");
-            doc.setTextColor(...GRAY);
-            doc.setFontSize(9.5);
-            doc.text("Monto", PW - 15 - 30, y);
-            doc.setFont("Helvetica", "bold");
-            doc.setTextColor(...DARK);
-            doc.text(montoFmt, PW - 15, y, { align: "right" });
-
-            y += ROW_H;
-
-            // Fecha inicio / nombre concepto como observación
-            const fechaInicioLabel = mesEspecifico
-                ? `FECHA DE INICIO ${ahora.toLocaleDateString("es-MX")}, ${ahora.getHours()}:00 H`
-                : `Historial completo al ${ahora.toLocaleDateString("es-MX")}`;
-
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(9.5);
-            doc.setTextColor(...DARK);
-            doc.text(fechaInicioLabel, boxX, y);
-
-            doc.text("Total", PW - 15 - 30, y);
-            doc.setFontSize(11);
-            doc.text(montoFmt, PW - 15, y, { align: "right" });
-
-            y += 14;
-
-            // ── Notas pie de página
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(18);
-            doc.setTextColor(...DARK);
-            doc.text("¡Gracias por tu pago!", PW / 2, y, { align: "center" });
-            y += 8;
-
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(9);
-            doc.setTextColor(...GRAY);
-            if (estadoFacturacion === "Solicitada") {
-                const msg =
-                    "Tienes hasta antes del fin de mes para solicitar tu factura. " +
-                    "Solo escríbenos por chat o comunícate\n" +
-                    "directamente con la gestión del centro. ¡Así de fácil! \n" +
-                    "- Equipo Algorithmics";
-                doc.text(msg, PW / 2, y, { align: "center", lineHeightFactor: 1.6 });
-                y += 24;
-            } else {
-                const msg = "Cualquier aclaración sobre este recibo o tu pago" +
-                    " solo escríbenos por chat o comunícate\n" +
-                    "directamente con la gestión del centro. ¡Así de fácil! \n" +
-                    "- Equipo Algorithmics";
-                doc.text(msg, PW / 2, y, { align: "center", lineHeightFactor: 1.6 });
-                y += 24;
-            }
-
-            // Contacto
-            doc.setFont("Helvetica", "bold");
-            doc.setFontSize(10);
-            doc.setTextColor(...DARK);
-            doc.text("Contacto", PW / 2, y, { align: "center" });
-            y += 6;
-            doc.setFont("Helvetica", "normal");
-            doc.setFontSize(9);
-            doc.setTextColor(...GRAY);
-            doc.text(
-                "Teléfono & WhatsApp: (+52) 5612668168 & (+52) 5580177920",
-                PW / 2, y, { align: "center" }
-            );
-
-            // ── pie de página ───────────────────────────────────────────────────────
-            doc.setFont("Helvetica", "italic");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY);
-            doc.text(
-                "Este documento es solo informativo y no tiene validez fiscal.",
-                PW / 2, 285, { align: "center" }
-            );
-
-            // ── guardar ─────────────────────────────────────────────────────────────
-            const nombreArchivo = mesEspecifico
-                ? `Recibo_${mesEspecifico.nombreMes.replace(/\s+/g, "_")}_${pago.nombreAlumno.replace(/\s+/g, "_")}.pdf`
-                : `Recibo_Global_${pago.nombreAlumno.replace(/\s+/g, "_")}.pdf`;
-
-            doc.save(nombreArchivo);
-            toast.success(`Comprobante ${mesEspecifico ? "mensual" : "global"} generado exitosamente`);
-        };
-
-        // ── toast de confirmación de factura ─────────────────────────────────────
-        toast.message("¿Desea Facturar?", {
-            description: mesEspecifico
-                ? `Recibo de: ${mesEspecifico.nombreMes}`
-                : `Recibo Global: ${pago.nombreAlumno}`,
-            duration: 8000,
-            action: { label: "Sí, Facturar", onClick: () => generarPDF(true) },
-            cancel: { label: "No", onClick: () => generarPDF(false) },
-        });
-    };
-
-
-
-    const handleConfirmarPago = async (pagoId: string, monto: number, metodo: string, fechaAbono: string, nuevoMontoMensual?: number) => {
+    const handleConfirmarPago = async (
+        pagoId: string,
+        monto: number,
+        metodo: string,
+        fechaAbono: string,
+        idAlumno: string,
+        grupoId: string,
+        nombreAlumno: string,
+        nuevoMontoMensual?: number
+    ) => {
         try {
             await registrarAbono({
                 pagoId,
                 montoAbono: monto,
-                nombreAlumno: selectedPayment?.nombreAlumno || "",
+                nombreAlumno,
                 metodoAbono: metodo,
                 fechaAbono,
+                idAlumno,
+                grupoId,
                 nuevoMontoMensual: nuevoMontoMensual || null
             });
             toast.success("Pago registrado correctamente");
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error: any) { toast.error("Error al registrar: " + error.message); }
+        } catch (error: any) {
+            toast.error("Error al registrar: " + error.message);
+        }
     };
 
     const pagosFiltrados = pagos
@@ -415,7 +175,6 @@ export function PagosPage() {
             const hoy = new Date();
             const totalMesesHoy = hoy.getFullYear() * 12 + hoy.getMonth();
 
-            // Validación estricta para segmentar las pestañas sin fugas
             const tienePendientesPasados = periodos.some((m: any) => {
                 const v = new Date(m.vencimiento);
                 return (v.getFullYear() * 12 + v.getMonth()) <= totalMesesHoy && m.status !== "Pagado";
@@ -475,8 +234,19 @@ export function PagosPage() {
             return sum + (mesEnCurso ? (mesEnCurso.saldo || 0) : 0);
         }, 0);
 
-    const totalRecolectado = pagos
-        .reduce((sum, p) => {
+    let totalRecolectado = 0;
+    if (vista === 'registro') {
+        totalRecolectado = pagosFiltrados.reduce((sum, p) => {
+            const periodosPagados = (p.periodosMensuales || []).filter(m => 
+                m.status === "Pagado"
+            );
+            const sumMeses = periodosPagados.reduce((acc, m) => {
+                return acc + (m.monto || 0);
+            }, 0);
+            return sum + sumMeses;
+        }, 0);
+    } else {
+        totalRecolectado = pagosFiltrados.reduce((sum, p) => {
             const mesEnCurso = (p.periodosMensuales || []).find((m: any) => {
                 if (!m.vencimiento) return false;
                 const v = new Date(m.vencimiento);
@@ -484,9 +254,10 @@ export function PagosPage() {
             });
             return sum + (mesEnCurso ? (mesEnCurso.pagado || 0) : 0);
         }, 0);
+    }
 
     return (
-        <div className="bg-gray-50 min-h-screen w-full pt-12"> {/* 👈 Ajuste de padding */}
+        <div className="bg-gray-50 min-h-screen w-full pt-12">
             <header className="relative overflow-hidden border-b border-cyan-100 bg-[linear-gradient(120deg,#eefbff_0%,#d9f3ff_48%,#8fd6f3_100%)] px-6 py-5 shadow-sm">
                 <div className="absolute right-10 top-0 h-24 w-24 rounded-full border-[18px] border-white/40" />
                 <div className="relative mx-auto flex w-full max-w-none items-center justify-between gap-6 px-4 lg:px-10">
@@ -546,11 +317,30 @@ export function PagosPage() {
                                 payment={p}
                                 vista={vista}
                                 onRegisterPayment={(mesElegido) => {
-                                    setSelectedPayment({ ...p, saldo: mesElegido.saldo, montoTotal: mesElegido.monto, id: p.id, claveMes: mesElegido.clave });
+                                    const pagoId = mesElegido.pagoId || p.pagoId || p.id;
+                                    const grupoId = mesElegido.grupoId || p.grupoId;
+
+                                    console.log('🔍 Mes elegido:', mesElegido);
+                                    console.log('🔍 pagoId a usar:', pagoId);
+                                    console.log('🔍 grupoId a usar:', grupoId);
+
+                                    setSelectedPayment({
+                                        ...p,
+                                        saldo: mesElegido.saldo,
+                                        montoTotal: mesElegido.monto,
+                                        id: p.id,
+                                        pagoId: pagoId,
+                                        idAlumno: p.idAlumno,
+                                        grupoId: grupoId,
+                                        nombreAlumno: p.nombreAlumno,
+                                        claveMes: mesElegido.clave
+                                    });
                                     setIsModalOpen(true);
                                 }}
-                                onChangePaymentDate={() => { }}
-                                onPrintReceipt={(mes) => handleImprimirRecibo(p, mes)}
+                                onChangePaymentDate={() => {}}
+                                onPrintReceipt={(mes) => {
+                                    toast.info('Función de recibo en desarrollo');
+                                }}
                             />
                         ))
                     ) : (

@@ -33,14 +33,10 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
     const hoy = new Date();
     const totalMesesHoy = hoy.getFullYear() * 12 + hoy.getMonth();
 
-    // --- SOLUCIÓN A LOS TOTALES GLOBALES ---
-    // El TOTAL ahora filtra estrictamente para sumar solo lo que se debe cobrar hasta el mes actual
     const sumMontoReal = periodosRaw.reduce((sum: number, m: any) => {
         if (!m.vencimiento || m.status === "Programado") return sum;
         const v = new Date(m.vencimiento);
         const totalMesesVence = v.getFullYear() * 12 + v.getMonth();
-
-        // Solo suma si el mes ya pasó o es el mes en curso (ignora el futuro)
         if (totalMesesVence <= totalMesesHoy) {
             return sum + (m.monto || 0);
         }
@@ -48,17 +44,11 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
     }, 0);
 
     const totalGlobalMonto = periodosRaw.length > 0 ? sumMontoReal : (payment.montoTotal || 0);
-
-    // El ABONADO suma todo el dinero que el alumno ha pagado históricamente (incluyendo adelantos)
     const totalGlobalPagado = periodosRaw.reduce((sum: number, m: any) => sum + (m.pagado || 0), 0) || payment.montoPagado || 0;
-
-    // El ADEUDO REAL es lo que debía pagar hasta hoy, menos todo el dinero que ya ingresó
     const totalGlobalAdeudo = Math.max(0, totalGlobalMonto - totalGlobalPagado);
 
-    // --- CANDADO DE TIEMPO ESTRICTO POR MES CALENDARIO PARA LAS TARJETAS ---
     const mesesAMostrar = periodosRaw.filter((m: any) => {
         if (!m.vencimiento) return false;
-
         const v = new Date(m.vencimiento);
         const totalMesesVence = v.getFullYear() * 12 + v.getMonth();
 
@@ -168,6 +158,9 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
                                 const indiceReal = periodosRaw.indexOf(mes);
                                 const estaBloqueado = indiceReal > primerMesPendienteIndex && primerMesPendienteIndex !== -1;
 
+                                // ✅ LOG PARA VERIFICAR QUE pagoId EXISTE EN mes
+                                console.log('🔍 Renderizando mes:', mes.clave, 'pagoId:', mes.pagoId);
+
                                 return (
                                     <div key={mes.clave} className={`flex flex-col justify-between rounded-lg border px-4 py-3 text-xs ${esPagado ? 'border-emerald-100 bg-emerald-50/30' : 'border-gray-100 bg-gray-50'}`}>
                                         <div>
@@ -201,7 +194,15 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
 
                                         {!esPagado && (
                                             <button
-                                                onClick={() => !estaBloqueado && onRegisterPayment(mes)}
+                                                onClick={() => {
+                                                    if (!estaBloqueado) {
+                                                        // ✅ PASAR EXPLÍCITAMENTE pagoId CON EL MES
+                                                        onRegisterPayment({
+                                                            ...mes,
+                                                            pagoId: mes.pagoId // ← Asegurar que pagoId se pase
+                                                        });
+                                                    }
+                                                }}
                                                 disabled={estaBloqueado}
                                                 className={`mt-3 w-full rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${estaBloqueado
                                                     ? "bg-gray-200 text-gray-400 cursor-not-allowed"

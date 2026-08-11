@@ -2,19 +2,12 @@ import express from "express";
 import Pago from "../models/Pago.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
-import {
-    cobroAunNoInicia,
-    construirPeriodosMensuales,
-    crearOActualizarPagoDeInscripcion,
-    crearPagoId,
-    indiceMes,
-} from "../utils/pagos.js";
+import { crearPagoId } from "../utils/pagos.js";
 
 const router = express.Router();
 
 // ============================================================
 // FUNCIÓN PARA SINCRONIZAR PAGOS DESDE INSCRIPCIONES
-// (ACTUALIZADA PARA ACTUALIZAR PAGOS EXISTENTES)
 // ============================================================
 async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
@@ -39,7 +32,6 @@ async function sincronizarPagosDesdeInscripciones() {
         const pagoId = crearPagoId(idAlumno, grupoId);
         const grupo = gruposMap.get(grupoId.toUpperCase());
 
-        // ✅ ACTUALIZAR O CREAR (upsert) para mantener consistencia
         await Pago.updateOne(
             { pagoId },
             {
@@ -61,183 +53,128 @@ async function sincronizarPagosDesdeInscripciones() {
 }
 
 // ============================================================
-// GET /lista-completa - CON FILTRO DE PAGOS ACTIVOS
+// GET /lista-completa – USANDO PAGOS REALES (SIN RECÁLCULO)
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
+        // Sincronizar pagos principales desde inscripciones
         await sincronizarPagosDesdeInscripciones();
 
-        const hoy = new Date();
-
-        const respuestaProcesada = await Pago.aggregate([
-            // 🔥 CORRECCIÓN: FILTRAR SOLO PAGOS ACTIVOS
-            {
-                $match: {
-                    activo: true,
-                },
-            },
+        // Obtener todos los pagos activos con sus abonos
+        const pagos = await Pago.aggregate([
+            { $match: { activo: true } },
             {
                 $lookup: {
                     from: "abonos",
                     let: { idDelPago: "$pagoId" },
                     pipeline: [
-                        {
-                            $match: {
-                                $expr: { $eq: ["$pagoId", "$$idDelPago"] }
-                            }
-                        },
+                        { $match: { $expr: { $eq: ["$pagoId", "$$idDelPago"] } } },
                         { $sort: { fechaAbono: 1 } }
                     ],
                     as: "historialAbonos"
                 }
-            },
-            {
-                $addFields: {
-                    diaPagoResuelto: { $ifNull: ["$diaPago", "$diaPagoFijo"] },
-                    fechaInicioResuelta: { $ifNull: ["$fechaInicioPago", "$fechaPago"] }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    id: { $toUpper: { $trim: { input: "$pagoId" } } },
-                    idAlumno: 1,
-                    grupoId: 1,
-                    nombreAlumno: 1,
-                    nombreCurso: 1,
-                    montoTotal: { $toDouble: "$montoPago" },
-                    diaPagoFijo: "$diaPagoResuelto",
-                    fechaPago: "$fechaInicioResuelta",
-                    activo: { $ifNull: ["$activo", true] },
-                    fechaBaja: 1,
-                    historialAbonos: {
-                        $map: {
-                            input: "$historialAbonos",
-                            as: "a",
-                            in: {
-                                abonoId: "$$a.abonoId",
-                                fechaAbono: "$$a.fechaAbono",
-                                montoAbono: { $toDouble: "$$a.montoAbono" },
-                                metodoAbono: "$$a.metodoAbono",
-                            }
-                        }
-                    },
-                    montoPagado: {
-                        $sum: {
-                            $map: {
-                                input: "$historialAbonos",
-                                as: "a",
-                                in: { $toDouble: "$$a.montoAbono" }
-                            }
-                        }
-                    },
-                    metodoAbono: {
-                        $cond: {
-                            if: { $gt: [{ $size: "$historialAbonos" }, 0] },
-                            then: { $last: "$historialAbonos.metodoAbono" },
-                            else: "No registrado"
-                        }
-                    },
-                    fechaPagoReal: {
-                        $cond: {
-                            if: { $gt: [{ $size: "$historialAbonos" }, 0] },
-                            then: { $last: "$historialAbonos.fechaAbono" },
-                            else: null
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    saldo: { $subtract: ["$montoTotal", "$montoPagado"] }
-                }
-            },
-            {
-                $addFields: {
-                    status: {
-                        $cond: {
-                            if: { $gte: ["$montoPagado", "$montoTotal"] },
-                            then: "Pagado",
-                            else: {
-                                $cond: {
-                                    if: { $gt: ["$montoPagado", 0] },
-                                    then: "Parcial",
-                                    else: "Pendiente"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $sort: { fechaPagoReal: -1 }
             }
         ]);
 
-        const resultadoFinal = respuestaProcesada.map((p) => {
-            const hoy = new Date();
-            const diaPago = Number(p.diaPagoFijo) || 1;
-            const fechaInicio = p.fechaPago ? new Date(p.fechaPago) : null;
-            const programado = fechaInicio && cobroAunNoInicia(fechaInicio, hoy);
+        // Agrupar pagos por alumno + grupo
+        const alumnosMap = new Map();
 
-            const periodosMensuales = construirPeriodosMensuales({
-                fechaInicioCobro: fechaInicio,
-                diaPagoFijo: diaPago,
-                montoMensualidad: p.montoTotal,
-                abonos: p.historialAbonos || [],
-                hoy,
-                mesesFuturosVisibles: 3,
+        for (const pago of pagos) {
+            const key = `${pago.idAlumno}-${pago.grupoId}`;
+            if (!alumnosMap.has(key)) {
+                alumnosMap.set(key, {
+                    idAlumno: pago.idAlumno,
+                    grupoId: pago.grupoId,
+                    nombreAlumno: pago.nombreAlumno,
+                    nombreCurso: pago.nombreCurso,
+                    pagos: [],
+                    montoTotal: 0,
+                    montoPagado: 0,
+                    historialAbonos: [],
+                    activo: true,
+                    fechaBaja: null,
+                });
+            }
+            const alum = alumnosMap.get(key);
+            alum.pagos.push(pago);
+            alum.montoTotal += pago.montoPago || 0;
+            const abonos = pago.historialAbonos || [];
+            const pagado = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
+            alum.montoPagado += pagado;
+            alum.historialAbonos = alum.historialAbonos.concat(abonos);
+        }
+
+        // Construir respuesta
+        const resultadoFinal = [];
+
+        for (const [key, alum] of alumnosMap) {
+            // Ordenar pagos por fecha de inicio (real, sin recalcular)
+            const pagosOrdenados = alum.pagos.sort((a, b) => new Date(a.fechaInicioPago) - new Date(b.fechaInicioPago));
+
+            // 🔥 PERIODOS MENSUALES = CADA PAGO REAL, SIN RECÁLCULO
+            const periodosMensuales = pagosOrdenados.map((pago) => {
+                const fechaVencimiento = new Date(pago.fechaInicioPago);
+                const abonosDelPago = pago.historialAbonos || [];
+                const totalAbonado = abonosDelPago.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
+                const saldo = Math.max(0, pago.montoPago - totalAbonado);
+                const status = totalAbonado >= pago.montoPago ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
+
+                return {
+                    clave: `${fechaVencimiento.getFullYear()}-${String(fechaVencimiento.getMonth() + 1).padStart(2, '0')}`,
+                    nombreMes: fechaVencimiento.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+                    vencimiento: fechaVencimiento.toISOString(),
+                    monto: pago.montoPago || 0,
+                    pagado: totalAbonado,
+                    saldo: saldo,
+                    status: status,
+                    pagoId: pago.pagoId,
+                    metodoAbono: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].metodoAbono : null,
+                    fechaPagoReal: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].fechaAbono : null,
+                };
             });
 
-            const periodoVigente =
-                periodosMensuales.find((mes) => {
-                    const idx = indiceMes(new Date(mes.vencimiento));
-                    return idx === indiceMes(hoy);
-                }) ||
-                periodosMensuales.find((mes) => mes.status !== "Programado") ||
-                periodosMensuales[0];
+            // Calcular totales (suma de los pagos reales)
+            const totalMonto = periodosMensuales.reduce((sum, m) => sum + m.monto, 0);
+            const totalPagado = periodosMensuales.reduce((sum, m) => sum + m.pagado, 0);
+            const saldoTotal = Math.max(0, totalMonto - totalPagado);
+            const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
 
-            let status = p.status;
-            let saldo = p.saldo < 0 ? 0 : p.saldo;
-            let fechaLimite = periodoVigente?.vencimiento || p.fechaPago;
+            // Fecha límite: el vencimiento del mes actual o el primer pendiente
+            const hoy = new Date();
+            const mesActual = periodosMensuales.find(m => {
+                const v = new Date(m.vencimiento);
+                return v.getMonth() === hoy.getMonth() && v.getFullYear() === hoy.getFullYear();
+            }) || periodosMensuales.find(m => m.status !== "Pagado") || periodosMensuales[0];
 
-            if (p.activo === false) {
-                status = "Baja";
-                saldo = 0;
-            } else if (programado) {
-                status = "Programado";
-                const primerMes = periodosMensuales.find((mes) => mes.status === "Programado") || periodosMensuales[0];
-                saldo = Number(primerMes?.saldo ?? primerMes?.monto ?? p.montoTotal ?? 0);
-                fechaLimite = primerMes?.vencimiento || fechaLimite;
-            } else if (periodoVigente) {
-                fechaLimite = periodoVigente.vencimiento;
-                saldo = periodoVigente.saldo;
-                if (periodoVigente.status === "Pagado") status = "Pagado";
-                else if (periodoVigente.status === "Parcial") status = "Parcial";
-                else if (periodoVigente.status === "Pendiente") status = "Pendiente";
-            }
-
-            return {
-                ...p,
-                status,
-                saldo,
-                fechaLimite,
-                periodosMensuales,
-                mesCobroVigente: periodoVigente?.nombreMes || (fechaInicio ? fechaInicio.toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : ""),
-                cobroProgramado: programado,
-            };
-        });
+            resultadoFinal.push({
+                id: key,
+                idAlumno: alum.idAlumno,
+                grupoId: alum.grupoId,
+                nombreAlumno: alum.nombreAlumno,
+                nombreCurso: alum.nombreCurso,
+                montoTotal: totalMonto,
+                montoPagado: totalPagado,
+                saldo: saldoTotal,
+                status: statusGeneral,
+                activo: alum.activo,
+                fechaBaja: alum.fechaBaja,
+                fechaLimite: mesActual?.vencimiento || null,
+                periodosMensuales: periodosMensuales,
+                cobroProgramado: false,
+                metodoAbono: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].metodoAbono : null,
+                fechaPagoReal: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].fechaAbono : null,
+            });
+        }
 
         res.json(resultadoFinal);
-
     } catch (error) {
-        console.error("Error en agregación:", error);
-        res.status(500).json({ error: "Error al procesar pagos optimizados" });
+        console.error("Error en /lista-completa:", error);
+        res.status(500).json({ error: "Error al obtener pagos" });
     }
 });
 
 // ============================================================
-// PATCH /actualizar-dia/:id - (SIN CAMBIOS)
+// PATCH /actualizar-dia/:id
 // ============================================================
 router.patch("/actualizar-dia/:id", async (req, res) => {
     try {

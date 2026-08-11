@@ -1,9 +1,19 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 
 interface RegisterPaymentModalProps {
     payment: any;
     onClose: () => void;
-    onConfirm: (pagoId: string, monto: number, metodo: string, fechaAbono: string, nuevoMontoMensual?: number) => void;
+    onConfirm: (
+        pagoId: string,
+        monto: number,
+        metodo: string,
+        fechaAbono: string,
+        idAlumno: string,
+        grupoId: string,
+        nombreAlumno: string,
+        nuevoMontoMensual?: number
+    ) => void;
 }
 
 export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPaymentModalProps) {
@@ -22,32 +32,47 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
 
         const tarifaFutura = cambiarTarifa ? Number(nuevoMonto) : undefined;
 
-        // Ejecutamos onConfirm pasándole todos los datos hacia PagosPage.tsx
-        onConfirm(payment.id, montoAbono, metodo, fechaAbono, tarifaFutura);
+        // âœ… OBTENER pagoId CON FALLBACK
+        const pagoId = payment.pagoId || payment.id || payment._id;
+        
+        if (!pagoId) {
+            toast.error('El pago no tiene un identificador vÃ¡lido.');
+            return;
+        }
+
+        // âœ… ENVIAR TODOS LOS DATOS AL BACKEND
+        onConfirm(
+            pagoId,
+            montoAbono,
+            metodo,
+            fechaAbono,
+            payment.idAlumno,
+            payment.grupoId,
+            payment.nombreAlumno,
+            tarifaFutura
+        );
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-
-                {/* ENCABEZADO DEL MODAL */}
                 <div className="bg-cyan-600 px-6 py-4 flex justify-between items-center">
                     <div>
                         <h2 className="text-white font-black text-lg leading-tight">
                             Registrar Abono
                         </h2>
                         <p className="text-cyan-100 text-xs font-medium mt-0.5">
-                            {payment.nombreAlumno} • {payment.claveMes ? `Periodo: ${payment.claveMes}` : 'Abono Global'}
+                            {payment.nombreAlumno} â€¢ {payment.claveMes ? `Periodo: ${payment.claveMes}` : 'Abono Global'}
                         </p>
                     </div>
                     <button onClick={onClose} className="text-cyan-100 hover:text-white transition-colors">
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-
-                    {/* SECCIÓN 1: DATOS DEL ABONO ACTUAL */}
                     <div className="space-y-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Monto a abonar hoy</label>
@@ -70,7 +95,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Método</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">MÃ©todo</label>
                                 <select
                                     value={metodo}
                                     onChange={(e) => setMetodo(e.target.value)}
@@ -94,7 +119,6 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                         </div>
                     </div>
 
-                    {/* SECCIÓN 2: ACTUALIZAR TARIFA FUTURA (El nuevo requerimiento) */}
                     <div className="border-t border-gray-100 pt-4 mt-2">
                         <label className="flex items-center gap-3 cursor-pointer group">
                             <div className="relative">
@@ -108,15 +132,14 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                                 <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${cambiarTarifa ? 'translate-x-4' : ''}`}></div>
                             </div>
                             <span className="text-xs font-bold text-gray-700 group-hover:text-purple-700 transition-colors">
-                                Cambiar mensualidad para próximos meses
+                                Cambiar mensualidad para prÃ³ximos meses
                             </span>
                         </label>
 
-                        {/* Solo se muestra si el usuario activa el switch */}
                         {cambiarTarifa && (
                             <div className="mt-3 bg-purple-50 border border-purple-100 rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
                                 <label className="text-[10px] font-bold text-purple-600 uppercase tracking-wider mb-1.5 block">
-                                    Nueva tarifa mensual (Aplicará a meses futuros)
+                                    Nueva tarifa mensual
                                 </label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-400 font-bold">$</span>
@@ -131,13 +154,12 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                                     />
                                 </div>
                                 <p className="text-[9px] text-purple-500/70 font-medium mt-2 leading-tight">
-                                    * Esta tarifa reemplazará el costo de colegiatura del alumno a partir del siguiente mes pendiente en su historial.
+                                    * Se aplicarÃ¡ a meses futuros a partir del siguiente mes pendiente.
                                 </p>
                             </div>
                         )}
                     </div>
 
-                    {/* BOTONES DE ACCIÓN */}
                     <div className="flex justify-end gap-3 pt-2">
                         <button
                             type="button"
