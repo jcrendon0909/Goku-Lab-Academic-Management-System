@@ -61,7 +61,7 @@ export function AsignacionProfesorVeranoForm({
     cargarProfesores();
   }, []);
 
-  // ✅ Auto-completar costo por hora al seleccionar profesor
+  // Auto-completar costo por hora al seleccionar profesor
   useEffect(() => {
     if (formData.idProfesor) {
       const profesor = profesores.find(p => p.idProfesor === formData.idProfesor);
@@ -70,10 +70,8 @@ export function AsignacionProfesorVeranoForm({
         if (profesor.tipoPago === 'por_hora' && profesor.salarioPorHora) {
           costoBase = profesor.salarioPorHora;
         } else if (profesor.tipoPago === 'fijo_mensual' && profesor.salarioMensual) {
-          // Estimación: 160 horas/mes (4 semanas × 40h)
           costoBase = Math.round(profesor.salarioMensual / 160);
         }
-        // Solo si no es edición (para no sobrescribir un valor personalizado)
         if (!asignacionExistente) {
           setFormData(prev => ({ ...prev, costoHora: costoBase }));
         }
@@ -103,15 +101,28 @@ export function AsignacionProfesorVeranoForm({
 
     setCargando(true);
     try {
+      // ✅ URL CORRECTA
       const url = asignacionExistente?._id 
         ? `/cursos-verano/asignaciones/${asignacionExistente._id}`
-        : `/cursos-verano/${cursoId}/asignaciones`;
-      const method = asignacionExistente?._id ? 'PATCH' : 'POST';
+        : `/cursos-verano/asignaciones`;
+      
+      // ✅ MÉTODO CORRECTO
+      const method = asignacionExistente?._id ? 'PUT' : 'POST';
+
+      const payload = {
+        idCursoVerano: cursoId,
+        idProfesor: formData.idProfesor,
+        nombreProfesor: profesores.find(p => p.idProfesor === formData.idProfesor)?.nombre || '',
+        dias: formData.dias,
+        horasPorDia: formData.horasPorDia,
+        costoHora: formData.costoHora,
+        semanas: formData.semanas,
+      };
 
       const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {

@@ -17,19 +17,36 @@ interface CursoVerano {
   profesorPrincipal: string;
 }
 
+interface Profesor {
+  idProfesor: string;
+  nombre: string;
+  estatus: string;
+}
+
 export function CursosVeranoPage() {
   const [cursos, setCursos] = useState<CursoVerano[]>([]);
+  const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [cargando, setCargando] = useState(true);
 
-  const cargarCursos = async () => {
+  const cargarDatos = async () => {
     try {
       setCargando(true);
-      const res = await apiFetch('/cursos-verano');
-      if (!res.ok) throw new Error('Error al cargar cursos');
-      const data = await res.json();
-      setCursos(data);
+      const [resCursos, resProfesores] = await Promise.all([
+        apiFetch('/cursos-verano'),
+        apiFetch('/profesores')
+      ]);
+
+      if (!resCursos.ok) throw new Error('Error al cargar cursos');
+      if (!resProfesores.ok) throw new Error('Error al cargar profesores');
+
+      const cursosData = await resCursos.json();
+      const profesoresData = await resProfesores.json();
+
+      setCursos(cursosData);
+      // Filtrar solo profesores activos
+      setProfesores(profesoresData.filter((p: any) => p.estatus === 'Activo' || p.estatus === 'activo'));
     } catch (error) {
-      toast.error('Error al cargar cursos de verano');
+      toast.error('Error al cargar datos');
       console.error(error);
     } finally {
       setCargando(false);
@@ -37,8 +54,15 @@ export function CursosVeranoPage() {
   };
 
   useEffect(() => {
-    cargarCursos();
+    cargarDatos();
   }, []);
+
+  // Función para obtener nombre del profesor a partir del ID
+  const obtenerNombreProfesor = (idProfesor: string): string => {
+    if (!idProfesor) return 'Sin asignar';
+    const profesor = profesores.find(p => p.idProfesor === idProfesor);
+    return profesor ? profesor.nombre : idProfesor;
+  };
 
   const cambiarEstatus = async (id: string, nuevoEstatus: string) => {
     try {
@@ -49,7 +73,7 @@ export function CursosVeranoPage() {
       });
       if (!res.ok) throw new Error('Error al cambiar estatus');
       toast.success(`Curso ${nuevoEstatus === 'finalizado' ? 'finalizado' : 'activado'}`);
-      cargarCursos();
+      cargarDatos();
     } catch (error) {
       toast.error('Error al cambiar estatus');
       console.error(error);
@@ -65,13 +89,12 @@ export function CursosVeranoPage() {
         throw new Error(error.error || 'Error al eliminar');
       }
       toast.success('Curso eliminado');
-      cargarCursos();
+      cargarDatos();
     } catch (error: any) {
       toast.error(error.message || 'Error al eliminar');
     }
   };
 
-  // ✅ Eliminar videos decorativos - array vacío
   const decorativeVideos: { src: string; position: any }[] = [];
 
   if (cargando) {
@@ -80,8 +103,8 @@ export function CursosVeranoPage() {
 
   return (
     <BackgroundVideo
-      videoSrc="https://media.gokulab.mx/Galery/videos/codyanimado.mp4"  // ✅ Nuevo video de fondo
-      decorativeVideos={decorativeVideos}  // ✅ Sin videos decorativos
+      videoSrc="https://media.gokulab.mx/Galery/videos/codyanimado.mp4"
+      decorativeVideos={decorativeVideos}
     >
       <div className="p-4 md:p-6 w-full max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
@@ -135,7 +158,7 @@ export function CursosVeranoPage() {
                     <p>📆 Inicio: {new Date(curso.fechaInicio).toLocaleDateString()}</p>
                     <p>📆 Fin: {new Date(curso.fechaFin).toLocaleDateString()}</p>
                     {curso.profesorPrincipal && (
-                      <p>👨‍🏫 Profesor principal: {curso.profesorPrincipal}</p>
+                      <p>👨‍🏫 Profesor principal: {obtenerNombreProfesor(curso.profesorPrincipal)}</p>
                     )}
                     {curso.descripcion && (
                       <p className="text-gray-500 text-xs">{curso.descripcion}</p>

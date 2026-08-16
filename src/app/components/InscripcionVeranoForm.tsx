@@ -92,7 +92,6 @@ export function InscripcionVeranoForm({
 
     setCargando(true);
     try {
-      // Si no tiene idAlumno, crear alumno nuevo
       let idAlumno = formData.idAlumno;
       if (!idAlumno && formData.nombreAlumno) {
         const res = await apiFetch('/alumnos', {
@@ -115,8 +114,8 @@ export function InscripcionVeranoForm({
         nombreAlumno: formData.nombreAlumno.trim(),
         montoPago: parseFloat(formData.montoPago as any),
         semanasPagadas: parseInt(formData.semanasPagadas as any),
-        fechaInicio: new Date(formData.fechaInicio).toISOString(),
-        fechaFin: new Date(formData.fechaFin).toISOString(),
+        fechaInicio: formData.fechaInicio, // ✅ CORREGIDO
+        fechaFin: formData.fechaFin,       // ✅ CORREGIDO
         notas: formData.notas || '',
       };
 
@@ -141,7 +140,7 @@ export function InscripcionVeranoForm({
   };
 
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border-2 border-yellow-200 shadow-xl">
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border-2 border-yellow-200 shadow-xl max-h-[70vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           <UserPlus className="h-5 w-5 text-yellow-600" />
@@ -169,7 +168,7 @@ export function InscripcionVeranoForm({
               />
               <Search className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
               {alumnos.length > 0 && (
-                <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
                   {alumnos.map((a) => (
                     <li
                       key={a.idAlumno}

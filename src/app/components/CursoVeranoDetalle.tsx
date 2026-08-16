@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
-import BackgroundVideo from './BackgroundVideo';
 import { ArrowLeft, User, Trash2, Plus, Calendar, Clock, DollarSign, Users, UserPlus } from 'lucide-react';
 import { AsignacionProfesorVeranoForm } from './AsignacionProfesorVeranoForm';
 import { InscripcionVeranoForm } from './InscripcionVeranoForm';
@@ -45,6 +44,7 @@ export function CursoVeranoDetalle() {
   const [curso, setCurso] = useState<Curso | null>(null);
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([]);
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
+  const [profesores, setProfesores] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [mostrarFormAsignacion, setMostrarFormAsignacion] = useState(false);
   const [mostrarFormInscripcion, setMostrarFormInscripcion] = useState(false);
@@ -65,23 +65,27 @@ export function CursoVeranoDetalle() {
     if (!id) return;
     try {
       setCargando(true);
-      const [resCurso, resAsignaciones, resInscripciones] = await Promise.all([
+      const [resCurso, resAsignaciones, resInscripciones, resProfesores] = await Promise.all([
         apiFetch(`/cursos-verano/${id}`),
         apiFetch(`/cursos-verano/${id}/asignaciones`),
-        apiFetch(`/cursos-verano/${id}/inscripciones`)
+        apiFetch(`/cursos-verano/${id}/inscripciones`),
+        apiFetch('/profesores')
       ]);
 
       if (!resCurso.ok) throw new Error('Error al cargar curso');
       if (!resAsignaciones.ok) throw new Error('Error al cargar asignaciones');
       if (!resInscripciones.ok) throw new Error('Error al cargar inscripciones');
+      if (!resProfesores.ok) throw new Error('Error al cargar profesores');
 
       const cursoData = await resCurso.json();
       const asignacionesData = await resAsignaciones.json();
       const inscripcionesData = await resInscripciones.json();
+      const profesoresData = await resProfesores.json();
 
       setCurso(cursoData);
       setAsignaciones(asignacionesData);
       setInscripciones(inscripcionesData);
+      setProfesores(profesoresData.filter((p: any) => p.estatus === 'Activo' || p.estatus === 'activo'));
     } catch (error) {
       toast.error('Error al cargar datos');
       console.error(error);
@@ -127,7 +131,6 @@ export function CursoVeranoDetalle() {
   // === Funciones para edición inline de inscripciones ===
   const iniciarEdicionInscripcion = (inscripcion: Inscripcion) => {
     setInscripcionEditando(inscripcion._id);
-    // Convertir fechas a formato YYYY-MM-DD sin desfase horario
     const fechaInicio = inscripcion.fechaInicio ? new Date(inscripcion.fechaInicio) : null;
     const fechaFin = inscripcion.fechaFin ? new Date(inscripcion.fechaFin) : null;
     setFormularioInscripcion({
@@ -157,15 +160,18 @@ export function CursoVeranoDetalle() {
     }
   };
 
-  // Formateo de fecha sin desfase
   const formatFechaLocal = (fecha: string) => {
     if (!fecha) return '';
     const date = new Date(fecha);
     return date.toLocaleDateString('es-MX', { timeZone: 'UTC' });
   };
 
-  // ✅ Eliminar videos decorativos - array vacío
-  const decorativeVideos: { src: string; position: any }[] = [];
+  // Función para obtener el nombre del profesor a partir del ID
+  const obtenerNombreProfesor = (id: string) => {
+    if (!id) return 'Sin nombre';
+    const prof = profesores.find(p => p.idProfesor === id);
+    return prof ? prof.nombre : id;
+  };
 
   if (cargando) {
     return <div className="p-8 text-center text-gray-500">⏳ Cargando...</div>;
@@ -176,20 +182,17 @@ export function CursoVeranoDetalle() {
   }
 
   return (
-    <BackgroundVideo
-      videoSrc="https://media.gokulab.mx/Galery/videos/codyanimado.mp4"
-      decorativeVideos={decorativeVideos}
-    >
-      <div className="p-4 md:p-6 w-full max-w-5xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-amber-50 p-4 md:p-6">
+      <div className="w-full max-w-5xl mx-auto">
         <Link
           to="/cursos-verano"
-          className="inline-flex items-center gap-2 text-white hover:text-yellow-300 transition-colors mb-4 group"
+          className="inline-flex items-center gap-2 text-yellow-700 hover:text-yellow-900 transition-colors mb-4 group"
         >
           <ArrowLeft className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
           <span>Volver a la lista</span>
         </Link>
 
-        <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl border-2 border-yellow-200 p-6">
+        <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-yellow-200 p-6 max-h-[calc(100vh-150px)] overflow-y-auto">
           {/* Cabecera del curso */}
           <div className="flex items-start justify-between mb-6">
             <div>
@@ -237,7 +240,9 @@ export function CursoVeranoDetalle() {
                 <div key={asig._id} className="bg-white border-2 border-blue-100 rounded-xl p-4 hover:border-blue-300 transition">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-bold text-gray-900">{asig.nombreProfesor}</p>
+                      <p className="font-bold text-gray-900">
+                        {asig.nombreProfesor || obtenerNombreProfesor(asig.idProfesor) || 'Sin nombre'}
+                      </p>
                       <div className="flex flex-wrap gap-2 mt-1">
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
@@ -458,6 +463,6 @@ export function CursoVeranoDetalle() {
           )}
         </div>
       </div>
-    </BackgroundVideo>
+    </div>
   );
 }

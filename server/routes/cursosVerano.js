@@ -2,6 +2,7 @@ import express from "express";
 import CursoVerano from "../models/CursoVerano.js";
 import AsignacionProfesorVerano from "../models/AsignacionProfesorVerano.js";
 import InscripcionVerano from "../models/InscripcionVerano.js";
+import Profesor from "../models/Profesor.js";
 
 const router = express.Router();
 
@@ -9,7 +10,6 @@ const router = express.Router();
 // CURSOS
 // ============================================================
 
-// GET / - Listar todos los cursos
 router.get("/", async (req, res) => {
   try {
     const cursos = await CursoVerano.find().sort({ año: -1, fechaInicio: -1 });
@@ -20,7 +20,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /:id - Obtener un curso por ID
 router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -35,7 +34,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST / - Crear un nuevo curso
 router.post("/", async (req, res) => {
   try {
     const nuevoCurso = new CursoVerano(req.body);
@@ -47,7 +45,6 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUT /:id - Actualizar un curso
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -66,7 +63,6 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// PATCH /:id - Cambiar estatus
 router.patch("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -86,7 +82,6 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// DELETE /:id - Eliminar curso (solo si no tiene inscripciones)
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -109,7 +104,6 @@ router.delete("/:id", async (req, res) => {
 // ASIGNACIONES DE PROFESORES
 // ============================================================
 
-// GET /:id/asignaciones - Obtener asignaciones de un curso
 router.get("/:id/asignaciones", async (req, res) => {
   try {
     const { id } = req.params;
@@ -121,7 +115,6 @@ router.get("/:id/asignaciones", async (req, res) => {
   }
 });
 
-// POST /asignaciones - Crear una asignación
 router.post("/asignaciones", async (req, res) => {
   try {
     const nuevaAsignacion = new AsignacionProfesorVerano(req.body);
@@ -133,7 +126,6 @@ router.post("/asignaciones", async (req, res) => {
   }
 });
 
-// PUT /asignaciones/:id - Actualizar una asignación
 router.put("/asignaciones/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,7 +144,6 @@ router.put("/asignaciones/:id", async (req, res) => {
   }
 });
 
-// DELETE /asignaciones/:id - Eliminar una asignación
 router.delete("/asignaciones/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -171,7 +162,6 @@ router.delete("/asignaciones/:id", async (req, res) => {
 // INSCRIPCIONES
 // ============================================================
 
-// GET /:id/inscripciones - Obtener inscripciones de un curso
 router.get("/:id/inscripciones", async (req, res) => {
   try {
     const { id } = req.params;
@@ -183,7 +173,6 @@ router.get("/:id/inscripciones", async (req, res) => {
   }
 });
 
-// POST /:id/inscripciones - Registrar un alumno en un curso
 router.post("/:id/inscripciones", async (req, res) => {
   try {
     const { id } = req.params;
@@ -198,7 +187,6 @@ router.post("/:id/inscripciones", async (req, res) => {
       return res.status(404).json({ error: "Curso no encontrado" });
     }
 
-    // ✅ CORREGIDO: Agregar 'T00:00:00' para evitar desfase de zona horaria
     const nuevaInscripcion = new InscripcionVerano({
       idCursoVerano: id,
       idAlumno,
@@ -218,7 +206,6 @@ router.post("/:id/inscripciones", async (req, res) => {
   }
 });
 
-// ✅ NUEVO: PUT /inscripciones/:inscripcionId - Actualizar una inscripción
 router.put("/inscripciones/:inscripcionId", async (req, res) => {
   try {
     const { inscripcionId } = req.params;
@@ -229,17 +216,14 @@ router.put("/inscripciones/:inscripcionId", async (req, res) => {
       return res.status(404).json({ error: "Inscripción no encontrada" });
     }
 
-    // Actualizar solo los campos enviados
     if (nombreAlumno !== undefined) inscripcion.nombreAlumno = nombreAlumno.trim();
     if (montoPago !== undefined) inscripcion.montoPago = parseFloat(montoPago);
     if (semanasPagadas !== undefined) inscripcion.semanasPagadas = parseInt(semanasPagadas);
-    // ✅ CORREGIDO: Agregar 'T00:00:00' para evitar desfase de zona horaria
     if (fechaInicio) inscripcion.fechaInicio = new Date(fechaInicio + 'T00:00:00');
     if (fechaFin) inscripcion.fechaFin = new Date(fechaFin + 'T00:00:00');
     if (notas !== undefined) inscripcion.notas = notas;
 
     await inscripcion.save();
-
     res.json({ ok: true, mensaje: "Inscripción actualizada", inscripcion });
   } catch (error) {
     console.error("❌ PUT /cursosVerano/inscripciones/:id:", error);
@@ -247,7 +231,6 @@ router.put("/inscripciones/:inscripcionId", async (req, res) => {
   }
 });
 
-// DELETE /inscripciones/:inscripcionId - Eliminar una inscripción
 router.delete("/inscripciones/:inscripcionId", async (req, res) => {
   try {
     const { inscripcionId } = req.params;
@@ -262,4 +245,68 @@ router.delete("/inscripciones/:inscripcionId", async (req, res) => {
   }
 });
 
+// ============================================================
+// RENTABILIDAD
+// ============================================================
+
+router.get("/:id/rentabilidad", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const curso = await CursoVerano.findOne({ idCursoVerano: id });
+    if (!curso) {
+      return res.status(404).json({ error: "Curso no encontrado" });
+    }
+
+    const profesores = await Profesor.find().lean();
+    const profesoresMap = new Map();
+    profesores.forEach(p => {
+      profesoresMap.set(p.idProfesor, p.nombre || p.idProfesor);
+    });
+
+    const asignaciones = await AsignacionProfesorVerano.find({ idCursoVerano: id });
+    const inscripciones = await InscripcionVerano.find({ idCursoVerano: id });
+
+    const ingresos = inscripciones.reduce((sum, ins) => sum + ins.montoPago, 0);
+    const costos = asignaciones.reduce((sum, asig) => {
+      const totalHoras = asig.dias.length * asig.horasPorDia * asig.semanas;
+      return sum + (totalHoras * asig.costoHora);
+    }, 0);
+    const utilidad = ingresos - costos;
+
+    res.json({
+      idCursoVerano: id,
+      nombre: curso.nombre,
+      ingresos,
+      costos,
+      utilidad,
+      alumnosInscritos: inscripciones.length,
+      profesoresAsignados: asignaciones.length,
+      detalle: {
+        inscripciones: inscripciones.map(ins => ({
+          id: ins._id,
+          alumno: ins.nombreAlumno || ins.idAlumno || 'Sin nombre',
+          monto: ins.montoPago,
+          semanas: ins.semanasPagadas,
+          fechaInicio: ins.fechaInicio,
+          fechaFin: ins.fechaFin
+        })),
+        asignaciones: asignaciones.map(asig => {
+          const nombreProfesor = asig.nombreProfesor || profesoresMap.get(asig.idProfesor) || asig.idProfesor || 'Sin nombre';
+          return {
+            profesor: nombreProfesor,
+            dias: asig.dias,
+            horasPorDia: asig.horasPorDia,
+            costoHora: asig.costoHora,
+            semanas: asig.semanas,
+            costoTotal: asig.dias.length * asig.horasPorDia * asig.semanas * asig.costoHora
+          };
+        })
+      }
+    });
+  } catch (error) {
+    console.error("❌ GET /cursosVerano/:id/rentabilidad:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 export default router;
