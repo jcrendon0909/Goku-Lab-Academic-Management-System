@@ -5,6 +5,7 @@ import {
   getProfesores,
 } from "../../services/api";
 import { formatMexicoTimeRange } from "../../utils/dateUtils";
+import { toast } from "sonner";
 
 interface ReagendacionFormProps {
   data: any;
@@ -188,7 +189,12 @@ export default function ReagendacionForm({
       else onClose();
     } catch (error: any) {
       console.error("Error en handleSubmit:", error);
-      toast.error(error?.message || "Error al guardar la reagendación");
+      // Si el error es 409 (conflicto), mostrar mensaje específico
+      if (error.message?.includes("profesor ya tiene") || error.message?.includes("alumno ya tiene")) {
+        toast.error(`⚠️ ${error.message}`);
+      } else {
+        toast.error(error?.message || "Error al guardar la reagendación");
+      }
     } finally {
       setGuardando(false);
     }

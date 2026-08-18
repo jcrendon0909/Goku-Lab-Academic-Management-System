@@ -1,152 +1,179 @@
-import express from "express";
-import Asistencia from "../models/Asistencia.js";
-import Inscripcion from "../models/Inscripcion.js";
-import Grupo from "../models/Grupo.js";
+import express from 'express';
+import Asistencia from '../models/Asistencia.js';
+import Grupo from '../models/Grupo.js';
+import Inscripcion from '../models/Inscripcion.js';
+import Reagendacion from '../models/Reagendacion.js';
 
 const router = express.Router();
 
 // ============================================================
-// GET /grupos-para-profesor - Obtener grupos (sin autenticación)
+// GET /profesor/:idProfesor - Obtener grupos y reagendaciones del día
 // ============================================================
-router.get("/grupos-para-profesor", async (req, res) => {
+router.get('/profesor/:idProfesor', async (req, res) => {
   try {
-    // Temporalmente devolvemos todos los grupos activos
-    const grupos = await Grupo.find({ Estatus: "Activo" }).lean();
-    res.json(grupos);
-  } catch (error) {
-    console.error("❌ GET /asistencia/grupos-para-profesor:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+    const { idProfesor } = req.params;
+    let { fecha } = req.query;
 
-// ============================================================
-// GET /grupo/:grupoId - Obtener asistencia de un grupo
-// ============================================================
-router.get("/grupo/:grupoId", async (req, res) => {
-  try {
-    const { grupoId } = req.params;
-    const { fecha } = req.query;
+    console.log(`🔍 Asistencia - Profesor: ${idProfesor}, Fecha: ${fecha || 'hoy'}`);
+
+    if (!idProfesor) {
+      return res.status(400).json({ error: 'ID de profesor requerido' });
+    }
 
     if (!fecha) {
-      return res.status(400).json({ error: "La fecha es requerida (YYYY-MM-DD)" });
+      fecha = new Date().toISOString().split('T')[0];
     }
-
-    const fechaInicio = new Date(fecha);
-    fechaInicio.setHours(0, 0, 0, 0);
-    const fechaFin = new Date(fecha);
-    fechaFin.setHours(23, 59, 59, 999);
-
-    // Obtener alumnos activos del grupo
-    const inscripciones = await Inscripcion.find({
-      grupoId: grupoId,
-      estatus: "Activa",
-    }).lean();
-
-    // Obtener asistencias existentes para esa fecha
-    const asistencias = await Asistencia.find({
-      grupoId: grupoId,
-      fecha: { $gte: fechaInicio, $lte: fechaFin },
-    }).lean();
-
-    // Combinar datos
-    const resultado = inscripciones.map((ins) => {
-      const asistencia = asistencias.find((a) => a.idAlumno === ins.idAlumno);
-      return {
-        idAlumno: ins.idAlumno,
-        nombreAlumno: ins.nombreAlumno,
-        estado: asistencia ? asistencia.estado : "ausente",
-        observaciones: asistencia ? asistencia.observaciones : "",
-        asistenciaId: asistencia ? asistencia._id : null,
-      };
-    });
-
-    res.json({
-      grupoId,
-      fecha: fecha,
-      alumnos: resultado,
-    });
-  } catch (error) {
-    console.error("❌ GET /asistencia/grupo/:grupoId:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================================
-// POST / - Guardar asistencia
-// ============================================================
-router.post("/", async (req, res) => {
-  try {
-    const { grupoId, fecha, alumnos } = req.body;
-
-    if (!grupoId || !fecha || !alumnos || !Array.isArray(alumnos)) {
-      return res.status(400).json({ error: "Datos inválidos" });
-    }
-
     const fechaObj = new Date(fecha);
-    fechaObj.setHours(0, 0, 0, 0);
+    const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'long' });
+    const diaSemanaCapitalized = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
 
-    const resultados = await Promise.all(
-      alumnos.map(async (item) => {
-        const { idAlumno, nombreAlumno, estado, observaciones } = item;
+    // 1. Obtener grupos activos del profesor que coinciden con el día de la semana
+    const grupos = await Grupo.find({
+      idProfesor,
+      Estatus: 'Activo',
+      diaClase: diaSemanaCapitalized,
+    }).lean();
 
-        if (!idAlumno || !estado) {
-          return { idAlumno, error: "Faltan datos" };
-        }
+    console.log(`   📚 Grupos encontrados: ${grupos.length}`);
 
-        let asistencia = await Asistencia.findOne({
-          idAlumno,
-          grupoId,
-          fecha: fechaObj,
-        });
-
-        if (asistencia) {
-          asistencia.estado = estado;
-          asistencia.observaciones = observaciones || "";
-          await asistencia.save();
-        } else {
-          asistencia = new Asistencia({
-            idAlumno,
-            nombreAlumno,
-            grupoId,
-            fecha: fechaObj,
-            estado,
-            observaciones: observaciones || "",
-          });
-          await asistencia.save();
-        }
-
-        return { idAlumno, success: true };
+    // 2. Para cada grupo, obtener alumnos inscritos activos
+    const gruposConAlumnos = await Promise.all(
+      grupos.map(async (grupo) => {
+        const inscripciones = await Inscripcion.find({
+          grupoId: grupo.IdGrupo,
+          estatus: 'Activa',
+        })
+          .lean()
+          .select('idAlumno nombreAlumno modalidad -_id');
+        return {
+          idGrupo: grupo.IdGrupo,
+          nombreCurso: grupo.nombreCurso,
+          diaClase: grupo.diaClase,
+          horaClase: grupo.horaClase,
+          duracionClase: grupo.duracionClase,
+          alumnos: inscripciones.map((ins) => ({
+            idAlumno: ins.idAlumno,
+            nombreAlumno: ins.nombreAlumno,
+            modalidad: ins.modalidad || 'Presencial',
+          })),
+          esReagendacion: false,
+        };
       })
     );
 
-    res.json({
-      ok: true,
-      mensaje: "Asistencia guardada correctamente",
-      resultados,
-    });
+    // 3. Obtener reagendaciones para ese día (si existen)
+    const inicioDia = new Date(fechaObj);
+    inicioDia.setHours(0, 0, 0, 0);
+    const finDia = new Date(fechaObj);
+    finDia.setHours(23, 59, 59, 999);
+
+    const reagendaciones = await Reagendacion.find({
+      idProfesor: idProfesor,
+      fechaHoraNueva: { $gte: inicioDia, $lte: finDia },
+      estatus: 'reagendado',
+    }).lean();
+
+    console.log(`   🔄 Reagendaciones: ${reagendaciones.length}`);
+
+    const reagendacionesConAlumno = await Promise.all(
+      reagendaciones.map(async (reag) => {
+        const inscripcion = await Inscripcion.findOne({
+          idAlumno: reag.idAlumno,
+          grupoId: reag.idGrupoNuevo,
+        })
+          .lean()
+          .select('nombreAlumno -_id');
+        return {
+          idGrupo: reag.idGrupoNuevo || `REAG-${reag._id}`,
+          nombreCurso: reag.nombreCurso || 'Clase reagendada',
+          diaClase: 'Reagendación',
+          horaClase: reag.fechaHoraNueva
+            ? new Date(reag.fechaHoraNueva).toTimeString().slice(0, 5)
+            : '',
+          duracionClase: reag.duracion || '2 horas',
+          alumnos: [
+            {
+              idAlumno: reag.idAlumno,
+              nombreAlumno: reag.nombreAlumno || inscripcion?.nombreAlumno || 'Alumno',
+              modalidad: reag.modalidad || 'Presencial',
+            },
+          ],
+          esReagendacion: true,
+          reagendacionId: reag._id,
+        };
+      })
+    );
+
+    // 4. Combinar y devolver
+    const resultado = [...gruposConAlumnos, ...reagendacionesConAlumno];
+    res.json(resultado);
   } catch (error) {
-    console.error("❌ POST /asistencia:", error);
+    console.error('❌ Error GET /asistencia/profesor/:idProfesor:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// GET /alumno/:idAlumno - Historial de asistencia de un alumno
+// POST /guardar - Guardar asistencias (lote)
 // ============================================================
-router.get("/alumno/:idAlumno", async (req, res) => {
+router.post('/guardar', async (req, res) => {
   try {
-    const { idAlumno } = req.params;
-    const { limite } = req.query;
-
-    const query = Asistencia.find({ idAlumno }).sort({ fecha: -1 });
-    if (limite) {
-      query.limit(parseInt(limite));
+    const { asistencias } = req.body;
+    if (!asistencias || !Array.isArray(asistencias) || asistencias.length === 0) {
+      return res.status(400).json({ error: 'No se enviaron asistencias' });
     }
 
-    const historial = await query.lean();
-    res.json(historial);
+    const ops = asistencias.map((a) => ({
+      updateOne: {
+        filter: {
+          idAlumno: a.idAlumno,
+          idGrupo: a.idGrupo,
+          fecha: new Date(a.fecha),
+        },
+        update: {
+          $set: {
+            idProfesor: a.idProfesor,
+            estado: a.estado || 'ausente',
+            comentario: a.comentario || '',
+            horaInicio: a.horaInicio || '',
+            horaFin: a.horaFin || '',
+            updatedAt: new Date(),
+          },
+        },
+        upsert: true,
+      },
+    }));
+
+    const result = await Asistencia.bulkWrite(ops);
+    res.json({
+      ok: true,
+      mensaje: 'Asistencias guardadas',
+      modificadas: result.modifiedCount,
+      insertadas: result.upsertedCount,
+    });
   } catch (error) {
-    console.error("❌ GET /asistencia/alumno/:idAlumno:", error);
+    console.error('❌ Error POST /asistencia/guardar:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// GET /alumno/:idAlumno - Obtener asistencias de un alumno
+// ============================================================
+router.get('/alumno/:idAlumno', async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+    const { desde, hasta } = req.query;
+    const filtro = { idAlumno };
+    if (desde || hasta) {
+      filtro.fecha = {};
+      if (desde) filtro.fecha.$gte = new Date(desde);
+      if (hasta) filtro.fecha.$lte = new Date(hasta);
+    }
+    const asistencias = await Asistencia.find(filtro).sort({ fecha: -1 }).lean();
+    res.json(asistencias);
+  } catch (error) {
+    console.error('❌ Error GET /asistencia/alumno/:idAlumno:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft, MapPin, Users, Tag, Repeat, Sparkles } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft, MapPin, Users, Tag, Repeat, Sparkles, ClipboardCheck } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { Link } from 'react-router-dom';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
 import { toast } from 'sonner';
-import BackgroundVideo from './BackgroundVideo';  // ✅ CORREGIDO: misma carpeta
+import BackgroundVideo from './BackgroundVideo';
 
 interface Clase {
   id: string;
@@ -32,6 +32,7 @@ interface Clase {
   tipoReagendacionClase?: string | null;
   fechaHoraNueva?: Date | null;
   modalidad?: string;
+  date?: Date;
 }
 
 export function CalendarioProfesor() {
@@ -82,7 +83,7 @@ export function CalendarioProfesor() {
           teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
           students: grupo.alumnos || [],
           comentarioGrupo: grupo.comentarioGrupo || '',
-          date: new Date(),
+          date: new Date(grupo.diaClase ? obtenerFechaDesdeDia(grupo.diaClase) : Date.now()),
           startTime: grupo.horaClase,
           endTime: grupo.horaFin,
           title: grupo.nombreCurso,
@@ -177,11 +178,24 @@ export function CalendarioProfesor() {
     }
   };
 
+  // Helper para obtener fecha desde el día de la semana (para clases recurrentes)
+  const obtenerFechaDesdeDia = (diaClase: string) => {
+    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const hoy = new Date();
+    const diaActual = hoy.getDay();
+    const diaBuscado = diasSemana.indexOf(diaClase.toLowerCase());
+    if (diaBuscado === -1) return hoy;
+    const diff = diaBuscado - diaActual;
+    const fecha = new Date(hoy);
+    fecha.setDate(fecha.getDate() + diff);
+    return fecha;
+  };
+
   useEffect(() => {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
-  // Manejadores de eventos
+  // Manejadores de eventos (existentes)
   const handleReagendar = (student: any) => {
     navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
   };
@@ -271,6 +285,13 @@ export function CalendarioProfesor() {
     }
   };
 
+  // ✅ NUEVA FUNCIÓN: Abrir asistencia con la fecha de la clase
+  const handleAbrirAsistencia = (clase: Clase) => {
+    const fecha = clase.date || new Date();
+    const fechaStr = fecha.toISOString().split('T')[0];
+    navigate(`/asistencia?fecha=${fechaStr}`);
+  };
+
   const decorativeVideos: { src: string; position: any }[] = [];
 
   if (cargando) {
@@ -351,15 +372,11 @@ export function CalendarioProfesor() {
                 return (
                   <div
                     key={clase.id}
-                    onClick={() => {
-                      setClaseSeleccionada(clase);
-                      setDialogAbierto(true);
-                    }}
                     className={`
                       group relative bg-white/20 backdrop-blur-md rounded-2xl p-5 
                       border border-white/20 hover:border-white/40 
                       shadow-lg hover:shadow-2xl 
-                      transition-all duration-300 cursor-pointer
+                      transition-all duration-300
                       hover:scale-[1.02] hover:-translate-y-1
                       ${isReagendada ? 'ring-2 ring-[#F8B50E]/50' : ''}
                     `}
@@ -413,6 +430,31 @@ export function CalendarioProfesor() {
                         </div>
                       )}
 
+                      {/* ✅ BOTÓN DE ASISTENCIA */}
+                      <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAbrirAsistencia(clase);
+                          }}
+                          className="flex-1 bg-[#26AAA3]/80 hover:bg-[#26AAA3] text-white text-xs font-bold px-3 py-1.5 rounded-full transition-all hover:scale-105 flex items-center justify-center gap-1.5 shadow-lg"
+                        >
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          📋 Asistencia
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setClaseSeleccionada(clase);
+                            setDialogAbierto(true);
+                          }}
+                          className="bg-white/20 hover:bg-white/30 text-white text-xs font-medium px-3 py-1.5 rounded-full transition-all hover:scale-105 flex items-center gap-1"
+                        >
+                          <span>Detalles</span>
+                          <span className="text-white/50">→</span>
+                        </button>
+                      </div>
+
                       <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                     </div>
                   </div>
@@ -428,6 +470,7 @@ export function CalendarioProfesor() {
         </div>
       </div>
 
+      {/* Diálogo de detalles de clase (con botón de asistencia) */}
       {claseSeleccionada && (
         <ClassDetailsDialog
           classData={claseSeleccionada}
@@ -442,6 +485,11 @@ export function CalendarioProfesor() {
           onBajaAlumno={handleBajaAlumno}
           onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}
           onActualizarInscripcion={handleActualizarInscripcion}
+          // ✅ PASAMOS LA FUNCIÓN DE ASISTENCIA AL DIÁLOGO
+          onAsistencia={() => {
+            handleAbrirAsistencia(claseSeleccionada);
+            setDialogAbierto(false);
+          }}
         />
       )}
     </BackgroundVideo>

@@ -1,23 +1,28 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const asistenciaSchema = new mongoose.Schema({
-  idAlumno: { type: String, required: true, index: true },
-  nombreAlumno: { type: String, required: true },
-  grupoId: { type: String, required: true, index: true },
-  fecha: { type: Date, required: true, index: true },
-  estado: {
-    type: String,
-    enum: ['presente', 'ausente', 'justificado'],
-    default: 'ausente'
+const asistenciaSchema = new mongoose.Schema(
+  {
+    idAlumno: { type: String, required: true, index: true },
+    idGrupo: { type: String, required: true, index: true },
+    idProfesor: { type: String, required: true, index: true },
+    fecha: { type: Date, required: true, index: true },
+    estado: {
+      type: String,
+      enum: ['presente', 'ausente', 'justificado', 'retardo'],
+      default: 'ausente',
+    },
+    comentario: { type: String, default: '' },
+    horaInicio: { type: String, default: '' },
+    horaFin: { type: String, default: '' },
   },
-  observaciones: { type: String, default: "" },
-  profesorId: { type: String, default: "" },
-}, {
-  timestamps: true,
-  collection: 'asistencias'
-});
+  {
+    timestamps: true,
+    collection: 'asistencias',
+    versionKey: false,
+  }
+);
 
-// Índice único para evitar duplicados (un alumno no puede tener dos asistencias el mismo día en el mismo grupo)
-asistenciaSchema.index({ idAlumno: 1, grupoId: 1, fecha: 1 }, { unique: true });
+asistenciaSchema.index({ idAlumno: 1, fecha: 1 });
+asistenciaSchema.index({ idGrupo: 1, fecha: 1 });
 
 export default mongoose.model('Asistencia', asistenciaSchema);

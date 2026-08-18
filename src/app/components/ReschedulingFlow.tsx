@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as API from '../../services/api';
 import { toast } from 'sonner';
@@ -37,6 +37,14 @@ interface Grupo {
   horaClase: string;
 }
 
+interface Inscripcion {
+  idAlumno: string;
+  grupoId: string;
+  nombreAlumno: string;
+  modalidad: string;
+  estatus: string;
+}
+
 export function ReschedulingFlow() {
   const location = useLocation();
   const [reagendaciones, setReagendaciones] = useState<Reagendacion[]>([]);
@@ -44,15 +52,27 @@ export function ReschedulingFlow() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
   const [grupoSeleccionado, setGrupoSeleccionado] = useState('');
   const [filtro, setFiltro] = useState('');
   const [dataForm, setDataForm] = useState<any>(null);
 
+  // ✅ Grupos filtrados según el alumno seleccionado
+  const gruposFiltrados = useMemo(() => {
+    if (!alumnoSeleccionado) return grupos;
+    // Obtener los IDs de los grupos donde el alumno tiene inscripción activa
+    const gruposIds = inscripciones
+      .filter(ins => ins.idAlumno === alumnoSeleccionado && ins.estatus === 'Activa')
+      .map(ins => ins.grupoId);
+    return grupos.filter(g => gruposIds.includes(g.IdGrupo));
+  }, [alumnoSeleccionado, inscripciones, grupos]);
+
   // Cargar datos al montar
   useEffect(() => {
     cargarReagendaciones();
     cargarCatalogos();
+    cargarInscripciones();
 
     // Si viene de un enlace con parámetros (ej. desde calendario)
     const params = new URLSearchParams(location.search);
@@ -89,6 +109,23 @@ export function ReschedulingFlow() {
     } catch (error) {
       toast.error('Error al cargar catálogos');
     }
+  };
+
+  const cargarInscripciones = async () => {
+    try {
+      const res = await API.apiFetch('/inscripciones');
+      if (!res.ok) throw new Error('Error al cargar inscripciones');
+      const data = await res.json();
+      setInscripciones(data);
+    } catch (error) {
+      toast.error('Error al cargar inscripciones');
+    }
+  };
+
+  // ✅ Cuando se selecciona un alumno, se actualiza el grupo seleccionado a vacío para evitar inconsistencias
+  const handleAlumnoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setAlumnoSeleccionado(e.target.value);
+    setGrupoSeleccionado(''); // resetear grupo
   };
 
   const eliminarReagendacion = async (id: string) => {
@@ -135,7 +172,7 @@ export function ReschedulingFlow() {
       alumno: {
         idAlumno: alumno.idAlumno,
         nombreAlumno: alumno.nombreAlumno,
-        modalidad: 'Presencial',
+        modalidad: 'Presencial', // se puede mejorar obteniendo de inscripción
       },
       clase,
     };
@@ -207,13 +244,13 @@ export function ReschedulingFlow() {
           </div>
         </div>
 
-        {/* Selectores rápidos */}
+        {/* Selectores rápidos - CON FILTRO DE GRUPOS POR ALUMNO */}
         <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 mb-4 border border-white/20 flex flex-wrap items-center gap-3 flex-shrink-0">
           <div className="flex-1 min-w-[150px]">
             <label className="block text-xs text-white/80 font-medium mb-1">Alumno</label>
             <select
               value={alumnoSeleccionado}
-              onChange={(e) => setAlumnoSeleccionado(e.target.value)}
+              onChange={handleAlumnoChange}
               className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E]"
             >
               <option value="">Seleccionar...</option>
@@ -232,12 +269,18 @@ export function ReschedulingFlow() {
               className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E]"
             >
               <option value="">Seleccionar...</option>
-              {grupos.map(g => (
+              {gruposFiltrados.length === 0 && alumnoSeleccionado && (
+                <option value="" disabled>⚠️ Este alumno no tiene cursos activos</option>
+              )}
+              {gruposFiltrados.map(g => (
                 <option key={g.IdGrupo} value={g.IdGrupo} className="text-gray-900">
                   {g.IdGrupo} - {g.nombreCurso} ({g.diaClase} {g.horaClase})
                 </option>
               ))}
             </select>
+            {alumnoSeleccionado && gruposFiltrados.length === 0 && (
+              <p className="text-xs text-amber-300 mt-1">⚠️ El alumno no está inscrito en ningún grupo activo.</p>
+            )}
           </div>
           <button
             onClick={abrirFormulario}
