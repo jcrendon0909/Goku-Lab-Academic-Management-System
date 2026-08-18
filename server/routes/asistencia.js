@@ -7,7 +7,7 @@ import Reagendacion from '../models/Reagendacion.js';
 const router = express.Router();
 
 // ============================================================
-// GET /profesor/:idProfesor - Obtener grupos y reagendaciones del día
+// GET /profesor/:idProfesor - Obtener grupos y asistencias del día
 // ============================================================
 router.get('/profesor/:idProfesor', async (req, res) => {
   try {
@@ -23,8 +23,16 @@ router.get('/profesor/:idProfesor', async (req, res) => {
     if (!fecha) {
       fecha = new Date().toISOString().split('T')[0];
     }
-    const fechaObj = new Date(fecha);
-    const diaSemana = fechaObj.toLocaleDateString('es-ES', { weekday: 'long' });
+
+    // ✅ CREAR FECHAS UTC PARA LA CONSULTA
+    const fechaStr = fecha; // "YYYY-MM-DD"
+    const inicioDia = new Date(fechaStr + 'T00:00:00.000Z');
+    const finDia = new Date(fechaStr + 'T23:59:59.999Z');
+
+    // ✅ OBTENER EL DÍA DE LA SEMANA USANDO LA FECHA LOCAL (MÉXICO)
+    // Para obtener el día de la semana, usamos la fecha en zona horaria local
+    const fechaLocal = new Date(fechaStr + 'T00:00:00');
+    const diaSemana = fechaLocal.toLocaleDateString('es-ES', { weekday: 'long' });
     const diaSemanaCapitalized = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
 
     // 1. Obtener grupos activos del profesor que coinciden con el día de la semana
@@ -36,7 +44,7 @@ router.get('/profesor/:idProfesor', async (req, res) => {
 
     console.log(`   📚 Grupos encontrados: ${grupos.length}`);
 
-    // 2. Para cada grupo, obtener alumnos inscritos activos
+    // 2. Para cada grupo, obtener alumnos inscritos activos y sus asistencias para la fecha (UTC)
     const gruposConAlumnos = await Promise.all(
       grupos.map(async (grupo) => {
         const inscripciones = await Inscripcion.find({
@@ -45,6 +53,23 @@ router.get('/profesor/:idProfesor', async (req, res) => {
         })
           .lean()
           .select('idAlumno nombreAlumno modalidad -_id');
+
+        // Obtener asistencias de estos alumnos para la fecha (usando UTC)
+        const idsAlumnos = inscripciones.map(ins => ins.idAlumno);
+        const asistencias = await Asistencia.find({
+          idAlumno: { $in: idsAlumnos },
+          idGrupo: grupo.IdGrupo,
+          fecha: {
+            $gte: inicioDia,
+            $lt: finDia,
+          },
+        }).lean();
+
+        const asistenciasMap = {};
+        asistencias.forEach(a => {
+          asistenciasMap[a.idAlumno] = a.estado;
+        });
+
         return {
           idGrupo: grupo.IdGrupo,
           nombreCurso: grupo.nombreCurso,
@@ -55,18 +80,14 @@ router.get('/profesor/:idProfesor', async (req, res) => {
             idAlumno: ins.idAlumno,
             nombreAlumno: ins.nombreAlumno,
             modalidad: ins.modalidad || 'Presencial',
+            estadoAsistencia: asistenciasMap[ins.idAlumno] || 'ausente',
           })),
           esReagendacion: false,
         };
       })
     );
 
-    // 3. Obtener reagendaciones para ese día (si existen)
-    const inicioDia = new Date(fechaObj);
-    inicioDia.setHours(0, 0, 0, 0);
-    const finDia = new Date(fechaObj);
-    finDia.setHours(23, 59, 59, 999);
-
+    // 3. Obtener reagendaciones para ese día (usando UTC)
     const reagendaciones = await Reagendacion.find({
       idProfesor: idProfesor,
       fechaHoraNueva: { $gte: inicioDia, $lte: finDia },
@@ -96,6 +117,7 @@ router.get('/profesor/:idProfesor', async (req, res) => {
               idAlumno: reag.idAlumno,
               nombreAlumno: reag.nombreAlumno || inscripcion?.nombreAlumno || 'Alumno',
               modalidad: reag.modalidad || 'Presencial',
+              estadoAsistencia: 'pendiente',
             },
           ],
           esReagendacion: true,
@@ -114,7 +136,7 @@ router.get('/profesor/:idProfesor', async (req, res) => {
 });
 
 // ============================================================
-// POST /guardar - Guardar asistencias (lote)
+// POST /guardar - Guardar asistencias (lote) con UTC
 // ============================================================
 router.post('/guardar', async (req, res) => {
   try {
@@ -128,7 +150,7 @@ router.post('/guardar', async (req, res) => {
         filter: {
           idAlumno: a.idAlumno,
           idGrupo: a.idGrupo,
-          fecha: new Date(a.fecha),
+          fecha: new Date(a.fecha + 'T00:00:00.000Z'), // ✅ UTC
         },
         update: {
           $set: {
@@ -167,8 +189,8 @@ router.get('/alumno/:idAlumno', async (req, res) => {
     const filtro = { idAlumno };
     if (desde || hasta) {
       filtro.fecha = {};
-      if (desde) filtro.fecha.$gte = new Date(desde);
-      if (hasta) filtro.fecha.$lte = new Date(hasta);
+      if (desde) filtro.fecha.$gte = new Date(desde + 'T00:00:00.000Z');
+      if (hasta) filtro.fecha.$lte = new Date(hasta + 'T23:59:59.999Z');
     }
     const asistencias = await Asistencia.find(filtro).sort({ fecha: -1 }).lean();
     res.json(asistencias);

@@ -23,6 +23,8 @@ interface Alumno {
   idAlumno: string;
   nombreAlumno: string;
   modalidad: string;
+  estadoAsistencia?: string; // ✅ agregado
+  comentarioAsistencia?: string; // ✅ agregado
 }
 
 interface GrupoAsistencia {
@@ -66,7 +68,6 @@ export function AsistenciaPage() {
   const [guardando, setGuardando] = useState(false);
   const [resumen, setResumen] = useState({ total: 0, presentes: 0, ausentes: 0 });
 
-  // Validar que el profesor tenga ID
   if (!idProfesor) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -81,18 +82,20 @@ export function AsistenciaPage() {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      // ✅ RUTA CORRECTA
       const res = await apiFetch(`/asistencia/profesor/${idProfesor}?fecha=${fecha}`);
       if (!res.ok) throw new Error('Error al cargar datos');
       const data = await res.json();
       setGrupos(data);
 
-      // Inicializar estado de asistencias (por defecto ausente)
+      // ✅ Inicializar con estados del backend
       const initialAsistencias: Record<string, AsistenciaState> = {};
       data.forEach((grupo: GrupoAsistencia) => {
         grupo.alumnos.forEach((alumno) => {
           const key = `${alumno.idAlumno}-${grupo.idGrupo}`;
-          initialAsistencias[key] = { estado: 'ausente', comentario: '' };
+          initialAsistencias[key] = {
+            estado: (alumno.estadoAsistencia as 'presente' | 'ausente' | 'justificado' | 'retardo') || 'ausente',
+            comentario: alumno.comentarioAsistencia || '',
+          };
         });
       });
       setAsistencias(initialAsistencias);
@@ -107,7 +110,6 @@ export function AsistenciaPage() {
 
   useEffect(() => {
     cargarDatos();
-    // Actualizar URL con la fecha
     const params = new URLSearchParams(location.search);
     params.set('fecha', fecha);
     navigate(`${location.pathname}?${params.toString()}`, { replace: true });
@@ -147,36 +149,35 @@ export function AsistenciaPage() {
   };
 
   const handleGuardar = async () => {
-    if (!idProfesor) return;
-    try {
-      setGuardando(true);
-      const payload = Object.entries(asistencias).map(([key, value]) => {
-        const [idAlumno, idGrupo] = key.split('-');
-        return {
-          idAlumno,
-          idGrupo,
-          idProfesor,
-          fecha: new Date(fecha),
-          estado: value.estado,
-          comentario: value.comentario || '',
-        };
-      });
-      const res = await apiFetch('/asistencia/guardar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asistencias: payload }),
-      });
-      if (!res.ok) throw new Error('Error al guardar');
-      const data = await res.json();
-      toast.success(`Asistencias guardadas (${data.modificadas} modificadas, ${data.insertadas} nuevas)`);
-      cargarDatos();
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setGuardando(false);
-    }
-  };
-
+  if (!idProfesor) return;
+  try {
+    setGuardando(true);
+    const payload = Object.entries(asistencias).map(([key, value]) => {
+      const [idAlumno, idGrupo] = key.split('-');
+      return {
+        idAlumno,
+        idGrupo,
+        idProfesor,
+        fecha: fecha, // ✅ enviar string, no Date
+        estado: value.estado,
+        comentario: value.comentario || '',
+      };
+    });
+    const res = await apiFetch('/asistencia/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asistencias: payload }),
+    });
+    if (!res.ok) throw new Error('Error al guardar');
+    const data = await res.json();
+    toast.success(`Asistencias guardadas (${data.modificadas} modificadas, ${data.insertadas} nuevas)`);
+    cargarDatos();
+  } catch (error: any) {
+    toast.error(error.message);
+  } finally {
+    setGuardando(false);
+  }
+};
   const cambiarFecha = (dias: number) => {
     const nuevaFecha = new Date(fecha);
     nuevaFecha.setDate(nuevaFecha.getDate() + dias);
