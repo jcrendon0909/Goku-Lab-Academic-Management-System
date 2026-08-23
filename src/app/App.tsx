@@ -25,7 +25,9 @@ import { ConsultaInscripciones } from './components/ConsultaInscripciones';
 import { EditorInscripciones } from './components/EditorInscripciones';
 import { PagosProfesoresPage } from './components/PagosProfesoresPage';
 import { GastosPage } from './components/GastosPage';
+import { ReporteAsistenciaAlumno } from './components/ReporteAsistenciaAlumno';
 
+// Dentro de los children del ProtectedRoute:
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -54,6 +56,7 @@ export const router = createBrowserRouter([
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
+      { path: '/reportes/asistencia-alumno', element: <ReporteAsistenciaAlumno /> },
       // ============================================================
       // 🆕 RUTAS DE CURSOS DE VERANO
       // ============================================================

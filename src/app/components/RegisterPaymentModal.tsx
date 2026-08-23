@@ -12,7 +12,11 @@ interface RegisterPaymentModalProps {
         idAlumno: string,
         grupoId: string,
         nombreAlumno: string,
-        nuevoMontoMensual?: number
+        nuevoMontoMensual?: number,
+        esDescuento?: boolean,
+        descuentoPorcentaje?: number,
+        mesesCubiertos?: number,
+        aplicaSaldoAFavor?: boolean
     ) => void;
 }
 
@@ -20,6 +24,12 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
     const [monto, setMonto] = useState<number | string>(payment.saldo || 0);
     const [metodo, setMetodo] = useState<string>('Efectivo');
     const [fechaAbono, setFechaAbono] = useState<string>(new Date().toISOString().substring(0, 10));
+
+    // ===== NUEVOS ESTADOS =====
+    const [esDescuento, setEsDescuento] = useState<boolean>(false);
+    const [descuentoPorcentaje, setDescuentoPorcentaje] = useState<number>(0);
+    const [mesesCubiertos, setMesesCubiertos] = useState<number>(1);
+    const [aplicaSaldoAFavor, setAplicaSaldoAFavor] = useState<boolean>(false);
 
     const [cambiarTarifa, setCambiarTarifa] = useState<boolean>(false);
     const [nuevoMonto, setNuevoMonto] = useState<number | string>(payment.montoTotal || 0);
@@ -32,15 +42,18 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
 
         const tarifaFutura = cambiarTarifa ? Number(nuevoMonto) : undefined;
 
-        // ✅ OBTENER pagoId CON FALLBACK
         const pagoId = payment.pagoId || payment.id || payment._id;
-        
         if (!pagoId) {
             toast.error('El pago no tiene un identificador válido.');
             return;
         }
 
-        // ✅ ENVIAR TODOS LOS DATOS AL BACKEND
+        // ✅ Si es descuento, validar que el porcentaje sea válido
+        if (esDescuento && (descuentoPorcentaje <= 0 || descuentoPorcentaje > 100)) {
+            toast.error('El porcentaje de descuento debe ser entre 1 y 100');
+            return;
+        }
+
         onConfirm(
             pagoId,
             montoAbono,
@@ -49,7 +62,11 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
             payment.idAlumno,
             payment.grupoId,
             payment.nombreAlumno,
-            tarifaFutura
+            tarifaFutura,
+            esDescuento,
+            esDescuento ? descuentoPorcentaje : 0,
+            mesesCubiertos,
+            aplicaSaldoAFavor
         );
     };
 
@@ -72,7 +89,8 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                    {/* Monto */}
                     <div className="space-y-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Monto a abonar hoy</label>
@@ -119,6 +137,69 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                         </div>
                     </div>
 
+                    {/* ===== NUEVAS OPCIONES: DESCUENTO Y SALDO A FAVOR ===== */}
+                    <div className="border-t border-gray-100 pt-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    checked={esDescuento}
+                                    onChange={(e) => setEsDescuento(e.target.checked)}
+                                    className="w-4 h-4 text-cyan-600 rounded border-gray-300 focus:ring-cyan-500"
+                                />
+                                <span className="text-xs font-bold text-gray-700 group-hover:text-cyan-700 transition-colors">
+                                    Es un descuento
+                                </span>
+                            </label>
+                            {esDescuento && (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        value={descuentoPorcentaje}
+                                        onChange={(e) => setDescuentoPorcentaje(Number(e.target.value))}
+                                        className="w-16 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold text-gray-900 focus:outline-none focus:border-cyan-500"
+                                    />
+                                    <span className="text-xs text-gray-500">%</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    checked={aplicaSaldoAFavor}
+                                    onChange={(e) => setAplicaSaldoAFavor(e.target.checked)}
+                                    className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                                />
+                                <span className="text-xs font-bold text-gray-700 group-hover:text-green-700 transition-colors">
+                                    Genera saldo a favor
+                                </span>
+                            </label>
+                            {aplicaSaldoAFavor && (
+                                <span className="text-[10px] text-green-600 font-medium">
+                                    (El excedente se acumulará para el próximo mes)
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <label className="text-xs font-bold text-gray-700">Meses que cubre este abono:</label>
+                            <select
+                                value={mesesCubiertos}
+                                onChange={(e) => setMesesCubiertos(Number(e.target.value))}
+                                className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold text-gray-900 focus:outline-none focus:border-cyan-500"
+                            >
+                                {[1, 2, 3, 4, 5, 6].map((n) => (
+                                    <option key={n} value={n}>{n}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Switch para cambiar tarifa (existente) */}
                     <div className="border-t border-gray-100 pt-4 mt-2">
                         <label className="flex items-center gap-3 cursor-pointer group">
                             <div className="relative">

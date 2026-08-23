@@ -21,7 +21,6 @@ export function PagosPage() {
     const cargarDatos = useCallback(() => {
         getPagosConEstatus()
             .then((data) => {
-                // 🔥 Agrupar por idAlumno + grupoId (en lugar de solo nombreAlumno)
                 const alumnosMap: Record<string, any> = {};
 
                 data.forEach((pago: any) => {
@@ -42,7 +41,8 @@ export function PagosPage() {
                             fechaLimite: pago.fechaLimite,
                             fechaPagoReal: pago.fechaPagoReal,
                             metodoAbono: pago.metodoAbono,
-                            periodosMap: {}
+                            periodosMap: {},
+                            saldoAFavor: pago.saldoAFavor || 0 // 👈 Agregado
                         };
                     }
 
@@ -55,6 +55,11 @@ export function PagosPage() {
                     alum.montoTotal += (Number(pago.montoTotal) || 0);
                     alum.montoPagado += (Number(pago.montoPagado) || 0);
                     if (pago.activo !== false) alum.activo = true;
+
+                    // Asegurar que el saldo a favor se acumule
+                    if (pago.saldoAFavor) {
+                        alum.saldoAFavor = (alum.saldoAFavor || 0) + Number(pago.saldoAFavor);
+                    }
 
                     const periodos = pago.periodosMensuales || [];
                     periodos.forEach((mes: any) => {
@@ -148,7 +153,11 @@ export function PagosPage() {
         idAlumno: string,
         grupoId: string,
         nombreAlumno: string,
-        nuevoMontoMensual?: number
+        nuevoMontoMensual?: number,
+        esDescuento?: boolean,
+        descuentoPorcentaje?: number,
+        mesesCubiertos?: number,
+        aplicaSaldoAFavor?: boolean
     ) => {
         try {
             await registrarAbono({
@@ -159,7 +168,11 @@ export function PagosPage() {
                 fechaAbono,
                 idAlumno,
                 grupoId,
-                nuevoMontoMensual: nuevoMontoMensual || null
+                nuevoMontoMensual: nuevoMontoMensual || null,
+                esDescuento: esDescuento || false,
+                descuentoPorcentaje: descuentoPorcentaje || 0,
+                mesesCubiertos: mesesCubiertos || 1,
+                aplicaSaldoAFavor: aplicaSaldoAFavor || false
             });
             toast.success("Pago registrado correctamente");
             setIsModalOpen(false);

@@ -7,7 +7,7 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   label: string;
-  adminOnly?: boolean;
+  roles: string[]; // ✅ Cambio: en lugar de adminOnly, usamos roles
   category?: 'academic' | 'finance' | 'admin' | 'general';
 }
 
@@ -17,7 +17,7 @@ export function Header() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const nombreUsuario = user.nombreCompleto || user.usuario || 'Usuario';
   const rolUsuario = user.rol || '';
-  const isAdmin = user.rol === 'admin';
+  const rol = user.rol || '';
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -34,38 +34,37 @@ export function Header() {
     return location.pathname.startsWith(path);
   };
 
-  // Definición de navegación con categorías
+  // ✅ Definición de navegación con roles
   const navItems: NavItem[] = [
     // General
-    { path: '/dashboard', icon: <Home className="w-4 h-4" />, label: 'Panel', category: 'general' },
+    { path: '/dashboard', icon: <Home className="w-4 h-4" />, label: 'Panel', roles: ['admin', 'profesor'], category: 'general' },
     
-    // Académico
-    { path: '/alumnos', icon: <Users className="w-4 h-4" />, label: 'Alumnos', category: 'academic' },
-    { path: '/grupos', icon: <BookOpen className="w-4 h-4" />, label: 'Grupos', category: 'academic' },
-    { path: '/cursos', icon: <BookOpen className="w-4 h-4" />, label: 'Cursos', category: 'academic', adminOnly: true },
-    { path: '/maestros', icon: <UserCog className="w-4 h-4" />, label: 'Maestros', category: 'academic', adminOnly: true },
+    // Académico - Profesores pueden ver Alumnos, Grupos, Cursos
+    { path: '/alumnos', icon: <Users className="w-4 h-4" />, label: 'Alumnos', roles: ['admin', 'profesor'], category: 'academic' },
+    { path: '/grupos', icon: <BookOpen className="w-4 h-4" />, label: 'Grupos', roles: ['admin', 'profesor'], category: 'academic' },
+    { path: '/cursos', icon: <BookOpen className="w-4 h-4" />, label: 'Cursos', roles: ['admin', 'profesor'], category: 'academic' },
+    { path: '/maestros', icon: <UserCog className="w-4 h-4" />, label: 'Maestros', roles: ['admin'], category: 'academic' },
     
-    // Finanzas
-    { path: '/asistencia', icon: <ClipboardCheck className="w-4 h-4" />, label: 'Asistencia', category: 'finance' },
-    { path: '/pagos', icon: <CreditCard className="w-4 h-4" />, label: 'Pagos', category: 'finance' },
-    { path: '/reportes/cobranza', icon: <BarChart className="w-4 h-4" />, label: 'Cobranza', category: 'finance', adminOnly: true },
-    { path: '/reportes/rentabilidad', icon: <LineChart className="w-4 h-4" />, label: 'Rentabilidad', category: 'finance', adminOnly: true },
-    { path: '/pagos-profesores', icon: <DollarSign className="w-4 h-4" />, label: 'Pagos Profesores', category: 'finance', adminOnly: true },
+    // Finanzas - Solo admin
+    { path: '/asistencia', icon: <ClipboardCheck className="w-4 h-4" />, label: 'Asistencia', roles: ['admin', 'profesor'], category: 'finance' },
+    { path: '/pagos', icon: <CreditCard className="w-4 h-4" />, label: 'Pagos', roles: ['admin'], category: 'finance' },
+    { path: '/reportes/cobranza', icon: <BarChart className="w-4 h-4" />, label: 'Cobranza', roles: ['admin'], category: 'finance' },
+    { path: '/reportes/rentabilidad', icon: <LineChart className="w-4 h-4" />, label: 'Rentabilidad', roles: ['admin'], category: 'finance' },
+    { path: '/pagos-profesores', icon: <DollarSign className="w-4 h-4" />, label: 'Pagos Profesores', roles: ['admin'], category: 'finance' },
     
-    // Administración
-    { path: '/calendario', icon: <Calendar className="w-4 h-4" />, label: 'Calendario', category: 'admin' },
-    { path: '/reschedule', icon: <Repeat className="w-4 h-4" />, label: 'Reagendaciones', category: 'admin', adminOnly: true },
-    { path: '/admin/usuarios', icon: <Users className="w-4 h-4" />, label: 'Usuarios', category: 'admin', adminOnly: true },
-    { path: '/cursos-verano', icon: <Sun className="w-4 h-4" />, label: 'Cursos Verano', category: 'admin', adminOnly: true },
-    { path: '/inscripciones-consulta', icon: <Eye className="w-4 h-4" />, label: 'Inscripciones', category: 'admin', adminOnly: true },
-    { path: '/admin/editor-inscripciones', icon: <Edit2 className="w-4 h-4" />, label: 'Editor', category: 'admin', adminOnly: true },
+    // Administración - Solo admin
+    { path: '/calendario', icon: <Calendar className="w-4 h-4" />, label: 'Calendario', roles: ['admin', 'profesor'], category: 'admin' },
+    { path: '/reschedule', icon: <Repeat className="w-4 h-4" />, label: 'Reagendaciones', roles: ['admin'], category: 'admin' },
+    { path: '/admin/usuarios', icon: <Users className="w-4 h-4" />, label: 'Usuarios', roles: ['admin'], category: 'admin' },
+    { path: '/cursos-verano', icon: <Sun className="w-4 h-4" />, label: 'Cursos Verano', roles: ['admin'], category: 'admin' },
+    { path: '/inscripciones-consulta', icon: <Eye className="w-4 h-4" />, label: 'Inscripciones', roles: ['admin'], category: 'admin' },
+    { path: '/admin/editor-inscripciones', icon: <Edit2 className="w-4 h-4" />, label: 'Editor', roles: ['admin'], category: 'admin' },
   ];
 
-  // Filtrar según rol
-  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  // ✅ Filtrar según rol
+  const visibleItems = navItems.filter(item => item.roles.includes(rol));
 
   // Categorías para separadores
-  const categories = ['general', 'academic', 'finance', 'admin'];
   let lastCategory = '';
 
   return (

@@ -426,14 +426,16 @@ export async function registrarAbono(data: {
   montoAbono: number;
   nombreAlumno: string;
   metodoAbono: string;
+  fechaAbono?: string;
   idAlumno: string;
   grupoId: string;
-  fechaAbono?: string;
-  nuevoMontoMensual?: number;
+  nuevoMontoMensual?: number | null;
+  // 👇 NUEVOS CAMPOS
+  esDescuento?: boolean;
+  descuentoPorcentaje?: number;
+  mesesCubiertos?: number;
+  aplicaSaldoAFavor?: boolean;
 }) {
-  // ✅ El console.log va AQUÍ, dentro del cuerpo
-  console.log('📤 Llamando a /abonos con data:', data);
-
   const res = await apiFetch("/abonos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

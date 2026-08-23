@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const pagoSchema = new mongoose.Schema(
     {
+        // ===== CAMPOS EXISTENTES (se mantienen) =====
         pagoId: { type: String, required: true, unique: true, index: true },
         idAlumno: { type: String, default: "", index: true },
         grupoId: { type: String, default: "", index: true },
@@ -24,6 +25,17 @@ const pagoSchema = new mongoose.Schema(
         facturaRequerida: { type: Boolean, default: false },
         facturaEmitida: { type: Boolean, default: false },
         folioFactura: { type: String, default: '' },
+
+        // ===== NUEVOS CAMPOS PARA DESCUENTOS Y SALDOS =====
+        descuentoAplicado: { type: Number, default: 0, min: 0, max: 100 }, // % de descuento
+        mesesCubiertos: { type: Number, default: 1, min: 1 }, // Para pagos adelantados
+        tipoPago: { 
+            type: String, 
+            enum: ['normal', 'adelantado', 'descuento'], 
+            default: 'normal' 
+        },
+        saldoAFavor: { type: Number, default: 0 }, // Excedente de este pago (para próximos meses)
+        fechaFinCobertura: { type: Date, default: null }, // Hasta cuándo está pagado (para adelantados)
     },
     {
         collection: 'pago',
@@ -31,23 +43,6 @@ const pagoSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
-
-// Middleware pre('save') simplificado y robusto
-// pagoSchema.pre('save', function(next) {
-//     if (!this.isNew && !this.isModified('fechaInicioPago') && !this.isModified('fechaPago')) {
-//         return next();
-//     }
-//     const fecha = this.fechaInicioPago || this.fechaPago || new Date();
-//     const mes = fecha.toLocaleString('es', { month: 'short' });
-//     this.mesCorrespondiente = mes.charAt(0).toUpperCase() + mes.slice(1);
-//     this.anio = fecha.getFullYear();
-//     if (!this.periodo || this.periodo === "Mes") {
-//         this.periodo = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2, '0')}`;
-//     }
-//     if (!this.diaPago) this.diaPago = fecha.getDate();
-//     if (!this.fechaPago) this.fechaPago = new Date();
-//     next();
-// });
 
 // Índices adicionales
 pagoSchema.index({ idAlumno: 1, anio: 1, mesCorrespondiente: 1 });
