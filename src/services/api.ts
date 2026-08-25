@@ -656,3 +656,26 @@ export async function eliminarGasto(id: string) {
   if (!res.ok) throw new Error('Error al eliminar gasto');
   return res.json();
 }
+// ===== EDITAR ABONO =====
+export async function editarAbono(
+  abonoId: string,
+  data: {
+    montoAbono?: number;
+    fechaAbono?: string;
+    metodoAbono?: string;
+    notas?: string;
+  }
+) {
+  const res = await apiFetch(`/abonos/${abonoId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Error al editar el abono");
+  }
+  const responseData = await res.json();
+  notifyDataChanged({ tipo: "pago" });
+  return responseData;
+}

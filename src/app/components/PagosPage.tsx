@@ -1,7 +1,8 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
-import { getPagosConEstatus, registrarAbono, actualizarDiaPago } from '../../services/api';
+import { EditAbonoModal } from '../components/EditAbonoModal';
+import { getPagosConEstatus, registrarAbono, actualizarDiaPago, editarAbono } from '../../services/api';
 import { toast } from "sonner";
 import { useSyncDataReload } from '../../utils/dataSync';
 
@@ -12,6 +13,8 @@ export function PagosPage() {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<any>(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [abonoParaEditar, setAbonoParaEditar] = useState<any>(null);
 
     const [busquedaAlumno, setBusquedaAlumno] = useState('');
     const [fechaInicio, setFechaInicio] = useState('');
@@ -42,7 +45,7 @@ export function PagosPage() {
                             fechaPagoReal: pago.fechaPagoReal,
                             metodoAbono: pago.metodoAbono,
                             periodosMap: {},
-                            saldoAFavor: pago.saldoAFavor || 0 // 👈 Agregado
+                            saldoAFavor: pago.saldoAFavor || 0
                         };
                     }
 
@@ -56,7 +59,6 @@ export function PagosPage() {
                     alum.montoPagado += (Number(pago.montoPagado) || 0);
                     if (pago.activo !== false) alum.activo = true;
 
-                    // Asegurar que el saldo a favor se acumule
                     if (pago.saldoAFavor) {
                         alum.saldoAFavor = (alum.saldoAFavor || 0) + Number(pago.saldoAFavor);
                     }
@@ -179,6 +181,21 @@ export function PagosPage() {
             cargarDatos();
         } catch (error: any) {
             toast.error("Error al registrar: " + error.message);
+        }
+    };
+
+    const handleEditarAbono = (abono: any) => {
+        setAbonoParaEditar(abono);
+        setShowEditModal(true);
+    };
+
+    const handleConfirmarEdicion = async (abonoId: string, data: any) => {
+        try {
+            await editarAbono(abonoId, data);
+            toast.success('Abono actualizado correctamente');
+            await cargarDatos();
+        } catch (error: any) {
+            toast.error(error.message || 'Error al editar abono');
         }
     };
 
@@ -351,9 +368,8 @@ export function PagosPage() {
                                     setIsModalOpen(true);
                                 }}
                                 onChangePaymentDate={() => {}}
-                                onPrintReceipt={(mes) => {
-                                    toast.info('Función de recibo en desarrollo');
-                                }}
+                                onPrintReceipt={() => {}}
+                                onEditarAbono={handleEditarAbono} // 👈 Nueva prop
                             />
                         ))
                     ) : (
@@ -368,6 +384,17 @@ export function PagosPage() {
                         payment={selectedPayment}
                         onClose={() => setIsModalOpen(false)}
                         onConfirm={handleConfirmarPago}
+                    />
+                )}
+
+                {showEditModal && abonoParaEditar && (
+                    <EditAbonoModal
+                        abono={abonoParaEditar}
+                        onClose={() => {
+                            setShowEditModal(false);
+                            setAbonoParaEditar(null);
+                        }}
+                        onConfirm={handleConfirmarEdicion}
                     />
                 )}
             </div>
