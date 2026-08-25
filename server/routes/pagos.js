@@ -7,7 +7,7 @@ import { crearPagoId } from "../utils/pagos.js";
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN PARA SINCRONIZAR PAGOS DESDE INSCRIPCIONES
+// FUNCIÓN PARA SINCRONIZAR PAGOS (SIN SOBRESCRIBIR DESCUENTOS)
 // ============================================================
 async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
@@ -32,6 +32,18 @@ async function sincronizarPagosDesdeInscripciones() {
         const pagoId = crearPagoId(idAlumno, grupoId);
         const grupo = gruposMap.get(grupoId.toUpperCase());
 
+        // ⚠️ IMPORTANTE: No sobrescribir montoPago si ya tiene descuento aplicado
+        // Verificar si el pago ya existe y tiene descuento
+        const pagoExistente = await Pago.findOne({ pagoId }).lean();
+        let montoPago = Number(ins.montoMensualidad);
+        let descuentoAplicado = 0;
+
+        if (pagoExistente && pagoExistente.descuentoAplicado > 0) {
+            // Mantener el monto con descuento
+            montoPago = pagoExistente.montoPago;
+            descuentoAplicado = pagoExistente.descuentoAplicado;
+        }
+
         await Pago.updateOne(
             { pagoId },
             {
@@ -41,10 +53,11 @@ async function sincronizarPagosDesdeInscripciones() {
                     grupoId,
                     nombreCurso: grupo?.nombreCurso || "Curso",
                     diaPago: Number(ins.diaPago) || 1,
-                    montoPago: Number(ins.montoMensualidad),
+                    montoPago: montoPago,
                     fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
                     activo: true,
                     fechaBaja: null,
+                    descuentoAplicado: descuentoAplicado,
                 },
             },
             { upsert: true }
@@ -53,14 +66,12 @@ async function sincronizarPagosDesdeInscripciones() {
 }
 
 // ============================================================
-// GET /lista-completa – USANDO PAGOS REALES (SIN RECÁLCULO)
+// GET /lista-completa – CON DESCUENTOS APLICADOS
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
-        // Sincronizar pagos principales desde inscripciones
         await sincronizarPagosDesdeInscripciones();
 
-        // Obtener todos los pagos activos con sus abonos
         const pagos = await Pago.aggregate([
             { $match: { activo: true } },
             {
@@ -76,7 +87,6 @@ router.get("/lista-completa", async (req, res) => {
             }
         ]);
 
-        // Agrupar pagos por alumno + grupo
         const alumnosMap = new Map();
 
         for (const pago of pagos) {
@@ -97,49 +107,54 @@ router.get("/lista-completa", async (req, res) => {
             }
             const alum = alumnosMap.get(key);
             alum.pagos.push(pago);
-            alum.montoTotal += pago.montoPago || 0;
+            // El monto total debe ser la suma de los montos con descuento
+            const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
+            alum.montoTotal += montoConDescuento;
             const abonos = pago.historialAbonos || [];
             const pagado = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
             alum.montoPagado += pagado;
             alum.historialAbonos = alum.historialAbonos.concat(abonos);
         }
 
-        // Construir respuesta
         const resultadoFinal = [];
 
         for (const [key, alum] of alumnosMap) {
-            // Ordenar pagos por fecha de inicio (real, sin recalcular)
             const pagosOrdenados = alum.pagos.sort((a, b) => new Date(a.fechaInicioPago) - new Date(b.fechaInicioPago));
 
-            // 🔥 PERIODOS MENSUALES = CADA PAGO REAL, SIN RECÁLCULO
+            // 🔥 PERIODOS CON DESCUENTO APLICADO
             const periodosMensuales = pagosOrdenados.map((pago) => {
                 const fechaVencimiento = new Date(pago.fechaInicioPago);
                 const abonosDelPago = pago.historialAbonos || [];
                 const totalAbonado = abonosDelPago.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
-                const saldo = Math.max(0, pago.montoPago - totalAbonado);
-                const status = totalAbonado >= pago.montoPago ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
+                
+                // ✅ Aplicar descuento al monto del periodo
+                const descuento = pago.descuentoAplicado || 0;
+                const montoBase = pago.montoPago || 0;
+                const montoPeriodo = montoBase * (1 - descuento / 100);
+                
+                const saldo = Math.max(0, montoPeriodo - totalAbonado);
+                const status = totalAbonado >= montoPeriodo ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
 
                 return {
                     clave: `${fechaVencimiento.getFullYear()}-${String(fechaVencimiento.getMonth() + 1).padStart(2, '0')}`,
                     nombreMes: fechaVencimiento.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
                     vencimiento: fechaVencimiento.toISOString(),
-                    monto: pago.montoPago || 0,
+                    monto: montoPeriodo,
                     pagado: totalAbonado,
                     saldo: saldo,
                     status: status,
                     pagoId: pago.pagoId,
                     metodoAbono: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].metodoAbono : null,
                     fechaPagoReal: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].fechaAbono : null,
+                    descuentoAplicado: descuento,
                 };
             });
 
-            // Calcular totales (suma de los pagos reales)
             const totalMonto = periodosMensuales.reduce((sum, m) => sum + m.monto, 0);
             const totalPagado = periodosMensuales.reduce((sum, m) => sum + m.pagado, 0);
             const saldoTotal = Math.max(0, totalMonto - totalPagado);
             const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
 
-            // Fecha límite: el vencimiento del mes actual o el primer pendiente
             const hoy = new Date();
             const mesActual = periodosMensuales.find(m => {
                 const v = new Date(m.vencimiento);
@@ -163,6 +178,7 @@ router.get("/lista-completa", async (req, res) => {
                 cobroProgramado: false,
                 metodoAbono: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].metodoAbono : null,
                 fechaPagoReal: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].fechaAbono : null,
+                saldoAFavor: 0, // Puedes calcularlo si lo necesitas
             });
         }
 
@@ -174,7 +190,7 @@ router.get("/lista-completa", async (req, res) => {
 });
 
 // ============================================================
-// PATCH /actualizar-dia/:id
+// PATCH /actualizar-dia/:id (sin cambios)
 // ============================================================
 router.patch("/actualizar-dia/:id", async (req, res) => {
     try {
