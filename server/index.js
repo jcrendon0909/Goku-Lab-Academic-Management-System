@@ -57,6 +57,7 @@ console.log("  ✅ cursosVeranoRoutes importado");
 
 import adminRoutes from "./routes/admin.js";
 console.log("  ✅ adminRoutes importado");
+import asistenciaRoutes from './routes/asistencia.js';
 
 // ✅ NUEVO: Importar rutas de pagos a profesores
 import pagosProfesoresRoutes from "./routes/pagosProfesores.js";
