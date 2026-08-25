@@ -23,9 +23,17 @@ interface PaymentRowProps {
     onRegisterPayment: (mesElegido?: any) => void;
     onChangePaymentDate: () => void;
     onPrintReceipt?: (mes: any) => void;
+    onEditarAbono?: (abono: any) => void; // 👈 Nueva prop
 }
 
-export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentDate, onPrintReceipt }: PaymentRowProps) {
+export function PaymentRow({ 
+    payment, 
+    vista, 
+    onRegisterPayment, 
+    onChangePaymentDate, 
+    onPrintReceipt,
+    onEditarAbono // 👈 Recibimos la función
+}: PaymentRowProps) {
     const isPaid = payment.status === "Pagado" || vista === 'registro';
     const esProgramado = payment.status === "Programado" || payment.cobroProgramado;
     const periodosRaw = payment.periodosMensuales || [];
@@ -66,6 +74,32 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
     );
 
     const vencido = !esProgramado && estaVencido(payment.fechaLimite, payment.status);
+
+    // Función para manejar la edición de un abono
+    const handleEditarAbono = (mes: any) => {
+        if (!onEditarAbono) return;
+        // Buscar el abono correspondiente a este mes
+        // Si el mes tiene un abonoId o pagoId, lo usamos para obtener el abono completo
+        // En este caso, asumimos que el mes tiene un abonoId o que podemos obtenerlo desde el pago
+        // Si no, mostramos un mensaje
+        if (!mes.abonoId && !mes.pagoId) {
+            alert('No se puede editar este abono porque no tiene un identificador');
+            return;
+        }
+        // Construimos un objeto abono con los datos que tenemos
+        const abono = {
+            abonoId: mes.abonoId || `ABO-${mes.pagoId}`, // Fallback
+            pagoId: mes.pagoId || payment.pagoId,
+            idAlumno: payment.idAlumno,
+            grupoId: payment.grupoId,
+            nombreAlumno: payment.nombreAlumno,
+            montoAbono: mes.pagado || 0,
+            fechaAbono: mes.fechaPagoReal || mes.vencimiento,
+            metodoAbono: mes.metodoAbono || mes.metodoPago || 'Efectivo',
+            notas: mes.notas || '',
+        };
+        onEditarAbono(abono);
+    };
 
     return (
         <div className="rounded-xl border bg-white p-6 shadow-sm space-y-4">
@@ -158,7 +192,6 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
                                 const indiceReal = periodosRaw.indexOf(mes);
                                 const estaBloqueado = indiceReal > primerMesPendienteIndex && primerMesPendienteIndex !== -1;
 
-                                // ✅ LOG PARA VERIFICAR QUE pagoId EXISTE EN mes
                                 console.log('🔍 Renderizando mes:', mes.clave, 'pagoId:', mes.pagoId);
 
                                 return (
@@ -166,16 +199,26 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
                                         <div>
                                             <div className="flex justify-between items-start">
                                                 <div className="font-bold text-gray-900 capitalize text-sm">{mes.nombreMes}</div>
-
-                                                {mes.pagado > 0 && onPrintReceipt && (
-                                                    <button
-                                                        onClick={() => onPrintReceipt(mes)}
-                                                        className="text-emerald-600 bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded-md transition-colors font-bold text-[10px]"
-                                                        title="Imprimir comprobante"
-                                                    >
-                                                        🖨️ {mes.status === "Pagado" ? "RECIBO MES" : "RECIBO PARCIAL"}
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center gap-1">
+                                                    {esPagado && onEditarAbono && (
+                                                        <button
+                                                            onClick={() => handleEditarAbono(mes)}
+                                                            className="text-purple-600 hover:text-purple-800 transition-colors p-1"
+                                                            title="Editar este abono"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                    )}
+                                                    {mes.pagado > 0 && onPrintReceipt && (
+                                                        <button
+                                                            onClick={() => onPrintReceipt(mes)}
+                                                            className="text-emerald-600 bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded-md transition-colors font-bold text-[10px]"
+                                                            title="Imprimir comprobante"
+                                                        >
+                                                            🖨️ {mes.status === "Pagado" ? "RECIBO MES" : "RECIBO PARCIAL"}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="text-gray-500 mt-1">Vence: {formatearFecha(mes.vencimiento)}</div>
 
@@ -196,7 +239,6 @@ export function PaymentRow({ payment, vista, onRegisterPayment, onChangePaymentD
                                             <button
                                                 onClick={() => {
                                                     if (!estaBloqueado) {
-                                                        // ✅ PASAR EXPLÍCITAMENTE pagoId CON EL MES
                                                         onRegisterPayment({
                                                             ...mes,
                                                             pagoId: mes.pagoId // ← Asegurar que pagoId se pase
