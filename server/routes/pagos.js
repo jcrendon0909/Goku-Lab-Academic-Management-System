@@ -7,7 +7,7 @@ import { crearPagoId } from "../utils/pagos.js";
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN PARA SINCRONIZAR PAGOS (SIN SOBRESCRIBIR DESCUENTOS)
+// FUNCIÓN PARA SINCRONIZAR PAGOS (CREA 12 MESES FUTUROS)
 // ============================================================
 async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
@@ -24,49 +24,62 @@ async function sincronizarPagosDesdeInscripciones() {
         if (id) gruposMap.set(id.toUpperCase(), g);
     }
 
+    const hoy = new Date();
+
     for (const ins of inscripciones) {
         const idAlumno = String(ins.idAlumno || "").trim();
         const grupoId = String(ins.grupoId || ins.GrupoId || "").trim();
         if (!idAlumno || !grupoId) continue;
 
-        const pagoId = crearPagoId(idAlumno, grupoId);
         const grupo = gruposMap.get(grupoId.toUpperCase());
+        const montoMensual = Number(ins.montoMensualidad);
+        const diaPago = Number(ins.diaPago) || 1;
 
-        // ⚠️ IMPORTANTE: No sobrescribir montoPago si ya tiene descuento aplicado
-        // Verificar si el pago ya existe y tiene descuento
-        const pagoExistente = await Pago.findOne({ pagoId }).lean();
-        let montoPago = Number(ins.montoMensualidad);
-        let descuentoAplicado = 0;
+        const fechaInicio = new Date(ins.fechaInicioPago || ins.fechaInscripcion || hoy);
+        
+        // Generar pagos para los próximos 12 meses
+        for (let i = 0; i < 12; i++) {
+            const mes = new Date(fechaInicio);
+            mes.setMonth(mes.getMonth() + i);
+            const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
+            const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
 
-        if (pagoExistente && pagoExistente.descuentoAplicado > 0) {
-            // Mantener el monto con descuento
-            montoPago = pagoExistente.montoPago;
-            descuentoAplicado = pagoExistente.descuentoAplicado;
-        }
+            const pagoExistente = await Pago.findOne({ pagoId }).lean();
+            let montoPago = montoMensual;
+            let descuentoAplicado = 0;
 
-        await Pago.updateOne(
-            { pagoId },
-            {
-                $set: {
-                    idAlumno,
-                    nombreAlumno: ins.nombreAlumno || idAlumno,
-                    grupoId,
-                    nombreCurso: grupo?.nombreCurso || "Curso",
-                    diaPago: Number(ins.diaPago) || 1,
-                    montoPago: montoPago,
-                    fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
-                    activo: true,
-                    fechaBaja: null,
-                    descuentoAplicado: descuentoAplicado,
+            if (pagoExistente && pagoExistente.descuentoAplicado > 0) {
+                montoPago = pagoExistente.montoPago;
+                descuentoAplicado = pagoExistente.descuentoAplicado;
+            }
+
+            await Pago.updateOne(
+                { pagoId },
+                {
+                    $set: {
+                        pagoId,
+                        idAlumno,
+                        nombreAlumno: ins.nombreAlumno || idAlumno,
+                        grupoId,
+                        nombreCurso: grupo?.nombreCurso || "Curso",
+                        diaPago: diaPago,
+                        montoPago: montoPago,
+                        fechaInicioPago: mes,
+                        activo: true,
+                        fechaBaja: null,
+                        periodo: "Mes",
+                        descuentoAplicado: descuentoAplicado,
+                        notas: pagoExistente?.notas || "Generado automáticamente",
+                    },
                 },
-            },
-            { upsert: true }
-        );
+                { upsert: true }
+            );
+        }
     }
 }
 
 // ============================================================
-// GET /lista-completa – CON DESCUENTOS APLICADOS
+// GET /lista-completa – CON PAGOS REALES Y DESCUENTOS
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
@@ -107,7 +120,6 @@ router.get("/lista-completa", async (req, res) => {
             }
             const alum = alumnosMap.get(key);
             alum.pagos.push(pago);
-            // El monto total debe ser la suma de los montos con descuento
             const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
             alum.montoTotal += montoConDescuento;
             const abonos = pago.historialAbonos || [];
@@ -121,17 +133,13 @@ router.get("/lista-completa", async (req, res) => {
         for (const [key, alum] of alumnosMap) {
             const pagosOrdenados = alum.pagos.sort((a, b) => new Date(a.fechaInicioPago) - new Date(b.fechaInicioPago));
 
-            // 🔥 PERIODOS CON DESCUENTO APLICADO
             const periodosMensuales = pagosOrdenados.map((pago) => {
                 const fechaVencimiento = new Date(pago.fechaInicioPago);
                 const abonosDelPago = pago.historialAbonos || [];
                 const totalAbonado = abonosDelPago.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
-                
-                // ✅ Aplicar descuento al monto del periodo
                 const descuento = pago.descuentoAplicado || 0;
                 const montoBase = pago.montoPago || 0;
                 const montoPeriodo = montoBase * (1 - descuento / 100);
-                
                 const saldo = Math.max(0, montoPeriodo - totalAbonado);
                 const status = totalAbonado >= montoPeriodo ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
 
@@ -178,7 +186,7 @@ router.get("/lista-completa", async (req, res) => {
                 cobroProgramado: false,
                 metodoAbono: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].metodoAbono : null,
                 fechaPagoReal: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].fechaAbono : null,
-                saldoAFavor: 0, // Puedes calcularlo si lo necesitas
+                saldoAFavor: 0,
             });
         }
 
@@ -190,7 +198,7 @@ router.get("/lista-completa", async (req, res) => {
 });
 
 // ============================================================
-// PATCH /actualizar-dia/:id (sin cambios)
+// PATCH /actualizar-dia/:id
 // ============================================================
 router.patch("/actualizar-dia/:id", async (req, res) => {
     try {

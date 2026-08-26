@@ -1,9 +1,6 @@
 import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
 
-// ✅ ELIMINA CUALQUIER IMPORTACIÓN DE ESTE MISMO ARCHIVO
-// ❌ NO: import { crearPagoId } from "../utils/pagos.js";
-
 export function parseFechaLocal(valor) {
   if (!valor) return null;
 
@@ -101,8 +98,13 @@ export function normalizarDatosPago(datosPago = {}) {
   };
 }
 
-export function crearPagoId(idAlumno, grupoId) {
-  return `${String(idAlumno).trim()}-${String(grupoId).trim()}`.toUpperCase();
+// ✅ FUNCIÓN MODIFICADA: acepta mesStr
+export function crearPagoId(idAlumno, grupoId, mesStr) {
+  const base = `${String(idAlumno).trim()}-${String(grupoId).trim()}`.toUpperCase();
+  if (mesStr) {
+    return `${base}-${mesStr}`.toUpperCase();
+  }
+  return base;
 }
 
 function obtenerUltimoDiaDelMes(anio, mes) {
@@ -136,13 +138,9 @@ export function construirPeriodosMensuales({
   abonos = [],
   hoy = new Date(),
   mesesFuturosVisibles = 0,
-  descuentoAplicado = 0, // 👈 Nuevo parámetro
 }) {
   const inicio = parseFechaLocal(fechaInicioCobro);
-  const montoOriginal = Number(montoMensualidad) || 0;
-  const descuento = Number(descuentoAplicado) || 0;
-  const monto = montoOriginal * (1 - descuento / 100); // 👈 Aplicar descuento
-
+  const monto = Number(montoMensualidad) || 0;
   if (!inicio || monto <= 0) return [];
 
   const diaPago = Math.min(Math.max(Number(diaPagoFijo) || 1, 1), 31);
@@ -152,6 +150,7 @@ export function construirPeriodosMensuales({
   const limiteSuperior = Math.max(mesFin, mesInicio);
 
   const periodos = [];
+
   let bolsaDeDinero = abonos.reduce(
     (total, abono) => total + Number(abono.montoAbono || 0),
     0
@@ -163,6 +162,7 @@ export function construirPeriodosMensuales({
     const ultimoDia = new Date(anio, mes + 1, 0).getDate();
     const diaVenc = Math.min(diaPago, ultimoDia);
     const inicioMes = new Date(anio, mes, 1, 0, 0, 0, 0);
+    const finMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
     const vencimiento = new Date(anio, mes, diaVenc, 23, 59, 59, 999);
 
     let pagadoMes = 0;
@@ -198,7 +198,7 @@ export function construirPeriodosMensuales({
         year: "numeric",
       }),
       vencimiento: vencimiento.toISOString(),
-      monto, // 👈 Monto con descuento
+      monto,
       pagado: pagadoMes,
       saldo: status === "Programado" ? monto : saldoMes,
       status,
@@ -207,6 +207,7 @@ export function construirPeriodosMensuales({
 
   return periodos;
 }
+
 export function obtenerPeriodoPagoExigible(diaPagoFijo, hoy = new Date()) {
   const diaPago = Number(diaPagoFijo) || 1;
   const diaPagoSeguro = Math.min(Math.max(diaPago, 1), 31);

@@ -49,7 +49,6 @@ console.log("  ✅ reportesRoutes importado");
 import usuariosRoutes from "./routes/usuarios.js";
 console.log("  ✅ usuariosRoutes importado");
 
-import  tes from "./routes/asistencia.js";
 console.log("  ✅ asistenciaRoutes importado");
 
 import cursosVeranoRoutes from "./routes/cursosVerano.js";

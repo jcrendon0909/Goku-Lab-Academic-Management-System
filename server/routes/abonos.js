@@ -3,12 +3,13 @@ import Abono from "../models/Abono.js";
 import Pago from "../models/Pago.js";
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
+import { crearPagoId } from "../utils/pagos.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN AUXILIAR: recalcular saldo de un pago
+// FUNCIÓN AUXILIAR: recalcular saldo de un pago (sin usar)
 // ============================================================
 async function recalcularSaldoPago(pagoId) {
     const abonos = await Abono.find({ pagoId });
@@ -23,9 +24,6 @@ async function recalcularSaldoPago(pagoId) {
     if (nuevoSaldo === 0) nuevoEstatus = "Pagado";
     else if (totalAbonado > 0) nuevoEstatus = "Parcial";
 
-    // Si el pago tiene saldoAFavor (excedente), se acumula en el alumno
-    // Pero esto se maneja en el POST, no aquí.
-
     pago.estatus = nuevoEstatus;
     pago.fechaPago = nuevoEstatus === "Pagado" ? new Date() : pago.fechaPago;
     await pago.save();
@@ -34,17 +32,20 @@ async function recalcularSaldoPago(pagoId) {
 }
 
 // ============================================================
-// POST / – REGISTRAR UN ABONO (CON DESCUENTOS Y SALDOS)
+// POST / – REGISTRAR ABONO CON DISTRIBUCIÓN AUTOMÁTICA
 // ============================================================
 router.post("/", async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const { 
-            pagoId, 
-            montoAbono, 
-            nombreAlumno, 
-            metodoAbono, 
-            fechaAbono, 
-            idAlumno, 
+        const {
+            pagoId,
+            montoAbono,
+            nombreAlumno,
+            metodoAbono,
+            fechaAbono,
+            idAlumno,
             grupoId,
             esDescuento = false,
             descuentoPorcentaje = 0,
@@ -53,98 +54,114 @@ router.post("/", async (req, res) => {
         } = req.body;
 
         // Validar campos obligatorios
-        if (!pagoId || !montoAbono || !nombreAlumno || !idAlumno || !grupoId) {
-            return res.status(400).json({
-                error: "Faltan datos: pagoId, montoAbono, nombreAlumno, idAlumno, grupoId"
-            });
+        if (!pagoId || !montoAbono || !idAlumno || !grupoId) {
+            return res.status(400).json({ error: "Faltan datos obligatorios" });
         }
 
-        // 1. Buscar el pago
-        const pago = await Pago.findOne({ pagoId });
-        if (!pago) {
-            return res.status(404).json({ error: "Pago no encontrado" });
+        // 1. Obtener el pago base (el que se está abonando, ej. enero)
+        const pagoBase = await Pago.findOne({ pagoId }).session(session);
+        if (!pagoBase) {
+            return res.status(404).json({ error: "Pago base no encontrado" });
         }
 
-        // 2. Obtener abonos existentes
-        const abonosExistentes = await Abono.find({ pagoId });
-        const totalAbonado = abonosExistentes.reduce((sum, a) => sum + a.montoAbono, 0);
-
-        // 3. Calcular el monto requerido del pago (con descuento)
-        const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
-        const saldoRestante = Math.max(0, montoConDescuento - totalAbonado);
-
-        // 4. Si es un abono con descuento, se aplica directamente al pago (sin sumar al total abonado)
-        let montoAbonoFinal = Number(montoAbono);
-        let esAbonoDescuento = esDescuento;
-
-        // Si es descuento, lo registramos pero no suma al total abonado (solo reduce el monto requerido)
-        // Pero para simplificar, manejamos el descuento como un abono con monto positivo (similar a un pago)
-        // La diferencia es que el pago se marcará como Pagado si el descuento cubre el saldo.
-
-        // 5. Crear el abono
-        const nuevoAbono = new Abono({
-            abonoId: await generarId('abono'),
-            pagoId: pago.pagoId,
-            idAlumno,
-            grupoId,
-            nombreAlumno,
-            montoAbono: montoAbonoFinal,
-            metodoAbono: metodoAbono || "Efectivo",
-            fechaAbono: fechaAbono ? new Date(fechaAbono) : new Date(),
-            numeroDeabono: String(abonosExistentes.length + 1),
-            esDescuento: esAbonoDescuento,
-            descuentoPorcentaje: esAbonoDescuento ? descuentoPorcentaje : 0,
-            mesesCubiertos,
-            aplicaSaldoAFavor,
-        });
-
-        await nuevoAbono.save();
-
-        // 6. Recalcular saldo del pago (incluyendo descuentos)
-        const totalAbonadoActualizado = (await Abono.find({ pagoId })).reduce((sum, a) => sum + a.montoAbono, 0);
-        const saldoRestanteNuevo = Math.max(0, montoConDescuento - totalAbonadoActualizado);
-
-        let nuevoEstatus = "Pendiente";
-        if (saldoRestanteNuevo === 0) nuevoEstatus = "Pagado";
-        else if (totalAbonadoActualizado > 0) nuevoEstatus = "Parcial";
-
-        // 7. Si el pago queda Pagado, actualizar fechaPago
-        if (nuevoEstatus === "Pagado") {
-            pago.fechaPago = new Date();
+        // 2. Determinar los meses a cubrir (a partir del mes del pago base)
+        const fechaInicio = new Date(pagoBase.fechaInicioPago);
+        const meses = [];
+        for (let i = 0; i < mesesCubiertos; i++) {
+            const mes = new Date(fechaInicio);
+            mes.setMonth(mes.getMonth() + i);
+            meses.push(mes);
         }
 
-        pago.estatus = nuevoEstatus;
-        await pago.save();
+        // 3. Calcular monto por mes con descuento
+        const montoTotal = Number(montoAbono);
+        const montoPorMes = montoTotal / mesesCubiertos;
+        const montoConDescuento = esDescuento
+            ? montoPorMes * (1 - descuentoPorcentaje / 100)
+            : montoPorMes;
 
-        // 8. Manejar saldo a favor (excedente)
-        let saldoAFavor = 0;
-        if (aplicaSaldoAFavor && saldoRestanteNuevo === 0 && totalAbonadoActualizado > pago.montoPago) {
-            saldoAFavor = totalAbonadoActualizado - pago.montoPago;
-            // Actualizar el saldo a favor del alumno
-            const alumno = await Alumno.findOne({ idAlumno });
-            if (alumno) {
-                alumno.saldoAFavor = (alumno.saldoAFavor || 0) + saldoAFavor;
-                await alumno.save();
+        // 4. Crear/actualizar pagos y abonos para cada mes
+        const abonosCreados = [];
+        for (let i = 0; i < meses.length; i++) {
+            const mes = meses[i];
+            const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
+            const nuevoPagoId = crearPagoId(idAlumno, grupoId, mesStr);
+
+            // Buscar o crear pago para este mes
+            let pagoMes = await Pago.findOne({ pagoId: nuevoPagoId }).session(session);
+            if (!pagoMes) {
+                // Si no existe, crearlo con el monto con descuento
+                pagoMes = new Pago({
+                    pagoId: nuevoPagoId,
+                    idAlumno,
+                    grupoId,
+                    nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+                    nombreCurso: pagoBase.nombreCurso,
+                    diaPago: pagoBase.diaPago,
+                    montoPago: montoConDescuento,
+                    fechaInicioPago: mes,
+                    activo: true,
+                    fechaBaja: null,
+                    periodo: "Mes",
+                    estatus: "Pendiente",
+                    descuentoAplicado: esDescuento ? descuentoPorcentaje : 0,
+                });
+                await pagoMes.save({ session });
+            } else {
+                // Si ya existe, actualizar el monto y el descuento (si no tiene descuento previo)
+                if (!pagoMes.descuentoAplicado || pagoMes.descuentoAplicado === 0) {
+                    pagoMes.montoPago = montoConDescuento;
+                    pagoMes.descuentoAplicado = esDescuento ? descuentoPorcentaje : 0;
+                    await pagoMes.save({ session });
+                }
             }
+
+            // Crear el abono para este mes
+            const nuevoAbono = new Abono({
+                abonoId: await generarId("abono"),
+                pagoId: nuevoPagoId,
+                idAlumno,
+                grupoId,
+                nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+                montoAbono: montoConDescuento,
+                metodoAbono: metodoAbono || "Efectivo",
+                fechaAbono: fechaAbono ? new Date(fechaAbono) : new Date(),
+                numeroDeabono: String(i + 1),
+                esDescuento: esDescuento,
+                descuentoPorcentaje: esDescuento ? descuentoPorcentaje : 0,
+                mesesCubiertos: 1,
+                notas: `Abono distribuido para ${mesStr}`,
+            });
+            await nuevoAbono.save({ session });
+
+            // Marcar el pago como "Pagado" si el abono cubre el monto requerido
+            if (montoConDescuento >= pagoMes.montoPago) {
+                pagoMes.estatus = "Pagado";
+                pagoMes.fechaPago = fechaAbono ? new Date(fechaAbono) : new Date();
+                await pagoMes.save({ session });
+            }
+
+            abonosCreados.push(nuevoAbono);
         }
 
-        // 9. Respuesta exitosa
+        await session.commitTransaction();
+
         res.status(201).json({
-            message: "Abono registrado correctamente",
-            abono: nuevoAbono,
-            saldoRestante: saldoRestanteNuevo,
-            estatusPago: nuevoEstatus,
-            saldoAFavor: saldoAFavor,
+            message: `Abono distribuido en ${mesesCubiertos} meses`,
+            abonos: abonosCreados,
         });
 
     } catch (error) {
-        console.error("❌ Error al registrar abono:", error);
-        res.status(500).json({ error: "Error interno al procesar el abono" });
+        await session.abortTransaction();
+        console.error("❌ Error al registrar abono distribuido:", error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        session.endSession();
     }
 });
 
 // ============================================================
-// PUT /:abonoId – EDITAR UN ABONO (CON RECÁLCULO)
+// PUT /:abonoId – EDITAR ABONO (con recálculo)
 // ============================================================
 router.put("/:abonoId", async (req, res) => {
     const session = await mongoose.startSession();
@@ -154,17 +171,14 @@ router.put("/:abonoId", async (req, res) => {
         const { abonoId } = req.params;
         const { montoAbono, fechaAbono, metodoAbono, notas } = req.body;
 
-        // Buscar el abono
         const abono = await Abono.findOne({ abonoId });
         if (!abono) {
             await session.abortTransaction();
             return res.status(404).json({ error: "Abono no encontrado" });
         }
 
-        // Guardar el pagoId para recalcular después
         const pagoId = abono.pagoId;
 
-        // Actualizar el abono
         if (montoAbono !== undefined) abono.montoAbono = Number(montoAbono);
         if (fechaAbono) abono.fechaAbono = new Date(fechaAbono);
         if (metodoAbono) abono.metodoAbono = metodoAbono;
@@ -173,62 +187,33 @@ router.put("/:abonoId", async (req, res) => {
 
         // Recalcular el saldo del pago
         const pago = await Pago.findOne({ pagoId }).session(session);
-        if (!pago) {
-            await session.abortTransaction();
-            return res.status(404).json({ error: "Pago asociado no encontrado" });
-        }
-
-        // Recalcular total abonado (todos los abonos del pago)
-        const abonos = await Abono.find({ pagoId }).session(session);
-        const totalAbonado = abonos.reduce((sum, a) => sum + a.montoAbono, 0);
-
-        const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
-        const saldoRestante = Math.max(0, montoConDescuento - totalAbonado);
-
-        let nuevoEstatus = "Pendiente";
-        if (saldoRestante === 0) nuevoEstatus = "Pagado";
-        else if (totalAbonado > 0) nuevoEstatus = "Parcial";
-
-        pago.estatus = nuevoEstatus;
-        if (nuevoEstatus === "Pagado") {
-            pago.fechaPago = new Date();
-        }
-        await pago.save({ session });
-
-        // Recalcular saldo a favor del alumno (si aplica)
-        // Si el pago está pagado y el total abonado excede el monto original, el excedente se suma al saldoAFavor
-        let saldoAFavor = 0;
-        if (nuevoEstatus === "Pagado" && totalAbonado > pago.montoPago) {
-            saldoAFavor = totalAbonado - pago.montoPago;
-            const alumno = await Alumno.findOne({ idAlumno: pago.idAlumno }).session(session);
-            if (alumno) {
-                alumno.saldoAFavor = (alumno.saldoAFavor || 0) + saldoAFavor;
-                await alumno.save({ session });
-            }
+        if (pago) {
+            const abonos = await Abono.find({ pagoId }).session(session);
+            const totalAbonado = abonos.reduce((sum, a) => sum + a.montoAbono, 0);
+            const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
+            const saldoRestante = Math.max(0, montoConDescuento - totalAbonado);
+            let nuevoEstatus = "Pendiente";
+            if (saldoRestante === 0) nuevoEstatus = "Pagado";
+            else if (totalAbonado > 0) nuevoEstatus = "Parcial";
+            pago.estatus = nuevoEstatus;
+            if (nuevoEstatus === "Pagado") pago.fechaPago = new Date();
+            await pago.save({ session });
         }
 
         await session.commitTransaction();
-
-        res.json({
-            ok: true,
-            mensaje: "Abono actualizado correctamente",
-            abono,
-            saldoRestante,
-            estatusPago: nuevoEstatus,
-            saldoAFavor,
-        });
+        res.json({ ok: true, mensaje: "Abono actualizado" });
 
     } catch (error) {
         await session.abortTransaction();
         console.error("❌ Error al editar abono:", error);
-        res.status(500).json({ error: "Error interno al editar el abono" });
+        res.status(500).json({ error: error.message });
     } finally {
         session.endSession();
     }
 });
 
 // ============================================================
-// DELETE /:abonoId – ELIMINAR UN ABONO (CON RECÁLCULO)
+// DELETE /:abonoId – ELIMINAR ABONO
 // ============================================================
 router.delete("/:abonoId", async (req, res) => {
     const session = await mongoose.startSession();
@@ -236,7 +221,6 @@ router.delete("/:abonoId", async (req, res) => {
 
     try {
         const { abonoId } = req.params;
-
         const abono = await Abono.findOne({ abonoId });
         if (!abono) {
             await session.abortTransaction();
@@ -246,29 +230,26 @@ router.delete("/:abonoId", async (req, res) => {
         const pagoId = abono.pagoId;
         await Abono.deleteOne({ abonoId }).session(session);
 
-        // Recalcular saldo del pago
         const pago = await Pago.findOne({ pagoId }).session(session);
         if (pago) {
             const abonosRestantes = await Abono.find({ pagoId }).session(session);
             const totalAbonado = abonosRestantes.reduce((sum, a) => sum + a.montoAbono, 0);
             const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
             const saldoRestante = Math.max(0, montoConDescuento - totalAbonado);
-
             let nuevoEstatus = "Pendiente";
             if (saldoRestante === 0) nuevoEstatus = "Pagado";
             else if (totalAbonado > 0) nuevoEstatus = "Parcial";
-
             pago.estatus = nuevoEstatus;
             await pago.save({ session });
         }
 
         await session.commitTransaction();
-        res.json({ ok: true, mensaje: "Abono eliminado correctamente" });
+        res.json({ ok: true, mensaje: "Abono eliminado" });
 
     } catch (error) {
         await session.abortTransaction();
         console.error("❌ Error al eliminar abono:", error);
-        res.status(500).json({ error: "Error interno al eliminar el abono" });
+        res.status(500).json({ error: error.message });
     } finally {
         session.endSession();
     }
@@ -284,7 +265,7 @@ router.get("/pago/:pagoId", async (req, res) => {
         res.json(abonos);
     } catch (error) {
         console.error("❌ Error al obtener abonos:", error);
-        res.status(500).json({ error: "Error al obtener abonos" });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -298,7 +279,7 @@ router.get("/alumno/:idAlumno", async (req, res) => {
         res.json(abonos);
     } catch (error) {
         console.error("❌ Error al obtener abonos del alumno:", error);
-        res.status(500).json({ error: "Error al obtener abonos" });
+        res.status(500).json({ error: error.message });
     }
 });
 
