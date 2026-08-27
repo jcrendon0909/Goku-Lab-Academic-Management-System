@@ -8,7 +8,7 @@ import { crearPagoId } from "../utils/pagos.js";
 const router = express.Router();
 
 // ============================================================
-// POST / – REGISTRAR ABONO CON DESCUENTO Y MESES CUBIERTOS
+// POST / – REGISTRAR ABONO CON DISTRIBUCIÓN
 // ============================================================
 router.post("/", async (req, res) => {
     try {
@@ -28,15 +28,15 @@ router.post("/", async (req, res) => {
 
         console.log("📥 [ABONO] Recibido:", { pagoId, montoAbono, idAlumno, grupoId, mesesCubiertos, esDescuento, descuentoPorcentaje });
 
-        // Validar campos obligatorios
+        // Validar campos
         if (!pagoId || !montoAbono || !idAlumno || !grupoId) {
             return res.status(400).json({ error: "Faltan datos obligatorios" });
         }
 
-        // 1. Buscar el pago base (el que se está abonando, debe tener el mes en el ID)
+        // Buscar el pago base (el que se está abonando)
         let pagoBase = await Pago.findOne({ pagoId });
         if (!pagoBase) {
-            // Intentar buscar el pago sin el mes (formato antiguo) para compatibilidad
+            // Fallback: buscar sin mes (formato antiguo)
             const pagoIdSinMes = crearPagoId(idAlumno, grupoId);
             pagoBase = await Pago.findOne({ pagoId: pagoIdSinMes });
             if (!pagoBase) {
@@ -44,45 +44,38 @@ router.post("/", async (req, res) => {
                 return res.status(404).json({ error: "Pago base no encontrado" });
             }
             console.warn(`⚠️ Se encontró pago sin mes, usando ID: ${pagoIdSinMes}`);
-            // Actualizar el pago para que tenga el mes en el ID (si es posible)
-            // Pero mejor, forzamos que el abono se registre con el pago existente.
         }
 
-        console.log(`✅ Pago base encontrado: ${pagoBase.pagoId} - fecha: ${pagoBase.fechaInicioPago}`);
+        console.log(`✅ Pago base: ${pagoBase.pagoId} - fecha: ${pagoBase.fechaInicioPago}`);
 
-        // 2. Determinar el mes de inicio (del pago base)
         const fechaInicio = new Date(pagoBase.fechaInicioPago);
         const diaPago = pagoBase.diaPago || 1;
-        console.log(`📅 Mes de inicio: ${fechaInicio.toISOString()}, día de pago: ${diaPago}`);
 
-        // 3. Calcular el monto con descuento por mes
+        // ✅ CORRECCIÓN: Si es descuento, el monto total YA incluye el descuento
+        // Por lo tanto, NO se debe aplicar descuento adicional.
         const montoTotal = Number(montoAbono);
         const montoPorMes = montoTotal / mesesCubiertos;
-        const montoConDescuento = esDescuento
-            ? montoPorMes * (1 - descuentoPorcentaje / 100)
-            : montoPorMes;
+        // Si es descuento, usamos montoPorMes directamente (ya incluye descuento)
+        // Si no es descuento, también usamos montoPorMes (distribución equitativa)
+        const montoConDescuento = montoPorMes; // ← ¡Ya no aplicamos descuento extra!
 
-        console.log(`💰 Monto total: ${montoTotal}, por mes: ${montoPorMes}, con descuento: ${montoConDescuento}`);
+        console.log(`💰 Monto total: ${montoTotal}, por mes: ${montoPorMes}`);
 
-        // 4. Crear/actualizar pagos y abonos para cada mes cubierto
         const abonosCreados = [];
+
         for (let i = 0; i < mesesCubiertos; i++) {
             const mes = new Date(fechaInicio);
             mes.setMonth(mes.getMonth() + i);
-            // Ajustar al día de pago
             const ultimoDiaMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate();
             const diaReal = Math.min(diaPago, ultimoDiaMes);
             mes.setDate(diaReal);
 
             const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
-            // ✅ Usar crearPagoId con mes incluido
             const nuevoPagoId = crearPagoId(idAlumno, grupoId, mesStr);
             console.log(`🔍 Procesando mes ${mesStr}: nuevoPagoId = ${nuevoPagoId}`);
 
-            // Buscar o crear pago para este mes
             let pagoMes = await Pago.findOne({ pagoId: nuevoPagoId });
             if (!pagoMes) {
-                // Si no existe, crearlo con el monto base (sin descuento aún)
                 console.log(`⚠️ Pago no encontrado, creando: ${nuevoPagoId}`);
                 pagoMes = new Pago({
                     pagoId: nuevoPagoId,
@@ -91,7 +84,7 @@ router.post("/", async (req, res) => {
                     nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
                     nombreCurso: pagoBase.nombreCurso,
                     diaPago: diaPago,
-                    montoPago: montoConDescuento, // Lo ajustaremos si ya existía
+                    montoPago: montoConDescuento,
                     fechaInicioPago: mes,
                     activo: true,
                     fechaBaja: null,
@@ -103,7 +96,7 @@ router.post("/", async (req, res) => {
                 console.log(`✅ Pago creado: ${pagoMes.pagoId}`);
             } else {
                 console.log(`ℹ️ Pago existente: ${pagoMes.pagoId}`);
-                // Si el pago ya existe, solo actualizamos el monto y descuento si no tiene descuento previo
+                // Si el pago ya existe, actualizar solo si no tiene descuento previo
                 if (!pagoMes.descuentoAplicado || pagoMes.descuentoAplicado === 0) {
                     pagoMes.montoPago = montoConDescuento;
                     pagoMes.descuentoAplicado = esDescuento ? descuentoPorcentaje : 0;
@@ -114,7 +107,7 @@ router.post("/", async (req, res) => {
                 }
             }
 
-            // Crear el abono para este mes
+            // Crear abono para este mes
             const nuevoAbono = new Abono({
                 abonoId: await generarId("abono"),
                 pagoId: nuevoPagoId,
@@ -130,28 +123,27 @@ router.post("/", async (req, res) => {
             await nuevoAbono.save();
             console.log(`✅ Abono creado: ${nuevoAbono.abonoId} - $${montoConDescuento}`);
 
-            // Marcar el pago como "Pagado" si el abono cubre el monto requerido
+            // Marcar como Pagado si cubre el monto
             if (montoConDescuento >= pagoMes.montoPago) {
                 pagoMes.estatus = "Pagado";
                 pagoMes.fechaPago = fechaAbono ? new Date(fechaAbono) : new Date();
                 await pagoMes.save();
                 console.log(`✅ Pago ${pagoMes.pagoId} marcado como Pagado`);
             } else {
-                console.log(`ℹ️ Pago ${pagoMes.pagoId} queda Parcial (${montoConDescuento} < ${pagoMes.montoPago})`);
                 pagoMes.estatus = "Parcial";
                 await pagoMes.save();
+                console.log(`ℹ️ Pago ${pagoMes.pagoId} queda Parcial`);
             }
 
             abonosCreados.push(nuevoAbono);
         }
 
-        // 5. Opcional: Cambiar tarifa para meses futuros
+        // Cambiar tarifa futura (opcional)
         if (nuevoMontoMensual && nuevoMontoMensual > 0) {
-            // Buscar el primer mes futuro no cubierto
             const mesSiguiente = new Date(fechaInicio);
             mesSiguiente.setMonth(mesSiguiente.getMonth() + mesesCubiertos);
-            const mesStrSiguiente = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth() + 1).padStart(2, "0")}`;
-            const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSiguiente);
+            const mesStrSig = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth() + 1).padStart(2, "0")}`;
+            const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSig);
             const pagoFuturo = await Pago.findOne({ pagoId: pagoFuturoId });
             if (pagoFuturo) {
                 pagoFuturo.montoPago = nuevoMontoMensual;
@@ -172,9 +164,7 @@ router.post("/", async (req, res) => {
     }
 });
 
-// ============================================================
-// GET /pago/:pagoId – OBTENER ABONOS DE UN PAGO
-// ============================================================
+// GET /pago/:pagoId
 router.get("/pago/:pagoId", async (req, res) => {
     try {
         const { pagoId } = req.params;
@@ -186,9 +176,7 @@ router.get("/pago/:pagoId", async (req, res) => {
     }
 });
 
-// ============================================================
-// GET /alumno/:idAlumno – OBTENER ABONOS DE UN ALUMNO
-// ============================================================
+// GET /alumno/:idAlumno
 router.get("/alumno/:idAlumno", async (req, res) => {
     try {
         const { idAlumno } = req.params;
