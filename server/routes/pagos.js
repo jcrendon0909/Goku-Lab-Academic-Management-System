@@ -30,20 +30,25 @@ export async function sincronizarPagosDesdeInscripciones() {
         const grupoId = String(ins.grupoId || ins.GrupoId || "").trim();
         if (!idAlumno || !grupoId) continue;
 
-        const pagoId = crearPagoId(idAlumno, grupoId);
+        // Generar pagoId con mes (para el pago principal)
+        const fechaInicio = ins.fechaInicioPago || ins.fechaInscripcion || new Date();
+        const mesStr = `${fechaInicio.getFullYear()}-${String(fechaInicio.getMonth() + 1).padStart(2, "0")}`;
+        const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
+
         const grupo = gruposMap.get(grupoId.toUpperCase());
 
         await Pago.updateOne(
             { pagoId },
             {
                 $set: {
+                    pagoId,
                     idAlumno,
                     nombreAlumno: ins.nombreAlumno || idAlumno,
                     grupoId,
                     nombreCurso: grupo?.nombreCurso || "Curso",
                     diaPago: Number(ins.diaPago) || 1,
                     montoPago: Number(ins.montoMensualidad),
-                    fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
+                    fechaInicioPago: fechaInicio,
                     activo: true,
                     fechaBaja: null,
                     estatus: "Pendiente",
@@ -55,7 +60,7 @@ export async function sincronizarPagosDesdeInscripciones() {
 }
 
 // ============================================================
-// GET /lista-completa – CON CACHÉ Y SIN SINCRONIZACIÓN
+// GET /lista-completa – CON FILTRO DE MES Y CACHÉ
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
@@ -83,13 +88,17 @@ router.get("/lista-completa", async (req, res) => {
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
 
-        // Filtro base
-        const matchBase = { activo: true };
+        // Filtro base: solo pagos activos Y con formato de mes (terminan en -YYYY-MM)
+        const matchBase = {
+            activo: true,
+            pagoId: { $regex: /-\d{4}-\d{2}$/ } // 🔥 EXCLUYE PAGOS SIN MES
+        };
+
         if (busqueda) {
             matchBase.nombreAlumno = { $regex: busqueda, $options: 'i' };
         }
 
-        // Obtener pagos con abonos (sin sincronización)
+        // Obtener pagos con abonos
         const pagos = await Pago.aggregate([
             { $match: matchBase },
             {

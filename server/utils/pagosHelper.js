@@ -1,7 +1,6 @@
 import Pago from '../models/Pago.js';
 import Grupo from '../models/Grupo.js';
 import { crearPagoId } from './pagos.js';
-import { generarId } from './generarId.js';
 
 export const generarPagosHistoricos = async (inscripcion, marcarComoPagado = true) => {
   try {
@@ -48,7 +47,10 @@ export const generarPagosHistoricos = async (inscripcion, marcarComoPagado = tru
       fechaPrimerPago = new Date(fechaInscripcion);
     }
 
-    const pagoIdInicial = crearPagoId(idAlumno, grupoId);
+    // 🔥 Ahora el pago inicial también tiene mes
+    const mesStrInicio = `${fechaPrimerPago.getFullYear()}-${String(fechaPrimerPago.getMonth() + 1).padStart(2, "0")}`;
+    const pagoIdInicial = crearPagoId(idAlumno, grupoId, mesStrInicio);
+
     const pagoInicial = new Pago({
       pagoId: pagoIdInicial,
       idAlumno,
@@ -88,7 +90,10 @@ export const generarPagosHistoricos = async (inscripcion, marcarComoPagado = tru
       const diaReal = Math.min(diaPagoAlumno, ultimoDiaMes);
       const fechaVencimiento = new Date(currentDate.getFullYear(), currentDate.getMonth(), diaReal);
       
-      const pagoId = await generarId('pago');
+      // 🔥 Ahora cada pago también tiene mes en su ID
+      const mesStr = `${fechaVencimiento.getFullYear()}-${String(fechaVencimiento.getMonth() + 1).padStart(2, "0")}`;
+      const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
+
       const pago = new Pago({
         pagoId,
         idAlumno,

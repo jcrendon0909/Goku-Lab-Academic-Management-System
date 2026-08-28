@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { EditAbonoModal } from '../components/EditAbonoModal';
@@ -40,6 +40,31 @@ export function PagosPage() {
     });
 
     // ============================================================
+    // DEBOUNCE PARA BÚSQUEDA (retraso de 500ms)
+    // ============================================================
+    const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+    const [busquedaDebounced, setBusquedaDebounced] = useState('');
+
+    const handleBusquedaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const valor = e.target.value;
+        setBusquedaAlumno(valor);
+        if (debounceTimeout.current) {
+            clearTimeout(debounceTimeout.current);
+        }
+        debounceTimeout.current = setTimeout(() => {
+            setBusquedaDebounced(valor);
+        }, 500);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimeout.current) {
+                clearTimeout(debounceTimeout.current);
+            }
+        };
+    }, []);
+
+    // ============================================================
     // CARGA DE DATOS OPTIMIZADA (CON FILTROS Y PAGINACIÓN)
     // ============================================================
     const cargarDatos = useCallback(async () => {
@@ -51,16 +76,14 @@ export function PagosPage() {
             params.append('vista', vista);
             params.append('page', String(page));
             params.append('limit', String(limit));
-            if (busquedaAlumno) {
-                params.append('busqueda', busquedaAlumno);
+            if (busquedaDebounced) {
+                params.append('busqueda', busquedaDebounced);
             }
 
             const res = await apiFetch(`/pagos/lista-completa?${params.toString()}`);
             const result = await res.json();
 
-            // ✅ Compatibilidad: si la respuesta tiene 'data', usarlo; si no, es un array directo (versión antigua)
             let pagosData = result.data || result;
-            // Asegurar que sea un array
             if (!Array.isArray(pagosData)) {
                 console.warn('La respuesta no es un array, se esperaba un array de pagos:', pagosData);
                 pagosData = [];
@@ -77,20 +100,17 @@ export function PagosPage() {
             toast.error('Error al cargar pagos');
             setCargando(false);
         }
-    }, [mesFiltro, anioFiltro, busquedaAlumno, vista, page, limit]);
+    }, [mesFiltro, anioFiltro, busquedaDebounced, vista, page, limit]);
 
-    // Cargar datos al cambiar filtros o página
     useEffect(() => {
         cargarDatos();
     }, [cargarDatos]);
 
-    // Sincronizar recarga desde otros módulos
     useSyncDataReload(cargarDatos);
 
-    // Resetear página cuando cambia la búsqueda o vista
     useEffect(() => {
         setPage(1);
-    }, [busquedaAlumno, vista, mesFiltro, anioFiltro]);
+    }, [busquedaDebounced, vista, mesFiltro, anioFiltro]);
 
     // ============================================================
     // HANDLE CONFIRMAR PAGO
@@ -200,7 +220,6 @@ export function PagosPage() {
             </header>
 
             <div className="max-w-6xl mx-auto space-y-6 py-8 px-4 lg:px-0">
-                {/* FILTROS */}
                 <div className="bg-white border rounded-2xl p-5 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buscar Alumno</label>
@@ -208,9 +227,12 @@ export function PagosPage() {
                             type="text"
                             placeholder="Escribe el nombre..."
                             value={busquedaAlumno}
-                            onChange={(e) => setBusquedaAlumno(e.target.value)}
+                            onChange={handleBusquedaChange}
                             className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
                         />
+                        {busquedaAlumno && busquedaAlumno !== busquedaDebounced && (
+                            <p className="text-[10px] text-gray-400 italic">Buscando...</p>
+                        )}
                     </div>
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Mes</label>
@@ -257,7 +279,6 @@ export function PagosPage() {
                     </div>
                 </div>
 
-                {/* RESUMEN */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
                         <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Por recolectar</p>
@@ -279,7 +300,6 @@ export function PagosPage() {
                     </div>
                 </div>
 
-                {/* LISTA DE PAGOS */}
                 <div className="flex flex-col gap-4">
                     {pagos.length > 0 ? (
                         pagos.map((p) => (
@@ -290,11 +310,9 @@ export function PagosPage() {
                                 onRegisterPayment={(mesElegido) => {
                                     const pagoId = mesElegido.pagoId || p.pagoId || p.id;
                                     const grupoId = mesElegido.grupoId || p.grupoId;
-
                                     console.log('🔍 Mes elegido:', mesElegido);
                                     console.log('🔍 pagoId a usar:', pagoId);
                                     console.log('🔍 grupoId a usar:', grupoId);
-
                                     setSelectedPayment({
                                         ...p,
                                         saldo: mesElegido.saldo,
@@ -320,7 +338,6 @@ export function PagosPage() {
                     )}
                 </div>
 
-                {/* PAGINACIÓN */}
                 {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-4">
                         <button
@@ -343,7 +360,6 @@ export function PagosPage() {
                     </div>
                 )}
 
-                {/* MODALES */}
                 {isModalOpen && selectedPayment && (
                     <RegisterPaymentModal
                         payment={selectedPayment}
