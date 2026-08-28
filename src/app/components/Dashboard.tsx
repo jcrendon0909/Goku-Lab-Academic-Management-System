@@ -3,13 +3,35 @@ import {
   Users, BookOpen, DollarSign, UserCog, 
   BarChart3, Calendar, Clock, ShieldCheck, Sparkles, Rocket,
   Star, Zap, ClipboardCheck, Grid, Layers, FileText, 
-  TrendingUp, UserPlus, PieChart, Sun, Gift, Award
+  TrendingUp, UserPlus, PieChart, Sun, Gift, Award, User
 } from 'lucide-react';
 import { esAdmin } from '../../utils/roles';
+
+// ✅ Definición de tarjetas con roles
+const DASHBOARD_CARDS = [
+  { to: "/alumnos", icon: <Users className="h-7 w-7" />, title: "Alumnos", description: "👥 Gestión", color: "from-[#26AAA3] to-[#67A934]", emoji: "🎓", roles: ["admin", "profesor"] },
+  { to: "/grupos", icon: <Grid className="h-7 w-7" />, title: "Grupos", description: "📚 Horarios", color: "from-[#67A934] to-[#26AAA3]", emoji: "📋", roles: ["admin", "profesor"] },
+  { to: "/cursos", icon: <BookOpen className="h-7 w-7" />, title: "Cursos", description: "📖 Catálogo", color: "from-[#26AAA3] to-[#67A934]", emoji: "📘", roles: ["admin", "profesor"] },
+  { to: "/maestros", icon: <UserCog className="h-7 w-7" />, title: "Maestros", description: "🧑‍🏫 Gestión", color: "from-[#D61A1F] to-[#F8B50E]", emoji: "👨‍🏫", roles: ["admin"] },
+  { to: "/pagos", icon: <DollarSign className="h-7 w-7" />, title: "Pagos", description: "💰 Estado", color: "from-[#F8B50E] to-[#D61A1F]", emoji: "💵", roles: ["admin"] },
+  { to: "/asistencia", icon: <ClipboardCheck className="h-7 w-7" />, title: "Asistencia", description: "✅ Tomar", color: "from-[#26AAA3] to-[#67A934]", emoji: "📝", roles: ["admin", "profesor"] },
+  { to: "/reschedule", icon: <Calendar className="h-7 w-7" />, title: "Reagend.", description: "🔄 Cambios", color: "from-[#67A934] to-[#26AAA3]", emoji: "🗓️", roles: ["admin"] },
+  { to: "/calendario", icon: <Clock className="h-7 w-7" />, title: "Calendario", description: "📅 Agenda", color: "from-[#F8B50E] to-[#D61A1F]", emoji: "⏰", roles: ["admin", "profesor"] },
+  { to: "/reportes/rentabilidad", icon: <TrendingUp className="h-7 w-7" />, title: "Rentabilidad", description: "📊 Análisis", color: "from-[#26AAA3] to-[#67A934]", emoji: "📈", roles: ["admin"] },
+  { to: "/reportes/cobranza", icon: <PieChart className="h-7 w-7" />, title: "Cobranza", description: "💳 Reporte", color: "from-[#F8B50E] to-[#26AAA3]", emoji: "🧾", roles: ["admin"] },
+  { to: "/admin/usuarios", icon: <ShieldCheck className="h-7 w-7" />, title: "Usuarios", description: "🔐 Cuentas", color: "from-[#67A934] to-[#F8B50E]", emoji: "👥", roles: ["admin"] },
+  { to: "/cursos-verano", icon: <Sun className="h-7 w-7" />, title: "Cursos Verano", description: "☀️ Gestión", color: "from-yellow-400 to-orange-500", emoji: "🏖️", roles: ["admin"] },
+  { to: "/reportes/asistencia-alumno", icon: <User className="h-7 w-7" />, title: "Asistencia Alumno", description: "📋 Reporte", color: "from-blue-400 to-cyan-500", emoji: "📊", roles: ["admin"] },
+  { to: "/pagos-profesores", icon: <DollarSign className="h-7 w-7" />, title: "Pagos Profesores", description: "💵 Nómina", color: "from-[#1E293B] to-[#334155]", emoji: "💼", roles: ["admin"] },
+];
 
 export function Dashboard() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = esAdmin(user.rol);
+  const rol = user.rol || '';
+
+  // ✅ Filtrar tarjetas según el rol
+  const cardsVisibles = DASHBOARD_CARDS.filter(card => card.roles.includes(rol));
 
   return (
     <div className="relative h-[80vh] w-full overflow-hidden">
@@ -34,8 +56,6 @@ export function Dashboard() {
           
           {/* HEADER */}
           <div className="flex items-center justify-between mb-4 bg-white/5 backdrop-blur-sm rounded-2xl p-3 md:p-4 border border-white/10 shadow-xl">
-            
-            {/* LOGO CIRCULAR CON VIDEO */}
             <div className="flex-shrink-0 transform hover:scale-105 transition-all duration-500 hover:rotate-6">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-2xl ring-2 ring-[#26AAA3]/30 hover:ring-[#F8B50E]/50 transition-all duration-500">
                 <video
@@ -49,10 +69,7 @@ export function Dashboard() {
                 </video>
               </div>
             </div>
-
             <div className="flex-1"></div>
-
-            {/* Badge de rol */}
             <div className="hidden lg:block flex-shrink-0">
               <div className="bg-gradient-to-r from-[#26AAA3]/20 to-[#67A934]/20 rounded-full px-3 py-1.5 border border-white/20 backdrop-blur-sm">
                 <p className="text-xs font-bold text-white/90 flex items-center gap-1.5">
@@ -63,7 +80,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Mensaje de bienvenida - NOMBRE EN AZUL CORPORATIVO */}
+          {/* Mensaje de bienvenida */}
           <div className="mb-4 flex flex-col md:flex-row items-center justify-between gap-2 bg-white/5 backdrop-blur-sm rounded-2xl p-3 px-4 border border-white/10">
             <div className="flex items-center gap-3">
               <div className="bg-gradient-to-br from-[#F8B50E] to-[#D61A1F] p-1.5 rounded-full shadow-lg shadow-[#F8B50E]/20">
@@ -85,136 +102,14 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Grid de tarjetas - TODAS CON DEGRADADOS SUAVES */}
+          {/* Grid de tarjetas - FILTRADO POR ROL */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
-            
-            {/* Alumnos - Azul degradado */}
-            <CardGoku
-              to="/alumnos"
-              icon={<Users className="h-7 w-7" />}
-              title="Alumnos"
-              description="👥 Gestión"
-              color="from-[#26AAA3] to-[#67A934]"
-              emoji="🎓"
-            />
-
-            {/* Grupos - Verde degradado */}
-            <CardGoku
-              to="/grupos"
-              icon={<Grid className="h-7 w-7" />}
-              title="Grupos"
-              description="📚 Horarios"
-              color="from-[#67A934] to-[#26AAA3]"
-              emoji="📋"
-            />
-
-            {/* Cursos - Azul a Verde */}
-            <CardGoku
-              to="/cursos"
-              icon={<BookOpen className="h-7 w-7" />}
-              title="Cursos"
-              description="📖 Catálogo"
-              color="from-[#26AAA3] to-[#67A934]"
-              emoji="📘"
-            />
-
-            {/* Maestros - Rojo a Amarillo (suave) */}
-            <CardGoku
-              to="/maestros"
-              icon={<UserCog className="h-7 w-7" />}
-              title="Maestros"
-              description="🧑‍🏫 Gestión"
-              color="from-[#D61A1F] to-[#F8B50E]"
-              emoji="👨‍🏫"
-            />
-
-            {/* Pagos - Amarillo degradado */}
-            <CardGoku
-              to="/pagos"
-              icon={<DollarSign className="h-7 w-7" />}
-              title="Pagos"
-              description="💰 Estado"
-              color="from-[#F8B50E] to-[#D61A1F]"
-              emoji="💵"
-            />
-
-            {/* Asistencia - Azul degradado */}
-            <CardGoku
-              to="/asistencia"
-              icon={<ClipboardCheck className="h-7 w-7" />}
-              title="Asistencia"
-              description="✅ Tomar"
-              color="from-[#26AAA3] to-[#67A934]"
-              emoji="📝"
-            />
-
-            {/* Reagendaciones - Verde a Azul */}
-            <CardGoku
-              to="/reschedule"
-              icon={<Calendar className="h-7 w-7" />}
-              title="Reagend."
-              description="🔄 Cambios"
-              color="from-[#67A934] to-[#26AAA3]"
-              emoji="🗓️"
-            />
-
-            {/* Calendario - Amarillo a Naranja */}
-            <CardGoku
-              to="/calendario"
-              icon={<Clock className="h-7 w-7" />}
-              title="Calendario"
-              description="📅 Agenda"
-              color="from-[#F8B50E] to-[#D61A1F]"
-              emoji="⏰"
-            />
-
-            {/* Rentabilidad - Azul a Verde */}
-            <CardGoku
-              to="/reportes/rentabilidad"
-              icon={<TrendingUp className="h-7 w-7" />}
-              title="Rentabilidad"
-              description="📊 Análisis"
-              color="from-[#26AAA3] to-[#67A934]"
-              emoji="📈"
-            />
-
-            {/* Cobranza - Amarillo a Azul (suave) */}
-            <CardGoku
-              to="/reportes/cobranza"
-              icon={<PieChart className="h-7 w-7" />}
-              title="Cobranza"
-              description="💳 Reporte"
-              color="from-[#F8B50E] to-[#26AAA3]"
-              emoji="🧾"
-            />
-
-            {/* Usuarios - Verde a Amarillo */}
-            <CardGoku
-              to="/admin/usuarios"
-              icon={<ShieldCheck className="h-7 w-7" />}
-              title="Usuarios"
-              description="🔐 Cuentas"
-              color="from-[#67A934] to-[#F8B50E]"
-              emoji="👥"
-            />
-
-            {/* Cursos Verano - Amarillo a Naranja */}
-            <CardGoku
-              to="/cursos-verano"
-              icon={<Sun className="h-7 w-7" />}
-              title="Cursos Verano"
-              description="☀️ Gestión"
-              color="from-yellow-400 to-orange-500"
-              emoji="🏖️"
-            />
-            <Link to="/gastos" className="...">
-            <DollarSign className="h-8 w-8 text-red-500 mb-3" />
-            <h3 className="text-lg font-semibold text-gray-800">Gastos</h3>
-            <p className="text-sm text-gray-500">Registrar gastos mensuales</p>
-            </Link>
+            {cardsVisibles.map((card) => (
+              <CardGoku key={card.to} {...card} />
+            ))}
           </div>
 
-          {/* Mensaje para profesores */}
+          {/* Mensaje para profesores (solo si no es admin) */}
           {!isAdmin && (
             <div className="mt-4 text-center bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/20">
               <Rocket className="h-10 w-10 mx-auto mb-2 text-[#F8B50E] animate-bounce-slow" />
@@ -234,7 +129,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Estilos para animaciones */}
       <style>{`
         @keyframes pulse-slow {
           0%, 100% { opacity: 1; transform: scale(1); }
@@ -255,7 +149,7 @@ export function Dashboard() {
   );
 }
 
-// Componente CardGoku - con degradados suaves
+// Componente CardGoku (sin cambios)
 function CardGoku({ to, icon, title, description, color, emoji }: any) {
   return (
     <Link
@@ -263,7 +157,6 @@ function CardGoku({ to, icon, title, description, color, emoji }: any) {
       className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${color} p-3 md:p-4 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 hover:scale-[1.02]`}
     >
       <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      
       <div className="relative flex items-start justify-between mb-1.5">
         <div className="transform group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500 text-white">
           {icon}
@@ -274,14 +167,12 @@ function CardGoku({ to, icon, title, description, color, emoji }: any) {
           </span>
         )}
       </div>
-      
       <div className="relative text-white">
         <h3 className="text-sm md:text-base font-bold" style={{ fontFamily: "'Poppins', sans-serif" }}>
           {title}
         </h3>
         <p className="text-[10px] text-white/90 mt-0.5">{description}</p>
       </div>
-      
       <div className="absolute bottom-0 left-0 w-full h-0.5 bg-white/30 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
       <div className="absolute -top-6 -right-6 w-12 h-12 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition-transform duration-700" />
     </Link>

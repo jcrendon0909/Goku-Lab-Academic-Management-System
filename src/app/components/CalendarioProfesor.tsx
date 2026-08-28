@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft, MapPin, Users, Tag, Repeat, Sparkles, ClipboardCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, BookOpen, ArrowLeft, Repeat, ClipboardCheck } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 import { Link } from 'react-router-dom';
 import { ClassDetailsDialog } from './ClassDetailsDialog';
@@ -45,6 +45,12 @@ export function CalendarioProfesor() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const idProfesor = user.idProfesor;
 
+  // Helper para obtener el día de la semana
+  const obtenerDiaSemana = (fecha: Date) => {
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    return dias[fecha.getDay()];
+  };
+
   const cargarClases = async () => {
     try {
       setCargando(true);
@@ -67,36 +73,53 @@ export function CalendarioProfesor() {
         const clasesBase = data.clasesBase || [];
         const reagendaciones = data.reagendaciones || [];
 
-        const clasesBaseMapeadas = clasesBase.map((grupo: any) => ({
-          id: grupo.idGrupo || `base-${Math.random()}`,
-          titulo: grupo.nombreCurso || 'Clase',
-          profesor: grupo.nombreProfesor || 'Sin profesor',
-          fecha: grupo.diaClase || '',
-          diaClase: grupo.diaClase || '',
-          horaInicio: grupo.horaClase || '',
-          horaFin: grupo.horaFin || '',
-          reagendada: false,
-          idProfesor: grupo.idProfesor || '',
-          idGrupo: grupo.idGrupo,
-          studentId: grupo.alumnos?.[0]?.idAlumno || '',
-          studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
-          teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
-          students: grupo.alumnos || [],
-          comentarioGrupo: grupo.comentarioGrupo || '',
-          date: new Date(grupo.diaClase ? obtenerFechaDesdeDia(grupo.diaClase) : Date.now()),
-          startTime: grupo.horaClase,
-          endTime: grupo.horaFin,
-          title: grupo.nombreCurso,
-          cursoActivo: grupo.cursoActivo,
-          idCurso: grupo.idCurso,
-          profesorActivo: grupo.profesorActivo,
-          capacidadMaxima: grupo.capacidadMaxima,
-          alumnosInscritos: grupo.alumnosInscritos,
-          estatus: grupo.estatus,
-          tipoReagendacionClase: null,
-          fechaHoraNueva: null,
-          modalidad: grupo.alumnos?.[0]?.modalidad || 'Presencial',
-        }));
+        const clasesBaseMapeadas = clasesBase.map((grupo: any) => {
+          const hoy = new Date();
+          const diaSemana = obtenerDiaSemana(hoy);
+          const diaClase = grupo.diaClase?.toLowerCase() || '';
+          let fecha = new Date(hoy);
+          if (diaClase) {
+            const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+            const idx = diasSemana.indexOf(diaClase);
+            if (idx !== -1) {
+              const diff = idx - hoy.getDay();
+              fecha.setDate(hoy.getDate() + diff);
+              if (diff < 0) {
+                fecha.setDate(fecha.getDate() + 7);
+              }
+            }
+          }
+          return {
+            id: grupo.idGrupo || `base-${Math.random()}`,
+            titulo: grupo.nombreCurso || 'Clase',
+            profesor: grupo.nombreProfesor || 'Sin profesor',
+            fecha: grupo.diaClase || '',
+            diaClase: grupo.diaClase || '',
+            horaInicio: grupo.horaClase || '',
+            horaFin: grupo.horaFin || '',
+            reagendada: false,
+            idProfesor: grupo.idProfesor || '',
+            idGrupo: grupo.idGrupo,
+            studentId: grupo.alumnos?.[0]?.idAlumno || '',
+            studentName: grupo.alumnos?.[0]?.nombreAlumno || '',
+            teacher: { id: grupo.idProfesor, name: grupo.nombreProfesor, available: grupo.profesorActivo },
+            students: grupo.alumnos || [],
+            comentarioGrupo: grupo.comentarioGrupo || '',
+            date: fecha,
+            startTime: grupo.horaClase,
+            endTime: grupo.horaFin,
+            title: grupo.nombreCurso,
+            cursoActivo: grupo.cursoActivo,
+            idCurso: grupo.idCurso,
+            profesorActivo: grupo.profesorActivo,
+            capacidadMaxima: grupo.capacidadMaxima,
+            alumnosInscritos: grupo.alumnosInscritos,
+            estatus: grupo.estatus,
+            tipoReagendacionClase: null,
+            fechaHoraNueva: null,
+            modalidad: grupo.alumnos?.[0]?.modalidad || 'Presencial',
+          };
+        });
 
         const reagendacionesMapeadas = reagendaciones.map((grupo: any) => {
           const primeraReagendacion = grupo.alumnos?.[0]?.reagendacion;
@@ -168,6 +191,17 @@ export function CalendarioProfesor() {
         );
       }
 
+      // ✅ FILTRAR SOLO CLASES DE HOY
+      const hoy = new Date();
+      const hoyStr = hoy.toLocaleDateString('en-CA');
+      eventos = eventos.filter(e => {
+        if (e.date) {
+          const fechaClase = e.date.toLocaleDateString('en-CA');
+          return fechaClase === hoyStr;
+        }
+        return false;
+      });
+
       setClases(eventos);
     } catch (error) {
       console.error('Error al cargar calendario:', error);
@@ -178,24 +212,18 @@ export function CalendarioProfesor() {
     }
   };
 
-  // Helper para obtener fecha desde el día de la semana (para clases recurrentes)
-  const obtenerFechaDesdeDia = (diaClase: string) => {
-    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-    const hoy = new Date();
-    const diaActual = hoy.getDay();
-    const diaBuscado = diasSemana.indexOf(diaClase.toLowerCase());
-    if (diaBuscado === -1) return hoy;
-    const diff = diaBuscado - diaActual;
-    const fecha = new Date(hoy);
-    fecha.setDate(fecha.getDate() + diff);
-    return fecha;
-  };
-
   useEffect(() => {
     cargarClases();
   }, [idProfesor, user.nombreCompleto]);
 
-  // Manejadores de eventos (existentes)
+  // ✅ Manejador para abrir asistencia con fecha correcta (sin desfase UTC)
+  const handleAbrirAsistencia = (clase: Clase) => {
+    const fecha = clase.date || new Date();
+    const fechaStr = fecha.toLocaleDateString('en-CA');
+    navigate(`/asistencia?fecha=${fechaStr}`);
+  };
+
+  // Manejadores de eventos (sin cambios)
   const handleReagendar = (student: any) => {
     navigate(`/reschedule?classId=${claseSeleccionada?.id}&studentId=${student.idAlumno}&studentName=${encodeURIComponent(student.nombreAlumno)}`);
   };
@@ -248,20 +276,16 @@ export function CalendarioProfesor() {
     try {
       const idAlumno = student.idAlumno;
       const idGrupoNuevo = classData.idGrupo || classData.id;
-      
       if (!idAlumno || !idGrupoNuevo) {
         throw new Error('Faltan datos para eliminar la reagendación');
       }
-
       const res = await apiFetch(`/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
         method: 'DELETE',
       });
-      
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Error al eliminar reagendación');
       }
-      
       toast.success(`Reagendación de ${student.nombreAlumno} eliminada`);
       await cargarClases();
     } catch (error: any) {
@@ -283,13 +307,6 @@ export function CalendarioProfesor() {
     } catch (error: any) {
       toast.error(error.message || 'Error al actualizar inscripción');
     }
-  };
-
-  // ✅ NUEVA FUNCIÓN: Abrir asistencia con la fecha de la clase
-  const handleAbrirAsistencia = (clase: Clase) => {
-    const fecha = clase.date || new Date();
-    const fechaStr = fecha.toISOString().split('T')[0];
-    navigate(`/asistencia?fecha=${fechaStr}`);
   };
 
   const decorativeVideos: { src: string; position: any }[] = [];
@@ -339,7 +356,7 @@ export function CalendarioProfesor() {
                 <CalendarIcon className="h-6 w-6 text-gray-900" />
               </span>
               <span className="bg-gradient-to-r from-[#F8B50E] via-[#FFD700] to-white text-transparent bg-clip-text">
-                Mi Calendario
+                Mis Clases de Hoy
               </span>
             </h1>
           </div>
@@ -348,6 +365,9 @@ export function CalendarioProfesor() {
               <span className="text-white text-sm font-medium flex items-center gap-2">
                 <User className="h-4 w-4" />
                 {user.nombreCompleto || 'Profesor'}
+                <span className="text-white/60 text-xs ml-2">
+                  {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
               </span>
             </div>
           )}
@@ -358,8 +378,8 @@ export function CalendarioProfesor() {
           <div className="flex-1 flex items-center justify-center">
             <div className="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center max-w-md border border-white/20">
               <div className="text-6xl mb-4">🎯</div>
-              <p className="text-white text-lg font-medium">No tienes clases programadas</p>
-              <p className="text-white/70 text-sm mt-2">Las clases que se te asignen aparecerán aquí</p>
+              <p className="text-white text-lg font-medium">No tienes clases programadas para hoy</p>
+              <p className="text-white/70 text-sm mt-2">Revisa tu calendario o agenda.</p>
             </div>
           </div>
         ) : (
@@ -430,7 +450,6 @@ export function CalendarioProfesor() {
                         </div>
                       )}
 
-                      {/* ✅ BOTÓN DE ASISTENCIA */}
                       <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
                         <button
                           onClick={(e) => {
@@ -465,12 +484,11 @@ export function CalendarioProfesor() {
         )}
 
         <div className="mt-2 flex justify-between items-center text-xs text-white/50 flex-shrink-0">
-          <span>📋 {clases.length} clases programadas</span>
+          <span>📋 {clases.length} clases para hoy</span>
           <span>🔄 {clases.filter(c => c.reagendada).length} reagendadas</span>
         </div>
       </div>
 
-      {/* Diálogo de detalles de clase (con botón de asistencia) */}
       {claseSeleccionada && (
         <ClassDetailsDialog
           classData={claseSeleccionada}
@@ -485,11 +503,6 @@ export function CalendarioProfesor() {
           onBajaAlumno={handleBajaAlumno}
           onEliminarReagendacionAlumno={handleEliminarReagendacionAlumno}
           onActualizarInscripcion={handleActualizarInscripcion}
-          // ✅ PASAMOS LA FUNCIÓN DE ASISTENCIA AL DIÁLOGO
-          onAsistencia={() => {
-            handleAbrirAsistencia(claseSeleccionada);
-            setDialogAbierto(false);
-          }}
         />
       )}
     </BackgroundVideo>

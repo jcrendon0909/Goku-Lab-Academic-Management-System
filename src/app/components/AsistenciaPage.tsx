@@ -17,14 +17,15 @@ import {
   UserX,
   AlertCircle,
   Loader2,
+  FileText,
 } from 'lucide-react';
 
 interface Alumno {
   idAlumno: string;
   nombreAlumno: string;
   modalidad: string;
-  estadoAsistencia?: string; // ✅ agregado
-  comentarioAsistencia?: string; // ✅ agregado
+  estadoAsistencia?: string;
+  comentarioAsistencia?: string;
 }
 
 interface GrupoAsistencia {
@@ -46,10 +47,10 @@ interface AsistenciaState {
 }
 
 const ESTADOS = [
-  { value: 'presente', label: 'Presente', icon: <Check className="w-4 h-4" />, color: 'bg-emerald-500' },
-  { value: 'ausente', label: 'Ausente', icon: <X className="w-4 h-4" />, color: 'bg-rose-500' },
-  { value: 'justificado', label: 'Justificado', icon: <AlertCircle className="w-4 h-4" />, color: 'bg-amber-500' },
-  { value: 'retardo', label: 'Retardo', icon: <Clock className="w-4 h-4" />, color: 'bg-blue-500' },
+  { value: 'presente', label: 'Presente', icon: <Check className="w-4 h-4" />, color: 'bg-emerald-500', bgLight: 'bg-emerald-500/20', textColor: 'text-emerald-400' },
+  { value: 'ausente', label: 'Ausente', icon: <X className="w-4 h-4" />, color: 'bg-rose-500', bgLight: 'bg-rose-500/20', textColor: 'text-rose-400' },
+  { value: 'justificado', label: 'Justificado', icon: <AlertCircle className="w-4 h-4" />, color: 'bg-amber-500', bgLight: 'bg-amber-500/20', textColor: 'text-amber-400' },
+  { value: 'retardo', label: 'Retardo', icon: <Clock className="w-4 h-4" />, color: 'bg-blue-500', bgLight: 'bg-blue-500/20', textColor: 'text-blue-400' },
 ];
 
 export function AsistenciaPage() {
@@ -87,13 +88,12 @@ export function AsistenciaPage() {
       const data = await res.json();
       setGrupos(data);
 
-      // ✅ Inicializar con estados del backend
       const initialAsistencias: Record<string, AsistenciaState> = {};
       data.forEach((grupo: GrupoAsistencia) => {
         grupo.alumnos.forEach((alumno) => {
           const key = `${alumno.idAlumno}-${grupo.idGrupo}`;
           initialAsistencias[key] = {
-            estado: (alumno.estadoAsistencia as 'presente' | 'ausente' | 'justificado' | 'retardo') || 'ausente',
+            estado: (alumno.estadoAsistencia as any) || 'ausente',
             comentario: alumno.comentarioAsistencia || '',
           };
         });
@@ -149,35 +149,36 @@ export function AsistenciaPage() {
   };
 
   const handleGuardar = async () => {
-  if (!idProfesor) return;
-  try {
-    setGuardando(true);
-    const payload = Object.entries(asistencias).map(([key, value]) => {
-      const [idAlumno, idGrupo] = key.split('-');
-      return {
-        idAlumno,
-        idGrupo,
-        idProfesor,
-        fecha: fecha, // ✅ enviar string, no Date
-        estado: value.estado,
-        comentario: value.comentario || '',
-      };
-    });
-    const res = await apiFetch('/asistencia/guardar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ asistencias: payload }),
-    });
-    if (!res.ok) throw new Error('Error al guardar');
-    const data = await res.json();
-    toast.success(`Asistencias guardadas (${data.modificadas} modificadas, ${data.insertadas} nuevas)`);
-    cargarDatos();
-  } catch (error: any) {
-    toast.error(error.message);
-  } finally {
-    setGuardando(false);
-  }
-};
+    if (!idProfesor) return;
+    try {
+      setGuardando(true);
+      const payload = Object.entries(asistencias).map(([key, value]) => {
+        const [idAlumno, idGrupo] = key.split('-');
+        return {
+          idAlumno,
+          idGrupo,
+          idProfesor,
+          fecha: fecha, // string
+          estado: value.estado,
+          comentario: value.comentario || '',
+        };
+      });
+      const res = await apiFetch('/asistencia/guardar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asistencias: payload }),
+      });
+      if (!res.ok) throw new Error('Error al guardar');
+      const data = await res.json();
+      toast.success(`Asistencias guardadas (${data.modificadas} modificadas, ${data.insertadas} nuevas)`);
+      cargarDatos();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   const cambiarFecha = (dias: number) => {
     const nuevaFecha = new Date(fecha);
     nuevaFecha.setDate(nuevaFecha.getDate() + dias);
@@ -207,14 +208,19 @@ export function AsistenciaPage() {
       <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
         {/* Cabecera */}
         <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-3 flex-shrink-0">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white drop-shadow-lg flex items-center gap-3">
-            <span className="bg-gradient-to-r from-[#26AAA3] to-[#67A934] p-2 rounded-full shadow-lg inline-flex items-center justify-center">
-              <Users className="h-6 w-6 text-white" />
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white drop-shadow-lg flex items-center gap-3">
+              <span className="bg-gradient-to-r from-[#26AAA3] to-[#67A934] p-2 rounded-full shadow-lg inline-flex items-center justify-center">
+                <Users className="h-6 w-6 text-white" />
+              </span>
+              <span className="bg-gradient-to-r from-[#26AAA3] via-[#67A934] to-[#F8B50E] text-transparent bg-clip-text">
+                Pasar Lista
+              </span>
+            </h1>
+            <span className="text-white/50 text-sm hidden md:inline">
+              {new Date(fecha).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </span>
-            <span className="bg-gradient-to-r from-[#26AAA3] via-[#67A934] to-[#F8B50E] text-transparent bg-clip-text">
-              Asistencia
-            </span>
-          </h1>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center bg-white/20 backdrop-blur-sm rounded-full border border-white/20 p-1">
               <button
@@ -334,11 +340,18 @@ export function AsistenciaPage() {
                         const key = `${alumno.idAlumno}-${grupoKey}`;
                         const estadoActual = asistencias[key]?.estado || 'ausente';
                         const comentario = asistencias[key]?.comentario || '';
+                        const estadoInfo = ESTADOS.find(e => e.value === estadoActual) || ESTADOS[1];
 
                         return (
                           <div
                             key={alumno.idAlumno}
-                            className="bg-white/5 rounded-xl p-3 border border-white/10 hover:border-white/30 transition-all group"
+                            className={`bg-white/5 rounded-xl p-3 border transition-all group ${
+                              estadoActual === 'presente' ? 'border-emerald-500/30 bg-emerald-500/10' :
+                              estadoActual === 'ausente' ? 'border-rose-500/30 bg-rose-500/10' :
+                              estadoActual === 'justificado' ? 'border-amber-500/30 bg-amber-500/10' :
+                              estadoActual === 'retardo' ? 'border-blue-500/30 bg-blue-500/10' :
+                              'border-white/10'
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
@@ -372,18 +385,23 @@ export function AsistenciaPage() {
                               </div>
                             </div>
                             {/* Comentario opcional */}
-                            <input
-                              type="text"
-                              placeholder="Observación..."
-                              value={comentario}
-                              onChange={(e) => {
-                                setAsistencias((prev) => ({
-                                  ...prev,
-                                  [key]: { ...prev[key], comentario: e.target.value },
-                                }));
-                              }}
-                              className="mt-2 w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 placeholder-white/30 focus:outline-none focus:border-[#26AAA3] transition"
-                            />
+                            <div className="mt-2 relative">
+                              <input
+                                type="text"
+                                placeholder="Observación..."
+                                value={comentario}
+                                onChange={(e) => {
+                                  setAsistencias((prev) => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], comentario: e.target.value },
+                                  }));
+                                }}
+                                className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 placeholder-white/30 focus:outline-none focus:border-[#26AAA3] transition"
+                              />
+                              {estadoActual === 'presente' && (
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-400">✅</span>
+                              )}
+                            </div>
                           </div>
                         );
                       })}

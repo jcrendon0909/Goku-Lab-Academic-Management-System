@@ -11,21 +11,23 @@ const inscripcionSchema = new mongoose.Schema(
     fechaInicioPago: { type: Date, required: true },
     comentarios: { type: String, default: "" },
     fechaInscripcion: { type: Date, default: Date.now },
-    estatus: { 
-      type: String, 
-      enum: ["Activa", "Inactiva", "Baja"], 
-      default: "Activa" 
+    estatus: {
+      type: String,
+      enum: ["Activa", "Inactiva", "Baja", "Finalizada"],
+      default: "Activa",
     },
+    fechaFin: { type: Date, default: null },
     fechaBaja: { type: Date },
     motivoBaja: { type: String },
-    // ✅ NUEVO: Historial de modificaciones
     historialModificaciones: {
-      type: [{
-        fecha: { type: Date, default: Date.now },
-        usuario: { type: String, default: "admin" },
-        cambios: { type: mongoose.Schema.Types.Mixed, default: {} }
-      }],
-      default: []
+      type: [
+        {
+          fecha: { type: Date, default: Date.now },
+          usuario: { type: String, default: "admin" },
+          cambios: { type: mongoose.Schema.Types.Mixed, default: {} },
+        },
+      ],
+      default: [],
     },
   },
   {
@@ -35,7 +37,6 @@ const inscripcionSchema = new mongoose.Schema(
   }
 );
 
-// Índice compuesto para evitar duplicados
 inscripcionSchema.index({ idAlumno: 1, grupoId: 1 }, { unique: true });
 
 export default mongoose.model("Inscripcion", inscripcionSchema);

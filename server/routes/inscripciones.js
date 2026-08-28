@@ -3,6 +3,7 @@ import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -188,13 +189,11 @@ router.post("/", async (req, res) => {
 
     if (fechaIns < hoy) {
       try {
-        // Importación dinámica para evitar errores de carga al inicio
         const { generarPagosHistoricos } = await import('../utils/pagosHelper.js');
-        const pagosGenerados = await generarPagosHistoricos(nuevaInscripcion, false); // false = quedan Pendientes
+        const pagosGenerados = await generarPagosHistoricos(nuevaInscripcion, false);
         console.log(`✅ ${pagosGenerados.length} pagos históricos generados para inscripción ${nuevaInscripcion._id}`);
       } catch (error) {
         console.error('❌ Error generando pagos históricos:', error);
-        // No interrumpimos la creación
       }
     } else {
       console.log(`ℹ️ Inscripción con fecha actual o futura, no se generan históricos.`);
@@ -278,34 +277,35 @@ router.get("/grupo/:grupoId", async (req, res) => {
 });
 
 // ============================================================
-// TERMINAR CURSO
+// FINALIZAR CURSO (NUEVO)
 // ============================================================
-router.patch("/:inscripcionId/terminar", async (req, res) => {
+router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
   try {
-    const { inscripcionId } = req.params;
-    const { motivo } = req.body;
+    const { idAlumno, grupoId } = req.params;
+    const { fechaFin } = req.body;
 
-    const inscripcion = await Inscripcion.findById(inscripcionId);
+    const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId });
     if (!inscripcion) {
       return res.status(404).json({ error: "Inscripción no encontrada" });
     }
-
-    if (inscripcion.estatus !== "Activa") {
-      return res.status(400).json({ error: "La inscripción ya no está activa" });
+    if (inscripcion.estatus === "Finalizada") {
+      return res.status(400).json({ error: "El curso ya está finalizado" });
     }
 
-    inscripcion.estatus = "Baja";
-    inscripcion.fechaBaja = new Date();
-    inscripcion.motivoBaja = motivo || "Curso completado";
+    inscripcion.estatus = "Finalizada";
+    inscripcion.fechaFin = fechaFin ? new Date(fechaFin) : new Date();
     await inscripcion.save();
 
-    res.json({
-      ok: true,
-      mensaje: "Curso terminado correctamente",
-      inscripcion
-    });
+    // Desactivar pagos futuros
+    const Pago = mongoose.model("Pago");
+    await Pago.updateMany(
+      { idAlumno, grupoId, activo: true },
+      { $set: { activo: false, estatus: "Inactivo", fechaBaja: new Date() } }
+    );
+
+    res.json({ ok: true, mensaje: "Curso finalizado", data: inscripcion });
   } catch (error) {
-    console.error("ERROR TERMINAR CURSO:", error);
+    console.error("❌ Error PATCH /inscripciones/finalizar:", error);
     res.status(500).json({ error: error.message });
   }
 });

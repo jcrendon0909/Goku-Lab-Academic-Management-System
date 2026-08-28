@@ -3,6 +3,7 @@ import Pago from "../models/Pago.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import { crearPagoId } from "../utils/pagos.js";
+import cache from "../utils/cache.js"; // 👈 Importar cache
 
 const router = express.Router();
 
@@ -79,14 +80,44 @@ async function sincronizarPagosDesdeInscripciones() {
 }
 
 // ============================================================
-// GET /lista-completa – CON PAGOS REALES Y DESCUENTOS
+// GET /lista-completa – OPTIMIZADO CON CACHÉ Y PAGINACIÓN
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
+        const {
+            mes,
+            anio,
+            vista = 'control',
+            busqueda = '',
+            page = 1,
+            limit = 50,
+            criterioFechaPagados = 'real'
+        } = req.query;
+
+        // 1. Generar clave de caché según los parámetros
+        const cacheKey = `pagos-${mes || 'all'}-${anio || 'all'}-${vista}-${busqueda || 'all'}-${page}-${limit}-${criterioFechaPagados}`;
+
+        // 2. Verificar si ya está en caché
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            console.log(`✅ Sirviendo desde caché: ${cacheKey}`);
+            return res.json(cachedData);
+        }
+
+        console.log(`⏳ Procesando consulta: ${cacheKey}`);
+
+        // 3. Sincronizar pagos principales (crea pagos faltantes)
         await sincronizarPagosDesdeInscripciones();
 
-        const pagos = await Pago.aggregate([
-            { $match: { activo: true } },
+        // 4. Filtro base
+        const matchBase = { activo: true };
+        if (busqueda) {
+            matchBase.nombreAlumno = { $regex: busqueda, $options: 'i' };
+        }
+
+        // 5. Obtener todos los pagos con sus abonos
+        const pipeline = [
+            { $match: matchBase },
             {
                 $lookup: {
                     from: "abonos",
@@ -98,10 +129,12 @@ router.get("/lista-completa", async (req, res) => {
                     as: "historialAbonos"
                 }
             }
-        ]);
+        ];
 
+        const pagos = await Pago.aggregate(pipeline);
+
+        // 6. Agrupar por alumno + grupo
         const alumnosMap = new Map();
-
         for (const pago of pagos) {
             const key = `${pago.idAlumno}-${pago.grupoId}`;
             if (!alumnosMap.has(key)) {
@@ -120,15 +153,20 @@ router.get("/lista-completa", async (req, res) => {
             }
             const alum = alumnosMap.get(key);
             alum.pagos.push(pago);
-            const montoConDescuento = pago.montoPago * (1 - (pago.descuentoAplicado || 0) / 100);
-            alum.montoTotal += montoConDescuento;
+            alum.montoTotal += pago.montoPago || 0;
             const abonos = pago.historialAbonos || [];
             const pagado = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
             alum.montoPagado += pagado;
             alum.historialAbonos = alum.historialAbonos.concat(abonos);
         }
 
-        const resultadoFinal = [];
+        // 7. Construir periodos y aplicar filtros de vista
+        const hoy = new Date();
+        const mesActual = mes ? parseInt(mes) : hoy.getMonth() + 1;
+        const anioActual = anio ? parseInt(anio) : hoy.getFullYear();
+        const totalMesesHoy = anioActual * 12 + mesActual;
+
+        const resultadoCompleto = [];
 
         for (const [key, alum] of alumnosMap) {
             const pagosOrdenados = alum.pagos.sort((a, b) => new Date(a.fechaInicioPago) - new Date(b.fechaInicioPago));
@@ -137,39 +175,55 @@ router.get("/lista-completa", async (req, res) => {
                 const fechaVencimiento = new Date(pago.fechaInicioPago);
                 const abonosDelPago = pago.historialAbonos || [];
                 const totalAbonado = abonosDelPago.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
-                const descuento = pago.descuentoAplicado || 0;
-                const montoBase = pago.montoPago || 0;
-                const montoPeriodo = montoBase * (1 - descuento / 100);
-                const saldo = Math.max(0, montoPeriodo - totalAbonado);
-                const status = totalAbonado >= montoPeriodo ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
+                const saldo = Math.max(0, pago.montoPago - totalAbonado);
+                const status = totalAbonado >= pago.montoPago ? "Pagado" : (totalAbonado > 0 ? "Parcial" : "Pendiente");
 
                 return {
                     clave: `${fechaVencimiento.getFullYear()}-${String(fechaVencimiento.getMonth() + 1).padStart(2, '0')}`,
                     nombreMes: fechaVencimiento.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
                     vencimiento: fechaVencimiento.toISOString(),
-                    monto: montoPeriodo,
+                    monto: pago.montoPago || 0,
                     pagado: totalAbonado,
                     saldo: saldo,
                     status: status,
                     pagoId: pago.pagoId,
                     metodoAbono: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].metodoAbono : null,
                     fechaPagoReal: abonosDelPago.length > 0 ? abonosDelPago[abonosDelPago.length - 1].fechaAbono : null,
-                    descuentoAplicado: descuento,
                 };
             });
+
+            // Aplicar filtros de vista según fecha
+            const tienePendientesPasados = periodosMensuales.some((m) => {
+                const v = new Date(m.vencimiento);
+                return (v.getFullYear() * 12 + v.getMonth()) <= totalMesesHoy && m.status !== "Pagado";
+            });
+            const tieneProximosFuturos = periodosMensuales.some((m) => {
+                const v = new Date(m.vencimiento);
+                return (v.getFullYear() * 12 + v.getMonth()) > totalMesesHoy && m.status !== "Pagado";
+            });
+
+            let incluir = false;
+            if (vista === 'control') {
+                incluir = alum.activo !== false && tienePendientesPasados;
+            } else if (vista === 'registro') {
+                incluir = periodosMensuales.some(m => m.status === "Pagado") || (!alum.activo && alum.montoPagado > 0);
+            } else if (vista === 'proximos') {
+                incluir = alum.activo !== false && tieneProximosFuturos;
+            }
+
+            if (!incluir) continue;
 
             const totalMonto = periodosMensuales.reduce((sum, m) => sum + m.monto, 0);
             const totalPagado = periodosMensuales.reduce((sum, m) => sum + m.pagado, 0);
             const saldoTotal = Math.max(0, totalMonto - totalPagado);
             const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
 
-            const hoy = new Date();
-            const mesActual = periodosMensuales.find(m => {
+            const mesActualObj = periodosMensuales.find(m => {
                 const v = new Date(m.vencimiento);
-                return v.getMonth() === hoy.getMonth() && v.getFullYear() === hoy.getFullYear();
+                return v.getMonth() === (mesActual - 1) && v.getFullYear() === anioActual;
             }) || periodosMensuales.find(m => m.status !== "Pagado") || periodosMensuales[0];
 
-            resultadoFinal.push({
+            resultadoCompleto.push({
                 id: key,
                 idAlumno: alum.idAlumno,
                 grupoId: alum.grupoId,
@@ -181,18 +235,66 @@ router.get("/lista-completa", async (req, res) => {
                 status: statusGeneral,
                 activo: alum.activo,
                 fechaBaja: alum.fechaBaja,
-                fechaLimite: mesActual?.vencimiento || null,
+                fechaLimite: mesActualObj?.vencimiento || null,
                 periodosMensuales: periodosMensuales,
                 cobroProgramado: false,
                 metodoAbono: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].metodoAbono : null,
                 fechaPagoReal: alum.historialAbonos.length > 0 ? alum.historialAbonos[alum.historialAbonos.length - 1].fechaAbono : null,
-                saldoAFavor: 0,
             });
         }
 
-        res.json(resultadoFinal);
+        // 8. Paginación
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+        const total = resultadoCompleto.length;
+        const paginatedData = resultadoCompleto.slice(skip, skip + limitNum);
+
+        // 9. Calcular totales (para el frontend)
+        const totalPorRecolectar = paginatedData
+            .filter(p => p.activo !== false)
+            .reduce((sum, p) => {
+                const mesEnCurso = (p.periodosMensuales || []).find((m) => {
+                    if (!m.vencimiento) return false;
+                    const v = new Date(m.vencimiento);
+                    return v.getMonth() === (mesActual - 1) && v.getFullYear() === anioActual;
+                });
+                return sum + (mesEnCurso ? (mesEnCurso.saldo || 0) : 0);
+            }, 0);
+
+        const totalRecolectado = paginatedData
+            .filter(p => p.activo !== false)
+            .reduce((sum, p) => {
+                const mesEnCurso = (p.periodosMensuales || []).find((m) => {
+                    if (!m.vencimiento) return false;
+                    const v = new Date(m.vencimiento);
+                    return v.getMonth() === (mesActual - 1) && v.getFullYear() === anioActual;
+                });
+                return sum + (mesEnCurso ? (mesEnCurso.pagado || 0) : 0);
+            }, 0);
+
+        const responseData = {
+            data: paginatedData,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                pages: Math.ceil(total / limitNum)
+            },
+            totales: {
+                totalPorRecolectar,
+                totalRecolectado
+            }
+        };
+
+        // 10. Guardar en caché por 5 minutos
+        cache.set(cacheKey, responseData);
+        console.log(`✅ Datos guardados en caché: ${cacheKey}`);
+
+        res.json(responseData);
+
     } catch (error) {
-        console.error("Error en /lista-completa:", error);
+        console.error("Error en /lista-completa optimizado:", error);
         res.status(500).json({ error: "Error al obtener pagos" });
     }
 });
@@ -217,6 +319,10 @@ router.patch("/actualizar-dia/:id", async (req, res) => {
         pago.diaPago = nuevoDia;
         pago.updatedAt = new Date();
         await pago.save();
+
+        // Limpiar caché al actualizar un pago
+        cache.flushAll();
+        console.log("🧹 Caché limpiada por actualización de día de pago.");
 
         res.json({ ok: true, mensaje: "Día de pago actualizado", data: pago });
     } catch (error) {

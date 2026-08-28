@@ -28,7 +28,7 @@ export function PagosPage() {
 
                 data.forEach((pago: any) => {
                     const key = `${pago.idAlumno}-${pago.grupoId}`;
-                    
+
                     if (!alumnosMap[key]) {
                         alumnosMap[key] = {
                             id: pago.id || pago.pagoId,
@@ -55,14 +55,7 @@ export function PagosPage() {
                         alum.cursosLista.push(pago.nombreCurso);
                     }
 
-                    alum.montoTotal += (Number(pago.montoTotal) || 0);
-                    alum.montoPagado += (Number(pago.montoPagado) || 0);
-                    if (pago.activo !== false) alum.activo = true;
-
-                    if (pago.saldoAFavor) {
-                        alum.saldoAFavor = (alum.saldoAFavor || 0) + Number(pago.saldoAFavor);
-                    }
-
+                    // ✅ Sumar totales directamente desde los periodos, sin redistribuir
                     const periodos = pago.periodosMensuales || [];
                     periodos.forEach((mes: any) => {
                         const mesKey = mes.clave;
@@ -80,6 +73,7 @@ export function PagosPage() {
                                 fechaPagoReal: mes.fechaPagoReal || null
                             };
                         }
+                        // Usar los valores del backend (ya calculados)
                         alum.periodosMap[mesKey].monto = (Number(mes.monto) || 0);
                         alum.periodosMap[mesKey].pagado = (Number(mes.pagado) || 0);
                         alum.periodosMap[mesKey].saldo = (Number(mes.saldo) || 0);
@@ -88,6 +82,14 @@ export function PagosPage() {
                         alum.periodosMap[mesKey].grupoId = mes.grupoId || pago.grupoId;
                         alum.periodosMap[mesKey].fechaPagoReal = mes.fechaPagoReal || null;
                     });
+
+                    alum.montoTotal += (Number(pago.montoTotal) || 0);
+                    alum.montoPagado += (Number(pago.montoPagado) || 0);
+                    if (pago.activo !== false) alum.activo = true;
+
+                    if (pago.saldoAFavor) {
+                        alum.saldoAFavor = (alum.saldoAFavor || 0) + Number(pago.saldoAFavor);
+                    }
                 });
 
                 const pagosAgrupados = Object.values(alumnosMap).map((alum: any) => {
@@ -95,31 +97,17 @@ export function PagosPage() {
                         return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
                     });
 
-                    let bolsaDinero = alum.montoPagado;
+                    // ✅ Ya no redistribuimos, usamos los valores existentes
+                    // El saldo total es la suma de saldos de cada periodo
+                    const totalMonto = periodosMensuales.reduce((sum, m) => sum + m.monto, 0);
+                    const totalPagado = periodosMensuales.reduce((sum, m) => sum + m.pagado, 0);
+                    const saldoTotal = Math.max(0, totalMonto - totalPagado);
+                    const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
 
-                    periodosMensuales.forEach((m: any) => {
-                        m.pagado = 0;
-                        m.saldo = m.monto;
-                        m.status = "Pendiente";
-
-                        if (bolsaDinero > 0) {
-                            if (bolsaDinero >= m.monto) {
-                                m.pagado = m.monto;
-                                m.saldo = 0;
-                                m.status = "Pagado";
-                                bolsaDinero -= m.monto;
-                            } else {
-                                m.pagado = bolsaDinero;
-                                m.saldo = m.monto - bolsaDinero;
-                                m.status = "Parcial";
-                                bolsaDinero = 0;
-                            }
-                        }
-                    });
-
-                    const tienePendientes = periodosMensuales.some((m: any) => m.status !== "Pagado");
-                    alum.status = !tienePendientes ? "Pagado" : (alum.montoPagado > 0 ? "Parcial" : "Pendiente");
-                    alum.saldo = alum.montoTotal - alum.montoPagado;
+                    alum.status = statusGeneral;
+                    alum.saldo = saldoTotal;
+                    alum.montoTotal = totalMonto;
+                    alum.montoPagado = totalPagado;
                     alum.periodosMensuales = periodosMensuales;
                     alum.nombreCurso = alum.cursosLista.join(", ");
 
@@ -369,7 +357,7 @@ export function PagosPage() {
                                 }}
                                 onChangePaymentDate={() => {}}
                                 onPrintReceipt={() => {}}
-                                onEditarAbono={handleEditarAbono} // 👈 Nueva prop
+                                onEditarAbono={handleEditarAbono}
                             />
                         ))
                     ) : (

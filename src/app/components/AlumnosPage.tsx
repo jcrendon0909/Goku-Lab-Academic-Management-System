@@ -131,7 +131,6 @@ export function AlumnosPage() {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: recargar inscripciones de un alumno específico
   const recargarInscripcionesAlumno = async (idAlumno: string) => {
     try {
       const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
@@ -294,6 +293,26 @@ export function AlumnosPage() {
       tutor: alumno.tutor,
     });
     setShowInscripcionForm(true);
+  };
+
+  // ✅ Finalizar curso de un alumno
+  const finalizarCurso = async (idAlumno: string, grupoId: string) => {
+    if (!confirm('¿Finalizar este curso? El alumno ya no podrá asistir a clases de este grupo.')) return;
+    try {
+      const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/finalizar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaFin: new Date().toISOString() }),
+      });
+      if (!res.ok) throw new Error('Error al finalizar');
+      toast.success('✅ Curso finalizado correctamente');
+      cargarAlumnos();
+      if (alumnoExpandido === idAlumno) {
+        recargarInscripcionesAlumno(idAlumno);
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   // ----------------------------- ORDENAMIENTO -----------------------------
@@ -605,16 +624,28 @@ export function AlumnosPage() {
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                                                   ins.estatus === 'Activa' 
                                                     ? 'bg-emerald-100/80 text-emerald-700' 
+                                                    : ins.estatus === 'Finalizada'
+                                                    ? 'bg-gray-500/30 text-gray-300 border border-gray-500/30'
                                                     : 'bg-gray-100/80 text-gray-600'
                                                 }`}>
-                                                  {ins.estatus === 'Activa' ? '✅ Activa' : '⏸️ Inactiva'}
+                                                  {ins.estatus === 'Activa' ? '✅ Activa' : ins.estatus === 'Finalizada' ? '✅ Finalizado' : '⏸️ Inactiva'}
                                                 </span>
-                                                <button
-                                                  onClick={() => abrirModalMover(ins, alumno)}
-                                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline transition-all"
-                                                >
-                                                  🔄 Mover
-                                                </button>
+                                                {ins.estatus === 'Activa' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => abrirModalMover(ins, alumno)}
+                                                      className="text-blue-600 hover:text-blue-800 text-[10px] font-medium hover:underline transition-all"
+                                                    >
+                                                      🔄 Mover
+                                                    </button>
+                                                    <button
+                                                      onClick={() => finalizarCurso(alumno.idAlumno, ins.grupoId)}
+                                                      className="text-amber-600 hover:text-amber-800 text-[10px] font-medium hover:underline transition-all"
+                                                    >
+                                                      🏁 Finalizar
+                                                    </button>
+                                                  </>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -695,15 +726,10 @@ export function AlumnosPage() {
         <InscripcionForm
           onClose={() => setShowInscripcionForm(false)}
           onSuccess={() => {
-            // ✅ Recargar la lista de alumnos (para actualizar el contador de cursos activos)
             cargarAlumnos();
-            
-            // ✅ Recargar las inscripciones del alumno que acaba de ser inscrito
             if (alumnoParaInscripcion?.idAlumno) {
               recargarInscripcionesAlumno(alumnoParaInscripcion.idAlumno);
             }
-            
-            // ✅ Limpiar el estado del alumno seleccionado
             setAlumnoParaInscripcion(null);
           }}
           alumnoInicial={alumnoParaInscripcion || undefined}

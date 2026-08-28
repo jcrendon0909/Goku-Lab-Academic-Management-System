@@ -7,7 +7,7 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   label: string;
-  roles: string[]; // ✅ Cambio: en lugar de adminOnly, usamos roles
+  roles: string[];
   category?: 'academic' | 'finance' | 'admin' | 'general';
 }
 
