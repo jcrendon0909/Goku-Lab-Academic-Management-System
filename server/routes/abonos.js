@@ -4,6 +4,7 @@ import Pago from "../models/Pago.js";
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
 import { crearPagoId } from "../utils/pagos.js";
+import cache from "../utils/cache.js"; // ← Importar caché
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ router.post("/", async (req, res) => {
             montoAbono,
             nombreAlumno,
             metodoAbono,
-            fechaAbono,
+            fechaAbono: fechaAbonoRaw,
             idAlumno,
             grupoId,
             esDescuento = false,
@@ -26,40 +27,35 @@ router.post("/", async (req, res) => {
             nuevoMontoMensual
         } = req.body;
 
-        console.log("📥 [ABONO] Recibido:", { pagoId, montoAbono, idAlumno, grupoId, mesesCubiertos, esDescuento, descuentoPorcentaje });
-
         // Validar campos
         if (!pagoId || !montoAbono || !idAlumno || !grupoId) {
             return res.status(400).json({ error: "Faltan datos obligatorios" });
         }
 
-        // Buscar el pago base (el que se está abonando)
+        // Normalizar fechaAbono a hora fija (12:00) para evitar offset de zona horaria
+        let fechaAbono = new Date();
+        if (fechaAbonoRaw) {
+            const [year, month, day] = fechaAbonoRaw.split('-').map(Number);
+            fechaAbono = new Date(year, month - 1, day, 12, 0, 0);
+        }
+
+        // Buscar el pago base
         let pagoBase = await Pago.findOne({ pagoId });
         if (!pagoBase) {
-            // Fallback: buscar sin mes (formato antiguo)
             const pagoIdSinMes = crearPagoId(idAlumno, grupoId);
             pagoBase = await Pago.findOne({ pagoId: pagoIdSinMes });
             if (!pagoBase) {
                 console.error(`❌ Pago base no encontrado: ${pagoId}`);
                 return res.status(404).json({ error: "Pago base no encontrado" });
             }
-            console.warn(`⚠️ Se encontró pago sin mes, usando ID: ${pagoIdSinMes}`);
         }
-
-        console.log(`✅ Pago base: ${pagoBase.pagoId} - fecha: ${pagoBase.fechaInicioPago}`);
 
         const fechaInicio = new Date(pagoBase.fechaInicioPago);
         const diaPago = pagoBase.diaPago || 1;
 
-        // ✅ CORRECCIÓN: Si es descuento, el monto total YA incluye el descuento
-        // Por lo tanto, NO se debe aplicar descuento adicional.
         const montoTotal = Number(montoAbono);
         const montoPorMes = montoTotal / mesesCubiertos;
-        // Si es descuento, usamos montoPorMes directamente (ya incluye descuento)
-        // Si no es descuento, también usamos montoPorMes (distribución equitativa)
-        const montoConDescuento = montoPorMes; // ← ¡Ya no aplicamos descuento extra!
-
-        console.log(`💰 Monto total: ${montoTotal}, por mes: ${montoPorMes}`);
+        const montoConDescuento = montoPorMes;
 
         const abonosCreados = [];
 
@@ -69,14 +65,13 @@ router.post("/", async (req, res) => {
             const ultimoDiaMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate();
             const diaReal = Math.min(diaPago, ultimoDiaMes);
             mes.setDate(diaReal);
+            mes.setHours(12, 0, 0, 0);
 
             const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
             const nuevoPagoId = crearPagoId(idAlumno, grupoId, mesStr);
-            console.log(`🔍 Procesando mes ${mesStr}: nuevoPagoId = ${nuevoPagoId}`);
 
             let pagoMes = await Pago.findOne({ pagoId: nuevoPagoId });
             if (!pagoMes) {
-                console.log(`⚠️ Pago no encontrado, creando: ${nuevoPagoId}`);
                 pagoMes = new Pago({
                     pagoId: nuevoPagoId,
                     idAlumno,
@@ -93,21 +88,14 @@ router.post("/", async (req, res) => {
                     descuentoAplicado: esDescuento ? descuentoPorcentaje : 0,
                 });
                 await pagoMes.save();
-                console.log(`✅ Pago creado: ${pagoMes.pagoId}`);
             } else {
-                console.log(`ℹ️ Pago existente: ${pagoMes.pagoId}`);
-                // Si el pago ya existe, actualizar solo si no tiene descuento previo
                 if (!pagoMes.descuentoAplicado || pagoMes.descuentoAplicado === 0) {
                     pagoMes.montoPago = montoConDescuento;
                     pagoMes.descuentoAplicado = esDescuento ? descuentoPorcentaje : 0;
                     await pagoMes.save();
-                    console.log(`✅ Pago actualizado: ${pagoMes.pagoId} -> $${montoConDescuento}`);
-                } else {
-                    console.log(`⚠️ Pago ya tiene descuento, no se modifica.`);
                 }
             }
 
-            // Crear abono para este mes
             const nuevoAbono = new Abono({
                 abonoId: await generarId("abono"),
                 pagoId: nuevoPagoId,
@@ -116,23 +104,19 @@ router.post("/", async (req, res) => {
                 nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
                 montoAbono: montoConDescuento,
                 metodoAbono: metodoAbono || "Efectivo",
-                fechaAbono: fechaAbono ? new Date(fechaAbono) : new Date(),
+                fechaAbono: fechaAbono,
                 numeroDeabono: String(i + 1),
                 notas: `Abono distribuido para ${mesStr}`,
             });
             await nuevoAbono.save();
-            console.log(`✅ Abono creado: ${nuevoAbono.abonoId} - $${montoConDescuento}`);
 
-            // Marcar como Pagado si cubre el monto
             if (montoConDescuento >= pagoMes.montoPago) {
                 pagoMes.estatus = "Pagado";
-                pagoMes.fechaPago = fechaAbono ? new Date(fechaAbono) : new Date();
+                pagoMes.fechaPago = fechaAbono;
                 await pagoMes.save();
-                console.log(`✅ Pago ${pagoMes.pagoId} marcado como Pagado`);
             } else {
                 pagoMes.estatus = "Parcial";
                 await pagoMes.save();
-                console.log(`ℹ️ Pago ${pagoMes.pagoId} queda Parcial`);
             }
 
             abonosCreados.push(nuevoAbono);
@@ -142,6 +126,7 @@ router.post("/", async (req, res) => {
         if (nuevoMontoMensual && nuevoMontoMensual > 0) {
             const mesSiguiente = new Date(fechaInicio);
             mesSiguiente.setMonth(mesSiguiente.getMonth() + mesesCubiertos);
+            mesSiguiente.setHours(12, 0, 0, 0);
             const mesStrSig = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth() + 1).padStart(2, "0")}`;
             const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSig);
             const pagoFuturo = await Pago.findOne({ pagoId: pagoFuturoId });
@@ -149,9 +134,12 @@ router.post("/", async (req, res) => {
                 pagoFuturo.montoPago = nuevoMontoMensual;
                 pagoFuturo.descuentoAplicado = 0;
                 await pagoFuturo.save();
-                console.log(`✅ Tarifa futura actualizada: ${pagoFuturoId} -> $${nuevoMontoMensual}`);
             }
         }
+
+        // 🔥 INVALIDAR CACHÉ DE PAGOS PARA QUE SE REFRESQUE LA VISTA
+        cache.flushAll();
+        console.log('🗑️ Caché de pagos invalidada por nuevo abono.');
 
         res.status(201).json({
             message: `Abono distribuido en ${mesesCubiertos} meses`,
@@ -164,7 +152,9 @@ router.post("/", async (req, res) => {
     }
 });
 
-// GET /pago/:pagoId
+// ============================================================
+// GET /pago/:pagoId – OBTENER ABONOS DE UN PAGO
+// ============================================================
 router.get("/pago/:pagoId", async (req, res) => {
     try {
         const { pagoId } = req.params;
@@ -176,7 +166,9 @@ router.get("/pago/:pagoId", async (req, res) => {
     }
 });
 
-// GET /alumno/:idAlumno
+// ============================================================
+// GET /alumno/:idAlumno – OBTENER ABONOS DE UN ALUMNO
+// ============================================================
 router.get("/alumno/:idAlumno", async (req, res) => {
     try {
         const { idAlumno } = req.params;

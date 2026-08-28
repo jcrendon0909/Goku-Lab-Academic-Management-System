@@ -89,7 +89,31 @@ export function PagosPage() {
                 pagosData = [];
             }
 
-            setPagos(pagosData);
+            // ✅ Procesar pagos SIN redistribución
+            const pagosProcesados = pagosData.map((pago: any) => {
+                // Ya no hacemos redistribución; usamos los valores del backend
+                // Solo aseguramos que periodosMensuales exista y esté ordenado
+                const periodos = (pago.periodosMensuales || []).sort((a: any, b: any) => {
+                    return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
+                });
+
+                // Calcular totales sumando los periodos
+                const totalMonto = periodos.reduce((sum: number, m: any) => sum + (m.monto || 0), 0);
+                const totalPagado = periodos.reduce((sum: number, m: any) => sum + (m.pagado || 0), 0);
+                const saldoTotal = Math.max(0, totalMonto - totalPagado);
+                const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
+
+                return {
+                    ...pago,
+                    periodosMensuales: periodos,
+                    montoTotal: totalMonto,
+                    montoPagado: totalPagado,
+                    saldo: saldoTotal,
+                    status: statusGeneral,
+                };
+            });
+
+            setPagos(pagosProcesados);
             setTotalPages(result.pagination?.pages || 0);
             setTotalItems(result.pagination?.total || 0);
             setTotales(result.totales || { totalPorRecolectar: 0, totalRecolectado: 0 });
