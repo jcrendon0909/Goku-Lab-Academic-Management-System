@@ -3,14 +3,14 @@ import Pago from "../models/Pago.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import { crearPagoId } from "../utils/pagos.js";
-import cache from "../utils/cache.js"; // 👈 Importar cache
+import cache from "../utils/cache.js";
 
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN PARA SINCRONIZAR PAGOS (CREA 12 MESES FUTUROS)
+// FUNCIÓN PARA SINCRONIZAR PAGOS (EXPORTADA PARA index.js)
 // ============================================================
-async function sincronizarPagosDesdeInscripciones() {
+export async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
         estatus: { $ne: "Baja" },
         montoMensualidad: { $gt: 0 },
@@ -25,62 +25,37 @@ async function sincronizarPagosDesdeInscripciones() {
         if (id) gruposMap.set(id.toUpperCase(), g);
     }
 
-    const hoy = new Date();
-
     for (const ins of inscripciones) {
         const idAlumno = String(ins.idAlumno || "").trim();
         const grupoId = String(ins.grupoId || ins.GrupoId || "").trim();
         if (!idAlumno || !grupoId) continue;
 
+        const pagoId = crearPagoId(idAlumno, grupoId);
         const grupo = gruposMap.get(grupoId.toUpperCase());
-        const montoMensual = Number(ins.montoMensualidad);
-        const diaPago = Number(ins.diaPago) || 1;
 
-        const fechaInicio = new Date(ins.fechaInicioPago || ins.fechaInscripcion || hoy);
-        
-        // Generar pagos para los próximos 12 meses
-        for (let i = 0; i < 12; i++) {
-            const mes = new Date(fechaInicio);
-            mes.setMonth(mes.getMonth() + i);
-            const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
-            const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
-
-            const pagoExistente = await Pago.findOne({ pagoId }).lean();
-            let montoPago = montoMensual;
-            let descuentoAplicado = 0;
-
-            if (pagoExistente && pagoExistente.descuentoAplicado > 0) {
-                montoPago = pagoExistente.montoPago;
-                descuentoAplicado = pagoExistente.descuentoAplicado;
-            }
-
-            await Pago.updateOne(
-                { pagoId },
-                {
-                    $set: {
-                        pagoId,
-                        idAlumno,
-                        nombreAlumno: ins.nombreAlumno || idAlumno,
-                        grupoId,
-                        nombreCurso: grupo?.nombreCurso || "Curso",
-                        diaPago: diaPago,
-                        montoPago: montoPago,
-                        fechaInicioPago: mes,
-                        activo: true,
-                        fechaBaja: null,
-                        periodo: "Mes",
-                        descuentoAplicado: descuentoAplicado,
-                        notas: pagoExistente?.notas || "Generado automáticamente",
-                    },
+        await Pago.updateOne(
+            { pagoId },
+            {
+                $set: {
+                    idAlumno,
+                    nombreAlumno: ins.nombreAlumno || idAlumno,
+                    grupoId,
+                    nombreCurso: grupo?.nombreCurso || "Curso",
+                    diaPago: Number(ins.diaPago) || 1,
+                    montoPago: Number(ins.montoMensualidad),
+                    fechaInicioPago: ins.fechaInicioPago || ins.fechaInscripcion || new Date(),
+                    activo: true,
+                    fechaBaja: null,
+                    estatus: "Pendiente",
                 },
-                { upsert: true }
-            );
-        }
+            },
+            { upsert: true }
+        );
     }
 }
 
 // ============================================================
-// GET /lista-completa – OPTIMIZADO CON CACHÉ Y PAGINACIÓN
+// GET /lista-completa – CON CACHÉ Y SIN SINCRONIZACIÓN
 // ============================================================
 router.get("/lista-completa", async (req, res) => {
     try {
@@ -94,29 +69,28 @@ router.get("/lista-completa", async (req, res) => {
             criterioFechaPagados = 'real'
         } = req.query;
 
-        // 1. Generar clave de caché según los parámetros
-        const cacheKey = `pagos-${mes || 'all'}-${anio || 'all'}-${vista}-${busqueda || 'all'}-${page}-${limit}-${criterioFechaPagados}`;
+        console.log(`📥 [PAGOS] Solicitud: mes=${mes}, anio=${anio}, vista=${vista}, page=${page}`);
 
-        // 2. Verificar si ya está en caché
+        // Clave de caché
+        const cacheKey = `pagos-${mes}-${anio}-${vista}-${busqueda}-${page}-${limit}-${criterioFechaPagados}`;
         const cachedData = cache.get(cacheKey);
         if (cachedData) {
             console.log(`✅ Sirviendo desde caché: ${cacheKey}`);
             return res.json(cachedData);
         }
 
-        console.log(`⏳ Procesando consulta: ${cacheKey}`);
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
 
-        // 3. Sincronizar pagos principales (crea pagos faltantes)
-        await sincronizarPagosDesdeInscripciones();
-
-        // 4. Filtro base
+        // Filtro base
         const matchBase = { activo: true };
         if (busqueda) {
             matchBase.nombreAlumno = { $regex: busqueda, $options: 'i' };
         }
 
-        // 5. Obtener todos los pagos con sus abonos
-        const pipeline = [
+        // Obtener pagos con abonos (sin sincronización)
+        const pagos = await Pago.aggregate([
             { $match: matchBase },
             {
                 $lookup: {
@@ -129,11 +103,11 @@ router.get("/lista-completa", async (req, res) => {
                     as: "historialAbonos"
                 }
             }
-        ];
+        ]);
 
-        const pagos = await Pago.aggregate(pipeline);
+        console.log(`📊 Pagos encontrados: ${pagos.length}`);
 
-        // 6. Agrupar por alumno + grupo
+        // Agrupar por alumno+grupo
         const alumnosMap = new Map();
         for (const pago of pagos) {
             const key = `${pago.idAlumno}-${pago.grupoId}`;
@@ -160,7 +134,7 @@ router.get("/lista-completa", async (req, res) => {
             alum.historialAbonos = alum.historialAbonos.concat(abonos);
         }
 
-        // 7. Construir periodos y aplicar filtros de vista
+        // Construir periodos y filtrar según vista
         const hoy = new Date();
         const mesActual = mes ? parseInt(mes) : hoy.getMonth() + 1;
         const anioActual = anio ? parseInt(anio) : hoy.getFullYear();
@@ -192,7 +166,6 @@ router.get("/lista-completa", async (req, res) => {
                 };
             });
 
-            // Aplicar filtros de vista según fecha
             const tienePendientesPasados = periodosMensuales.some((m) => {
                 const v = new Date(m.vencimiento);
                 return (v.getFullYear() * 12 + v.getMonth()) <= totalMesesHoy && m.status !== "Pagado";
@@ -243,14 +216,10 @@ router.get("/lista-completa", async (req, res) => {
             });
         }
 
-        // 8. Paginación
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const skip = (pageNum - 1) * limitNum;
+        // Paginación
         const total = resultadoCompleto.length;
         const paginatedData = resultadoCompleto.slice(skip, skip + limitNum);
 
-        // 9. Calcular totales (para el frontend)
         const totalPorRecolectar = paginatedData
             .filter(p => p.activo !== false)
             .reduce((sum, p) => {
@@ -287,14 +256,14 @@ router.get("/lista-completa", async (req, res) => {
             }
         };
 
-        // 10. Guardar en caché por 5 minutos
+        // Guardar en caché (5 minutos)
         cache.set(cacheKey, responseData);
         console.log(`✅ Datos guardados en caché: ${cacheKey}`);
 
         res.json(responseData);
 
     } catch (error) {
-        console.error("Error en /lista-completa optimizado:", error);
+        console.error("❌ Error en /lista-completa:", error);
         res.status(500).json({ error: "Error al obtener pagos" });
     }
 });
@@ -320,9 +289,9 @@ router.patch("/actualizar-dia/:id", async (req, res) => {
         pago.updatedAt = new Date();
         await pago.save();
 
-        // Limpiar caché al actualizar un pago
+        // Invalidar caché al actualizar
         cache.flushAll();
-        console.log("🧹 Caché limpiada por actualización de día de pago.");
+        console.log("🗑️ Caché invalidada por actualización de día de pago.");
 
         res.json({ ok: true, mensaje: "Día de pago actualizado", data: pago });
     } catch (error) {

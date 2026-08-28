@@ -289,3 +289,26 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
 console.log("🔍 [14] app.listen() ejecutado (el servidor debería estar escuchando)");
+// ============================================================
+// SINCRONIZACIÓN DE PAGOS (EJECUCIÓN PERIÓDICA)
+// ============================================================
+import { sincronizarPagosDesdeInscripciones } from './routes/pagos.js';
+
+// Función para ejecutar sincronización con manejo de errores
+const ejecutarSincronizacion = async () => {
+    try {
+        console.log('🔄 [SYNC] Iniciando sincronización de pagos...');
+        await sincronizarPagosDesdeInscripciones();
+        console.log('✅ [SYNC] Sincronización completada.');
+    } catch (error) {
+        console.error('❌ [SYNC] Error en sincronización:', error.message);
+    }
+};
+
+// Ejecutar sincronización 5 segundos después de iniciar el servidor
+setTimeout(ejecutarSincronizacion, 5000);
+
+// Programar sincronización cada 5 minutos (300000 ms)
+setInterval(ejecutarSincronizacion, 300000);
+
+console.log('⏰ [SYNC] Sincronización programada cada 5 minutos.');

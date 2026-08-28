@@ -2,11 +2,12 @@
 import { PaymentRow } from '../components/PaymentRow';
 import { RegisterPaymentModal } from '../components/RegisterPaymentModal';
 import { EditAbonoModal } from '../components/EditAbonoModal';
-import { getPagosConEstatus, registrarAbono, actualizarDiaPago, editarAbono } from '../../services/api';
+import { apiFetch, registrarAbono, editarAbono } from '../../services/api';
 import { toast } from "sonner";
 import { useSyncDataReload } from '../../utils/dataSync';
 
 export function PagosPage() {
+    // ===== ESTADO =====
     const [pagos, setPagos] = useState<any[]>([]);
     const [cargando, setCargando] = useState(true);
     const [vista, setVista] = useState<'control' | 'registro' | 'proximos'>('control');
@@ -16,125 +17,84 @@ export function PagosPage() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [abonoParaEditar, setAbonoParaEditar] = useState<any>(null);
 
+    // Filtros
     const [busquedaAlumno, setBusquedaAlumno] = useState('');
     const [fechaInicio, setFechaInicio] = useState('');
     const [fechaFin, setFechaFin] = useState('');
     const [criterioFechaPagados, setCriterioFechaPagados] = useState<'limite' | 'real'>('real');
 
-    const cargarDatos = useCallback(() => {
-        getPagosConEstatus()
-            .then((data) => {
-                const alumnosMap: Record<string, any> = {};
+    // Paginación
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(0);
+    const [totalItems, setTotalItems] = useState(0);
+    const [limit] = useState(50);
 
-                data.forEach((pago: any) => {
-                    const key = `${pago.idAlumno}-${pago.grupoId}`;
+    // Filtros de mes y año (por defecto mes/año actual)
+    const [mesFiltro, setMesFiltro] = useState<number>(new Date().getMonth() + 1);
+    const [anioFiltro, setAnioFiltro] = useState<number>(new Date().getFullYear());
 
-                    if (!alumnosMap[key]) {
-                        alumnosMap[key] = {
-                            id: pago.id || pago.pagoId,
-                            pagoId: pago.pagoId,
-                            idAlumno: pago.idAlumno,
-                            grupoId: pago.grupoId,
-                            nombreAlumno: pago.nombreAlumno,
-                            cursosLista: [],
-                            montoTotal: 0,
-                            montoPagado: 0,
-                            saldo: 0,
-                            activo: false,
-                            fechaLimite: pago.fechaLimite,
-                            fechaPagoReal: pago.fechaPagoReal,
-                            metodoAbono: pago.metodoAbono,
-                            periodosMap: {},
-                            saldoAFavor: pago.saldoAFavor || 0
-                        };
-                    }
+    // Totales calculados desde el backend
+    const [totales, setTotales] = useState({
+        totalPorRecolectar: 0,
+        totalRecolectado: 0
+    });
 
-                    const alum = alumnosMap[key];
+    // ============================================================
+    // CARGA DE DATOS OPTIMIZADA (CON FILTROS Y PAGINACIÓN)
+    // ============================================================
+    const cargarDatos = useCallback(async () => {
+        try {
+            setCargando(true);
+            const params = new URLSearchParams();
+            params.append('mes', String(mesFiltro));
+            params.append('anio', String(anioFiltro));
+            params.append('vista', vista);
+            params.append('page', String(page));
+            params.append('limit', String(limit));
+            if (busquedaAlumno) {
+                params.append('busqueda', busquedaAlumno);
+            }
 
-                    if (!alum.cursosLista.includes(pago.nombreCurso)) {
-                        alum.cursosLista.push(pago.nombreCurso);
-                    }
+            const res = await apiFetch(`/pagos/lista-completa?${params.toString()}`);
+            const result = await res.json();
 
-                    // ✅ Sumar totales directamente desde los periodos, sin redistribuir
-                    const periodos = pago.periodosMensuales || [];
-                    periodos.forEach((mes: any) => {
-                        const mesKey = mes.clave;
-                        if (!alum.periodosMap[mesKey]) {
-                            alum.periodosMap[mesKey] = {
-                                clave: mes.clave,
-                                nombreMes: mes.nombreMes,
-                                vencimiento: mes.vencimiento,
-                                monto: 0,
-                                pagado: 0,
-                                saldo: 0,
-                                status: "Pendiente",
-                                pagoId: mes.pagoId || pago.pagoId,
-                                grupoId: mes.grupoId || pago.grupoId,
-                                fechaPagoReal: mes.fechaPagoReal || null
-                            };
-                        }
-                        // Usar los valores del backend (ya calculados)
-                        alum.periodosMap[mesKey].monto = (Number(mes.monto) || 0);
-                        alum.periodosMap[mesKey].pagado = (Number(mes.pagado) || 0);
-                        alum.periodosMap[mesKey].saldo = (Number(mes.saldo) || 0);
-                        alum.periodosMap[mesKey].status = mes.status || "Pendiente";
-                        alum.periodosMap[mesKey].pagoId = mes.pagoId || pago.pagoId;
-                        alum.periodosMap[mesKey].grupoId = mes.grupoId || pago.grupoId;
-                        alum.periodosMap[mesKey].fechaPagoReal = mes.fechaPagoReal || null;
-                    });
+            // ✅ Compatibilidad: si la respuesta tiene 'data', usarlo; si no, es un array directo (versión antigua)
+            let pagosData = result.data || result;
+            // Asegurar que sea un array
+            if (!Array.isArray(pagosData)) {
+                console.warn('La respuesta no es un array, se esperaba un array de pagos:', pagosData);
+                pagosData = [];
+            }
 
-                    alum.montoTotal += (Number(pago.montoTotal) || 0);
-                    alum.montoPagado += (Number(pago.montoPagado) || 0);
-                    if (pago.activo !== false) alum.activo = true;
+            setPagos(pagosData);
+            setTotalPages(result.pagination?.pages || 0);
+            setTotalItems(result.pagination?.total || 0);
+            setTotales(result.totales || { totalPorRecolectar: 0, totalRecolectado: 0 });
 
-                    if (pago.saldoAFavor) {
-                        alum.saldoAFavor = (alum.saldoAFavor || 0) + Number(pago.saldoAFavor);
-                    }
-                });
+            setCargando(false);
+        } catch (error) {
+            console.error("Error al cargar pagos:", error);
+            toast.error('Error al cargar pagos');
+            setCargando(false);
+        }
+    }, [mesFiltro, anioFiltro, busquedaAlumno, vista, page, limit]);
 
-                const pagosAgrupados = Object.values(alumnosMap).map((alum: any) => {
-                    const periodosMensuales = Object.values(alum.periodosMap).sort((a: any, b: any) => {
-                        return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
-                    });
-
-                    // ✅ Ya no redistribuimos, usamos los valores existentes
-                    // El saldo total es la suma de saldos de cada periodo
-                    const totalMonto = periodosMensuales.reduce((sum, m) => sum + m.monto, 0);
-                    const totalPagado = periodosMensuales.reduce((sum, m) => sum + m.pagado, 0);
-                    const saldoTotal = Math.max(0, totalMonto - totalPagado);
-                    const statusGeneral = saldoTotal === 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
-
-                    alum.status = statusGeneral;
-                    alum.saldo = saldoTotal;
-                    alum.montoTotal = totalMonto;
-                    alum.montoPagado = totalPagado;
-                    alum.periodosMensuales = periodosMensuales;
-                    alum.nombreCurso = alum.cursosLista.join(", ");
-
-                    return alum;
-                });
-
-                setPagos(pagosAgrupados);
-                setCargando(false);
-            })
-            .catch((err) => {
-                console.error("Error al traer pagos:", err);
-                setCargando(false);
-            });
-    }, []);
-
+    // Cargar datos al cambiar filtros o página
     useEffect(() => {
         cargarDatos();
     }, [cargarDatos]);
 
+    // Sincronizar recarga desde otros módulos
     useSyncDataReload(cargarDatos);
 
+    // Resetear página cuando cambia la búsqueda o vista
     useEffect(() => {
-        setBusquedaAlumno('');
-        setFechaInicio('');
-        setFechaFin('');
-    }, [vista]);
+        setPage(1);
+    }, [busquedaAlumno, vista, mesFiltro, anioFiltro]);
 
+    // ============================================================
+    // HANDLE CONFIRMAR PAGO
+    // ============================================================
     const handleConfirmarPago = async (
         pagoId: string,
         monto: number,
@@ -187,91 +147,18 @@ export function PagosPage() {
         }
     };
 
-    const pagosFiltrados = pagos
-        .filter(p => {
-            const periodos = p.periodosMensuales || [];
-            const hoy = new Date();
-            const totalMesesHoy = hoy.getFullYear() * 12 + hoy.getMonth();
-
-            const tienePendientesPasados = periodos.some((m: any) => {
-                const v = new Date(m.vencimiento);
-                return (v.getFullYear() * 12 + v.getMonth()) <= totalMesesHoy && m.status !== "Pagado";
-            });
-
-            const tieneProximosFuturos = periodos.some((m: any) => {
-                const v = new Date(m.vencimiento);
-                return (v.getFullYear() * 12 + v.getMonth()) > totalMesesHoy && m.status !== "Pagado";
-            });
-
-            if (vista === 'control') {
-                return p.activo !== false && tienePendientesPasados;
-            } else if (vista === 'registro') {
-                return periodos.some((m: any) => m.status === "Pagado") || (p.activo === false && Number(p.montoPagado || 0) > 0);
-            } else if (vista === 'proximos') {
-                return p.activo !== false && tieneProximosFuturos;
-            }
-            return false;
-        })
-        .filter(p => !busquedaAlumno || p.nombreAlumno?.toLowerCase().includes(busquedaAlumno.toLowerCase()))
-        .filter(p => {
-            if (!fechaInicio && !fechaFin) return true;
-            if (vista === 'control' || vista === 'proximos') {
-                const pendientes = (p.periodosMensuales || []).filter((m: any) => m.status !== "Pagado" && m.status !== "Programado");
-                if (pendientes.length === 0) return false;
-                return pendientes.some((mes: any) => {
-                    const fechaVence = mes.vencimiento ? mes.vencimiento.substring(0, 10) : "";
-                    if (!fechaVence) return false;
-                    if (fechaInicio && fechaVence < fechaInicio) return false;
-                    if (fechaFin && fechaVence > fechaFin) return false;
-                    return true;
-                });
-            } else {
-                let fechaEvaluarTexto = criterioFechaPagados === 'real' ? p.fechaPagoReal : p.fechaLimite;
-                if (!fechaEvaluarTexto) return false;
-                const fechaLimpia = fechaEvaluarTexto.substring(0, 10);
-                if (fechaInicio && fechaLimpia < fechaInicio) return false;
-                if (fechaFin && fechaLimpia > fechaFin) return false;
-                return true;
-            }
-        });
-
-    if (cargando) return <div className="p-10 text-center">Cargando informacion...</div>;
-
-    const hoy = new Date();
-    const mesActual = hoy.getMonth();
-    const anioActual = hoy.getFullYear();
-
-    const totalPorRecolectar = pagos
-        .filter(p => p.activo !== false)
-        .reduce((sum, p) => {
-            const mesEnCurso = (p.periodosMensuales || []).find((m: any) => {
-                if (!m.vencimiento) return false;
-                const v = new Date(m.vencimiento);
-                return v.getMonth() === mesActual && v.getFullYear() === anioActual;
-            });
-            return sum + (mesEnCurso ? (mesEnCurso.saldo || 0) : 0);
-        }, 0);
-
-    let totalRecolectado = 0;
-    if (vista === 'registro') {
-        totalRecolectado = pagosFiltrados.reduce((sum, p) => {
-            const periodosPagados = (p.periodosMensuales || []).filter(m => 
-                m.status === "Pagado"
-            );
-            const sumMeses = periodosPagados.reduce((acc, m) => {
-                return acc + (m.monto || 0);
-            }, 0);
-            return sum + sumMeses;
-        }, 0);
-    } else {
-        totalRecolectado = pagosFiltrados.reduce((sum, p) => {
-            const mesEnCurso = (p.periodosMensuales || []).find((m: any) => {
-                if (!m.vencimiento) return false;
-                const v = new Date(m.vencimiento);
-                return v.getMonth() === mesActual && v.getFullYear() === anioActual;
-            });
-            return sum + (mesEnCurso ? (mesEnCurso.pagado || 0) : 0);
-        }, 0);
+    // ============================================================
+    // RENDER
+    // ============================================================
+    if (cargando) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#26AAA3] mx-auto mb-4"></div>
+                    <p className="text-gray-600 font-bold">Cargando pagos...</p>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -290,46 +177,112 @@ export function PagosPage() {
                         </div>
                     </div>
                     <div className="flex rounded-xl border border-cyan-100 bg-white/80 p-1 shadow-sm gap-1">
-                        <button onClick={() => setVista('control')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'control' ? 'bg-[#0047B8] text-white shadow-md shadow-blue-900/15' : 'text-gray-500 hover:bg-cyan-50 hover:text-cyan-700'}`}>PENDIENTES</button>
-                        <button onClick={() => setVista('registro')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'registro' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-900/15' : 'text-gray-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>PAGADOS</button>
-                        <button onClick={() => setVista('proximos')} className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'proximos' ? 'bg-purple-600 text-white shadow-md shadow-purple-900/15' : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700'}`}>PRÓXIMOS</button>
+                        <button
+                            onClick={() => setVista('control')}
+                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'control' ? 'bg-[#0047B8] text-white shadow-md shadow-blue-900/15' : 'text-gray-500 hover:bg-cyan-50 hover:text-cyan-700'}`}
+                        >
+                            PENDIENTES
+                        </button>
+                        <button
+                            onClick={() => setVista('registro')}
+                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'registro' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-900/15' : 'text-gray-500 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                        >
+                            PAGADOS
+                        </button>
+                        <button
+                            onClick={() => setVista('proximos')}
+                            className={`rounded-lg px-6 py-2 text-xs font-black transition-all ${vista === 'proximos' ? 'bg-purple-600 text-white shadow-md shadow-purple-900/15' : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700'}`}
+                        >
+                            PRÓXIMOS
+                        </button>
                     </div>
                 </div>
             </header>
 
             <div className="max-w-6xl mx-auto space-y-6 py-8 px-4 lg:px-0">
-                <div className="bg-white border rounded-2xl p-5 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buscar Alumno</label><input type="text" placeholder="Escribe el nombre..." value={busquedaAlumno} onChange={(e) => setBusquedaAlumno(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors" /></div>
-                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Desde fecha</label><input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors" /></div>
-                    <div className="flex flex-col gap-1.5"><label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hasta fecha</label><input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 text-gray-700 transition-colors" /></div>
-                    {vista === 'registro' ? (
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Filtrar Historial por</label>
-                            <select value={criterioFechaPagados} onChange={(e) => setCriterioFechaPagados(e.target.value as 'limite' | 'real')} className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 text-xs font-bold text-emerald-800 focus:outline-none transition-colors"><option value="real">📅 FECHA DE PAGO REAL</option><option value="limite">⏳ FECHA QUE DEBIÓ PAGAR</option></select>
-                        </div>
-                    ) : (
-                        <button onClick={() => { setBusquedaAlumno(''); setFechaInicio(''); setFechaFin(''); }} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl py-2 text-xs font-bold transition-colors h-[34px]">Limpiar Filtros</button>
-                    )}
+                {/* FILTROS */}
+                <div className="bg-white border rounded-2xl p-5 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buscar Alumno</label>
+                        <input
+                            type="text"
+                            placeholder="Escribe el nombre..."
+                            value={busquedaAlumno}
+                            onChange={(e) => setBusquedaAlumno(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Mes</label>
+                        <select
+                            value={mesFiltro}
+                            onChange={(e) => setMesFiltro(Number(e.target.value))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
+                        >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                <option key={m} value={m}>
+                                    {new Date(2026, m - 1, 1).toLocaleDateString('es-MX', { month: 'long' })}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Año</label>
+                        <input
+                            type="number"
+                            value={anioFiltro}
+                            onChange={(e) => setAnioFiltro(Number(e.target.value))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
+                            min={2020}
+                            max={2030}
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Desde fecha</label>
+                        <input
+                            type="date"
+                            value={fechaInicio}
+                            onChange={(e) => setFechaInicio(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Hasta fecha</label>
+                        <input
+                            type="date"
+                            value={fechaFin}
+                            onChange={(e) => setFechaFin(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors"
+                        />
+                    </div>
                 </div>
 
-                <div>
-                    {vista === 'control' && (
-                        <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-5 flex items-center justify-between max-w-sm shadow-sm">
-                            <div><span className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Por recolectar en el mes</span><h2 className="text-2xl font-black text-cyan-900 mt-1">${totalPorRecolectar.toLocaleString('es-MX')}</h2></div>
-                            <span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-cyan-50">📅</span>
-                        </div>
-                    )}
-                    {vista === 'registro' && (
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between max-w-sm shadow-sm">
-                            <div><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total recolectado del mes</span><h2 className="text-2xl font-black text-emerald-900 mt-1">${totalRecolectado.toLocaleString('es-MX')}</h2></div>
-                            <span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-emerald-50">💰</span>
-                        </div>
-                    )}
+                {/* RESUMEN */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-wider">Por recolectar</p>
+                        <p className="text-2xl font-black text-cyan-900 mt-1">
+                            ${totales.totalPorRecolectar.toLocaleString('es-MX')}
+                        </p>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Recolectado</p>
+                        <p className="text-2xl font-black text-emerald-900 mt-1">
+                            ${totales.totalRecolectado.toLocaleString('es-MX')}
+                        </p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 shadow-sm col-span-2">
+                        <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Resumen</p>
+                        <p className="text-sm font-medium text-gray-700 mt-1">
+                            {totalItems} registros • Página {page} de {totalPages || 1}
+                        </p>
+                    </div>
                 </div>
 
+                {/* LISTA DE PAGOS */}
                 <div className="flex flex-col gap-4">
-                    {pagosFiltrados.length > 0 ? (
-                        pagosFiltrados.map((p) => (
+                    {pagos.length > 0 ? (
+                        pagos.map((p) => (
                             <PaymentRow
                                 key={p.id}
                                 payment={p}
@@ -367,6 +320,30 @@ export function PagosPage() {
                     )}
                 </div>
 
+                {/* PAGINACIÓN */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-4 mt-4">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Anterior
+                        </button>
+                        <span className="text-sm text-gray-600">
+                            Página {page} de {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                )}
+
+                {/* MODALES */}
                 {isModalOpen && selectedPayment && (
                     <RegisterPaymentModal
                         payment={selectedPayment}

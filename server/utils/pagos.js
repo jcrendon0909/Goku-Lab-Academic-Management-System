@@ -1,8 +1,5 @@
 import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
-import NodeCache from 'node-cache';
-const cache = new NodeCache({ stdTTL: 300 });
-export default cache;
 
 export function parseFechaLocal(valor) {
   if (!valor) return null;
