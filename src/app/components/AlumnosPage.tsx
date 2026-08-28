@@ -78,6 +78,11 @@ export function AlumnosPage() {
   const [alumnoDraft, setAlumnoDraft] = useState<Record<string, Partial<Alumno>>>({});
   const [guardandoAlumno, setGuardandoAlumno] = useState<Record<string, boolean>>({});
 
+  // --- Estados para el modal de finalizar curso ---
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false);
+  const [finalizarData, setFinalizarData] = useState<{ idAlumno: string; grupoId: string } | null>(null);
+  const [fechaFin, setFechaFin] = useState('');
+
   // ----------------------------- CARGA DE DATOS -----------------------------
   const cargarAlumnos = async () => {
     try {
@@ -295,17 +300,36 @@ export function AlumnosPage() {
     setShowInscripcionForm(true);
   };
 
-  // ✅ Finalizar curso de un alumno
-  const finalizarCurso = async (idAlumno: string, grupoId: string) => {
-    if (!confirm('¿Finalizar este curso? El alumno ya no podrá asistir a clases de este grupo.')) return;
+  // ----------------------------- FUNCIÓN FINALIZAR CURSO (con modal) -----------------------------
+  const abrirModalFinalizar = (idAlumno: string, grupoId: string) => {
+    setFinalizarData({ idAlumno, grupoId });
+    // Preestablecer fecha de hoy como default
+    const hoy = new Date().toISOString().slice(0, 10);
+    setFechaFin(hoy);
+    setShowFinalizarModal(true);
+  };
+
+  const confirmarFinalizarCurso = async () => {
+    if (!finalizarData) return;
+    if (!fechaFin) {
+      toast.warning('Selecciona una fecha de finalización');
+      return;
+    }
+    const { idAlumno, grupoId } = finalizarData;
     try {
       const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/finalizar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaFin: new Date().toISOString() }),
+        body: JSON.stringify({ fechaFin }),
       });
-      if (!res.ok) throw new Error('Error al finalizar');
-      toast.success('✅ Curso finalizado correctamente');
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al finalizar');
+      }
+      const data = await res.json();
+      toast.success(`✅ Curso finalizado. ${data.data.pagosDesactivados} pagos desactivados, ${data.data.reagendacionesCanceladas} reagendaciones canceladas.`);
+      setShowFinalizarModal(false);
+      setFinalizarData(null);
       cargarAlumnos();
       if (alumnoExpandido === idAlumno) {
         recargarInscripcionesAlumno(idAlumno);
@@ -371,7 +395,6 @@ export function AlumnosPage() {
         videoSrc="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4" 
         decorativeVideos={decorativeVideos}
       >
-        {/* Contenedor principal alineado con header */}
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 h-full flex flex-col py-1 mt-[30px]">
           {/* Cabecera */}
           <div className="flex flex-col md:flex-row items-center justify-between mb-3 gap-2 flex-shrink-0">
@@ -639,7 +662,7 @@ export function AlumnosPage() {
                                                       🔄 Mover
                                                     </button>
                                                     <button
-                                                      onClick={() => finalizarCurso(alumno.idAlumno, ins.grupoId)}
+                                                      onClick={() => abrirModalFinalizar(alumno.idAlumno, ins.grupoId)}
                                                       className="text-amber-600 hover:text-amber-800 text-[10px] font-medium hover:underline transition-all"
                                                     >
                                                       🏁 Finalizar
@@ -718,10 +741,53 @@ export function AlumnosPage() {
               </div>
             </div>
           )}
+
+          {/* Modal Finalizar Curso */}
+          {showFinalizarModal && finalizarData && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-4 border-amber-400 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-2xl">
+                    🏁
+                  </div>
+                  <h3 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-500">
+                    Finalizar Curso
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Este alumno dejará de asistir a partir de:
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha de finalización</label>
+                  <input
+                    type="date"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    className="w-full border-2 border-amber-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Se desactivarán pagos y clases posteriores a esta fecha.</p>
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
+                  <button
+                    onClick={() => setShowFinalizarModal(false)}
+                    className="px-5 py-2 border-2 border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all hover:scale-105"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarFinalizarCurso}
+                    className="px-6 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                  >
+                    Finalizar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </BackgroundVideo>
 
-      {/* Modal del formulario de inscripción - MODIFICADO */}
+      {/* Modal del formulario de inscripción */}
       {showInscripcionForm && (
         <InscripcionForm
           onClose={() => setShowInscripcionForm(false)}

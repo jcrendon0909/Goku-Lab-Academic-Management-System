@@ -3,6 +3,7 @@ import Inscripcion from "../models/Inscripcion.js";
 import Grupo from "../models/Grupo.js";
 import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
+import Reagendacion from "../models/Reagendacion.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
@@ -148,24 +149,20 @@ router.post("/", async (req, res) => {
   try {
     const datos = req.body;
 
-    // Validar campos obligatorios
     if (!datos.idAlumno || !datos.grupoId) {
       return res.status(400).json({ error: "idAlumno y grupoId son requeridos" });
     }
 
-    // Verificar que el grupo exista
     const grupo = await Grupo.findOne({ IdGrupo: datos.grupoId });
     if (!grupo) {
       return res.status(404).json({ error: "Grupo no encontrado" });
     }
 
-    // Procesar fecha de inscripción
     const fechaInscripcion = datos.fechaInscripcion ? new Date(datos.fechaInscripcion) : new Date();
     if (isNaN(fechaInscripcion.getTime())) {
       return res.status(400).json({ error: "Fecha de inscripción inválida" });
     }
 
-    // Crear la inscripción
     const nuevaInscripcion = new Inscripcion({
       idAlumno: datos.idAlumno.trim(),
       nombreAlumno: datos.nombreAlumno || "",
@@ -181,7 +178,6 @@ router.post("/", async (req, res) => {
 
     await nuevaInscripcion.save();
 
-    // ----- GENERAR PAGOS HISTÓRICOS (si la fecha es anterior a hoy) -----
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     const fechaIns = new Date(fechaInscripcion);
@@ -277,12 +273,21 @@ router.get("/grupo/:grupoId", async (req, res) => {
 });
 
 // ============================================================
-// FINALIZAR CURSO (NUEVO)
+// FINALIZAR CURSO (CON FECHA DE CORTE)
 // ============================================================
 router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
-    const { fechaFin } = req.body;
+    const { fechaFin } = req.body; // "2026-07-31" o ISO string
+
+    if (!fechaFin) {
+      return res.status(400).json({ error: "Debes especificar la fecha de finalización" });
+    }
+
+    const fechaCorte = new Date(fechaFin);
+    if (isNaN(fechaCorte.getTime())) {
+      return res.status(400).json({ error: "Fecha de finalización inválida" });
+    }
 
     const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId });
     if (!inscripcion) {
@@ -292,18 +297,74 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       return res.status(400).json({ error: "El curso ya está finalizado" });
     }
 
+    // Actualizar inscripción
     inscripcion.estatus = "Finalizada";
-    inscripcion.fechaFin = fechaFin ? new Date(fechaFin) : new Date();
+    inscripcion.fechaFin = fechaCorte;
     await inscripcion.save();
 
-    // Desactivar pagos futuros
+    // 1. Desactivar pagos futuros (fechaInicioPago > fechaCorte)
     const Pago = mongoose.model("Pago");
-    await Pago.updateMany(
-      { idAlumno, grupoId, activo: true },
-      { $set: { activo: false, estatus: "Inactivo", fechaBaja: new Date() } }
+    const pagosFuturos = await Pago.updateMany(
+      { 
+        idAlumno, 
+        grupoId, 
+        activo: true,
+        fechaInicioPago: { $gt: fechaCorte }
+      },
+      { 
+        $set: { 
+          activo: false, 
+          estatus: "Inactivo", 
+          fechaBaja: new Date(),
+          notas: `Curso finalizado el ${fechaCorte.toISOString().slice(0,10)}`
+        } 
+      }
     );
 
-    res.json({ ok: true, mensaje: "Curso finalizado", data: inscripcion });
+    // 2. Desactivar reagendaciones futuras para este alumno-grupo
+    const Reagendacion = mongoose.model("Reagendacion");
+    const reagendacionesFuturas = await Reagendacion.updateMany(
+      {
+        idAlumno,
+        idGrupoNuevo: grupoId,
+        estatus: "reagendado",
+        fechaHoraNueva: { $gt: fechaCorte }
+      },
+      {
+        $set: {
+          estatus: "cancelado",
+          comentario: `Cancelado por finalización de curso el ${fechaCorte.toISOString().slice(0,10)}`
+        }
+      }
+    );
+
+    // 3. Opcional: eliminar asistencia futura para este alumno-grupo (no es necesario, pero si existe)
+    const Asistencia = mongoose.model("Asistencia");
+    await Asistencia.updateMany(
+      {
+        idAlumno,
+        idGrupo: grupoId,
+        fecha: { $gt: fechaCorte }
+      },
+      {
+        $set: {
+          estado: "ausente",
+          comentario: `Clase posterior a finalización del curso (${fechaCorte.toISOString().slice(0,10)})`
+        }
+      }
+    );
+
+    res.json({
+      ok: true,
+      mensaje: "Curso finalizado correctamente",
+      data: {
+        inscripcion,
+        pagosDesactivados: pagosFuturos.modifiedCount,
+        reagendacionesCanceladas: reagendacionesFuturas.modifiedCount,
+        fechaCorte: fechaCorte.toISOString()
+      }
+    });
+
   } catch (error) {
     console.error("❌ Error PATCH /inscripciones/finalizar:", error);
     res.status(500).json({ error: error.message });
