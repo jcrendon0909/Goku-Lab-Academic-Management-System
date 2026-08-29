@@ -24,13 +24,10 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
     const [monto, setMonto] = useState<number | string>(payment.saldo || 0);
     const [metodo, setMetodo] = useState<string>('Efectivo');
     const [fechaAbono, setFechaAbono] = useState<string>(new Date().toISOString().substring(0, 10));
-
-    // ===== NUEVOS ESTADOS =====
     const [esDescuento, setEsDescuento] = useState<boolean>(false);
     const [descuentoPorcentaje, setDescuentoPorcentaje] = useState<number>(0);
     const [mesesCubiertos, setMesesCubiertos] = useState<number>(1);
     const [aplicaSaldoAFavor, setAplicaSaldoAFavor] = useState<boolean>(false);
-
     const [cambiarTarifa, setCambiarTarifa] = useState<boolean>(false);
     const [nuevoMonto, setNuevoMonto] = useState<number | string>(payment.montoTotal || 0);
 
@@ -38,7 +35,11 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
         e.preventDefault();
 
         const montoAbono = Number(monto);
-        if (isNaN(montoAbono) || montoAbono <= 0) return;
+        // ✅ Permitir 0, pero no valores negativos
+        if (isNaN(montoAbono) || montoAbono < 0) {
+            toast.error('El monto debe ser 0 o mayor');
+            return;
+        }
 
         const tarifaFutura = cambiarTarifa ? Number(nuevoMonto) : undefined;
 
@@ -48,8 +49,8 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
             return;
         }
 
-        // ✅ Si es descuento, validar que el porcentaje sea válido
-        if (esDescuento && (descuentoPorcentaje <= 0 || descuentoPorcentaje > 100)) {
+        // ✅ Si es descuento y el monto es > 0, validar porcentaje
+        if (esDescuento && montoAbono > 0 && (descuentoPorcentaje <= 0 || descuentoPorcentaje > 100)) {
             toast.error('El porcentaje de descuento debe ser entre 1 y 100');
             return;
         }
@@ -64,7 +65,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
             payment.nombreAlumno,
             tarifaFutura,
             esDescuento,
-            esDescuento ? descuentoPorcentaje : 0,
+            esDescuento && montoAbono > 0 ? descuentoPorcentaje : 0,
             mesesCubiertos,
             aplicaSaldoAFavor
         );
@@ -75,9 +76,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-cyan-600 px-6 py-4 flex justify-between items-center">
                     <div>
-                        <h2 className="text-white font-black text-lg leading-tight">
-                            Registrar Abono
-                        </h2>
+                        <h2 className="text-white font-black text-lg leading-tight">Registrar Abono</h2>
                         <p className="text-cyan-100 text-xs font-medium mt-0.5">
                             {payment.nombreAlumno} • {payment.claveMes ? `Periodo: ${payment.claveMes}` : 'Abono Global'}
                         </p>
@@ -137,7 +136,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                         </div>
                     </div>
 
-                    {/* ===== NUEVAS OPCIONES: DESCUENTO Y SALDO A FAVOR ===== */}
+                    {/* Opciones de descuento y saldo a favor */}
                     <div className="border-t border-gray-100 pt-4 space-y-3">
                         <div className="flex items-center gap-3">
                             <label className="flex items-center gap-2 cursor-pointer group">
@@ -199,7 +198,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                         </div>
                     </div>
 
-                    {/* Switch para cambiar tarifa (existente) */}
+                    {/* Switch para cambiar tarifa */}
                     <div className="border-t border-gray-100 pt-4 mt-2">
                         <label className="flex items-center gap-3 cursor-pointer group">
                             <div className="relative">

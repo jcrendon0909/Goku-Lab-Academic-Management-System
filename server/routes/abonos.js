@@ -4,7 +4,7 @@ import Pago from "../models/Pago.js";
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
 import { crearPagoId } from "../utils/pagos.js";
-import cache from "../utils/cache.js"; // ← Importar caché
+import cache from "../utils/cache.js";
 
 const router = express.Router();
 
@@ -27,9 +27,9 @@ router.post("/", async (req, res) => {
             nuevoMontoMensual
         } = req.body;
 
-        // Validar campos
-        if (!pagoId || !montoAbono || !idAlumno || !grupoId) {
-            return res.status(400).json({ error: "Faltan datos obligatorios" });
+        // ✅ Validación corregida: permite montoAbono = 0
+        if (!pagoId || montoAbono === undefined || montoAbono === null || montoAbono < 0 || !idAlumno || !grupoId) {
+            return res.status(400).json({ error: "Faltan datos obligatorios o monto inválido" });
         }
 
         // Normalizar fechaAbono a hora fija (12:00) para evitar offset de zona horaria
@@ -52,11 +52,39 @@ router.post("/", async (req, res) => {
 
         const fechaInicio = new Date(pagoBase.fechaInicioPago);
         const diaPago = pagoBase.diaPago || 1;
-
         const montoTotal = Number(montoAbono);
+
+        // ============================================================
+        // ✅ CASO ESPECIAL: ABONO DE $0 (solo trazabilidad)
+        // ============================================================
+        if (montoTotal === 0) {
+            const nuevoAbono = new Abono({
+                abonoId: await generarId("abono"),
+                pagoId,
+                idAlumno,
+                grupoId,
+                nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+                montoAbono: 0,
+                metodoAbono: metodoAbono || "Efectivo",
+                fechaAbono: fechaAbono,
+                notas: "Abono de $0 (sin pago)",
+            });
+            await nuevoAbono.save();
+
+            cache.flushAll();
+            console.log(`🗑️ Caché invalidada por abono de $0 para ${idAlumno}`);
+
+            return res.status(201).json({
+                message: "Abono de $0 registrado (sin pago)",
+                abono: nuevoAbono,
+            });
+        }
+
+        // ============================================================
+        // ✅ ABONO NORMAL (> 0)
+        // ============================================================
         const montoPorMes = montoTotal / mesesCubiertos;
         const montoConDescuento = montoPorMes;
-
         const abonosCreados = [];
 
         for (let i = 0; i < mesesCubiertos; i++) {
@@ -137,9 +165,8 @@ router.post("/", async (req, res) => {
             }
         }
 
-        // 🔥 INVALIDAR CACHÉ DE PAGOS PARA QUE SE REFRESQUE LA VISTA
         cache.flushAll();
-        console.log('🗑️ Caché de pagos invalidada por nuevo abono.');
+        console.log('🗑️ Caché invalidada por nuevo abono.');
 
         res.status(201).json({
             message: `Abono distribuido en ${mesesCubiertos} meses`,
