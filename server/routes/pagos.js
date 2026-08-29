@@ -8,7 +8,7 @@ import cache from "../utils/cache.js";
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN PARA SINCRONIZAR PAGOS (EXPORTADA PARA index.js)
+// FUNCIÓN PARA SINCRONIZAR PAGOS (CON PRESERVACIÓN DE DESCUENTOS)
 // ============================================================
 export async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
@@ -16,7 +16,12 @@ export async function sincronizarPagosDesdeInscripciones() {
         montoMensualidad: { $gt: 0 },
     }).lean();
 
-    if (!inscripciones.length) return;
+    if (!inscripciones.length) {
+        console.log('⚠️ No hay inscripciones activas para sincronizar');
+        return;
+    }
+
+    console.log(`📊 Sincronizando pagos para ${inscripciones.length} inscripciones...`);
 
     const grupos = await Grupo.find().lean();
     const gruposMap = new Map();
@@ -25,41 +30,75 @@ export async function sincronizarPagosDesdeInscripciones() {
         if (id) gruposMap.set(id.toUpperCase(), g);
     }
 
+    let actualizados = 0;
+    let preservados = 0;
+
     for (const ins of inscripciones) {
         const idAlumno = String(ins.idAlumno || "").trim();
         const grupoId = String(ins.grupoId || ins.GrupoId || "").trim();
         if (!idAlumno || !grupoId) continue;
 
         const fechaInicio = ins.fechaInicioPago || ins.fechaInscripcion || new Date();
-        // Normalizar a las 12:00 para evitar offset
         fechaInicio.setHours(12, 0, 0, 0);
         const mesStr = `${fechaInicio.getFullYear()}-${String(fechaInicio.getMonth() + 1).padStart(2, "0")}`;
         const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
 
         const grupo = gruposMap.get(grupoId.toUpperCase());
 
-        await Pago.updateOne(
-            { pagoId },
-            {
-                $set: {
-                    pagoId,
-                    idAlumno,
-                    nombreAlumno: ins.nombreAlumno || idAlumno,
-                    grupoId,
-                    nombreCurso: grupo?.nombreCurso || "Curso",
-                    diaPago: Number(ins.diaPago) || 1,
-                    montoPago: Number(ins.montoMensualidad),
-                    fechaInicioPago: fechaInicio,
-                    activo: true,
-                    fechaBaja: null,
-                    estatus: "Pendiente",
-                },
-            },
-            { upsert: true }
-        );
-    }
-}
+        // ✅ Verificar si el pago ya existe
+        const pagoExistente = await Pago.findOne({ pagoId }).lean();
 
+        if (pagoExistente) {
+            // ✅ SI EL PAGO YA EXISTE, NO MODIFICAR SU MONTO (preservar descuentos manuales)
+            preservados++;
+            // Solo actualizar los campos que no sean montoPago
+            await Pago.updateOne(
+                { pagoId },
+                {
+                    $set: {
+                        pagoId,
+                        idAlumno,
+                        nombreAlumno: ins.nombreAlumno || idAlumno,
+                        grupoId,
+                        nombreCurso: grupo?.nombreCurso || "Curso",
+                        diaPago: Number(ins.diaPago) || 1,
+                        fechaInicioPago: fechaInicio,
+                        activo: true,
+                        fechaBaja: null,
+                        estatus: pagoExistente.estatus || "Pendiente", // Mantener estatus existente
+                        // ✅ NO ACTUALIZAR montoPago ni descuentoAplicado
+                    },
+                }
+            );
+        } else {
+            // ✅ Pago nuevo: usar monto de la inscripción
+            const montoBase = Number(ins.montoMensualidad);
+            await Pago.updateOne(
+                { pagoId },
+                {
+                    $set: {
+                        pagoId,
+                        idAlumno,
+                        nombreAlumno: ins.nombreAlumno || idAlumno,
+                        grupoId,
+                        nombreCurso: grupo?.nombreCurso || "Curso",
+                        diaPago: Number(ins.diaPago) || 1,
+                        montoPago: montoBase,
+                        fechaInicioPago: fechaInicio,
+                        activo: true,
+                        fechaBaja: null,
+                        estatus: "Pendiente",
+                        descuentoAplicado: 0,
+                    },
+                },
+                { upsert: true }
+            );
+            actualizados++;
+        }
+    }
+
+    console.log(`✅ Sincronización completada. Nuevos: ${actualizados}, Preservados (sin modificar): ${preservados}`);
+}
 // ============================================================
 // GET /lista-completa – CON FILTRO DE MES Y CACHÉ
 // ============================================================
@@ -87,6 +126,12 @@ router.get("/lista-completa", async (req, res) => {
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
+
+        // 🔥 1. Sincronizar pagos (con preservación de descuentos)
+        await sincronizarPagosDesdeInscripciones();
+
+        // 🔥 2. Limpiar caché después de sincronizar (para que la consulta use datos frescos)
+        cache.flushAll();
 
         // Filtro base: solo pagos activos Y con formato de mes (terminan en -YYYY-MM)
         const matchBase = {
@@ -143,7 +188,7 @@ router.get("/lista-completa", async (req, res) => {
 
         // Construir periodos y filtrar según vista
         const hoy = new Date();
-        hoy.setHours(12, 0, 0, 0); // Normalizar a las 12:00
+        hoy.setHours(12, 0, 0, 0);
         const mesActual = mes ? parseInt(mes) : hoy.getMonth() + 1;
         const anioActual = anio ? parseInt(anio) : hoy.getFullYear();
         const totalMesesHoy = anioActual * 12 + mesActual;
@@ -155,7 +200,7 @@ router.get("/lista-completa", async (req, res) => {
 
             const periodosMensuales = pagosOrdenados.map((pago) => {
                 const fechaVencimiento = new Date(pago.fechaInicioPago);
-                fechaVencimiento.setHours(12, 0, 0, 0); // Normalizar
+                fechaVencimiento.setHours(12, 0, 0, 0);
                 const abonosDelPago = pago.historialAbonos || [];
                 const totalAbonado = abonosDelPago.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
                 const saldo = Math.max(0, pago.montoPago - totalAbonado);
@@ -175,6 +220,8 @@ router.get("/lista-completa", async (req, res) => {
                 };
             });
 
+            // ... resto del código sin cambios (filtros, paginación, etc.)
+            // (Mantén el resto de la lógica de filtrado y paginación igual a como estaba)
             const tienePendientesPasados = periodosMensuales.some((m) => {
                 const v = new Date(m.vencimiento);
                 v.setHours(12, 0, 0, 0);
@@ -281,6 +328,6 @@ router.get("/lista-completa", async (req, res) => {
     }
 });
 
-// ... resto de rutas sin cambios
+// ... resto de rutas (actualizar-dia, etc.)
 
 export default router;

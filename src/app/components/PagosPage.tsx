@@ -92,12 +92,10 @@ export function PagosPage() {
             // ✅ Procesar pagos SIN redistribución
             const pagosProcesados = pagosData.map((pago: any) => {
                 // Ya no hacemos redistribución; usamos los valores del backend
-                // Solo aseguramos que periodosMensuales exista y esté ordenado
                 const periodos = (pago.periodosMensuales || []).sort((a: any, b: any) => {
                     return new Date(a.vencimiento).getTime() - new Date(b.vencimiento).getTime();
                 });
 
-                // Calcular totales sumando los periodos
                 const totalMonto = periodos.reduce((sum: number, m: any) => sum + (m.monto || 0), 0);
                 const totalPagado = periodos.reduce((sum: number, m: any) => sum + (m.pagado || 0), 0);
                 const saldoTotal = Math.max(0, totalMonto - totalPagado);
@@ -334,9 +332,6 @@ export function PagosPage() {
                                 onRegisterPayment={(mesElegido) => {
                                     const pagoId = mesElegido.pagoId || p.pagoId || p.id;
                                     const grupoId = mesElegido.grupoId || p.grupoId;
-                                    console.log('🔍 Mes elegido:', mesElegido);
-                                    console.log('🔍 pagoId a usar:', pagoId);
-                                    console.log('🔍 grupoId a usar:', grupoId);
                                     setSelectedPayment({
                                         ...p,
                                         saldo: mesElegido.saldo,

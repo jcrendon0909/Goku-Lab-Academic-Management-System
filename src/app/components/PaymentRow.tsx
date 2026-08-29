@@ -23,7 +23,7 @@ interface PaymentRowProps {
     onRegisterPayment: (mesElegido?: any) => void;
     onChangePaymentDate: () => void;
     onPrintReceipt?: (mes: any) => void;
-    onEditarAbono?: (abono: any) => void; // 👈 Nueva prop
+    onEditarAbono?: (abono: any) => void;
 }
 
 export function PaymentRow({ 
@@ -32,7 +32,7 @@ export function PaymentRow({
     onRegisterPayment, 
     onChangePaymentDate, 
     onPrintReceipt,
-    onEditarAbono // 👈 Recibimos la función
+    onEditarAbono
 }: PaymentRowProps) {
     const isPaid = payment.status === "Pagado" || vista === 'registro';
     const esProgramado = payment.status === "Programado" || payment.cobroProgramado;
@@ -75,20 +75,14 @@ export function PaymentRow({
 
     const vencido = !esProgramado && estaVencido(payment.fechaLimite, payment.status);
 
-    // Función para manejar la edición de un abono
     const handleEditarAbono = (mes: any) => {
         if (!onEditarAbono) return;
-        // Buscar el abono correspondiente a este mes
-        // Si el mes tiene un abonoId o pagoId, lo usamos para obtener el abono completo
-        // En este caso, asumimos que el mes tiene un abonoId o que podemos obtenerlo desde el pago
-        // Si no, mostramos un mensaje
         if (!mes.abonoId && !mes.pagoId) {
             alert('No se puede editar este abono porque no tiene un identificador');
             return;
         }
-        // Construimos un objeto abono con los datos que tenemos
         const abono = {
-            abonoId: mes.abonoId || `ABO-${mes.pagoId}`, // Fallback
+            abonoId: mes.abonoId || `ABO-${mes.pagoId}`,
             pagoId: mes.pagoId || payment.pagoId,
             idAlumno: payment.idAlumno,
             grupoId: payment.grupoId,
@@ -103,10 +97,8 @@ export function PaymentRow({
 
     return (
         <div className="rounded-xl border bg-white p-6 shadow-sm space-y-4">
-
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-6 flex-1 flex-wrap">
-
                     <div className="flex flex-col min-w-[120px]">
                         <span className="text-[10px] font-bold text-cyan-600 uppercase">
                             {isPaid ? "Último Pago" : "Próximo Vencimiento"}
@@ -192,7 +184,11 @@ export function PaymentRow({
                                 const indiceReal = periodosRaw.indexOf(mes);
                                 const estaBloqueado = indiceReal > primerMesPendienteIndex && primerMesPendienteIndex !== -1;
 
-                                console.log('🔍 Renderizando mes:', mes.clave, 'pagoId:', mes.pagoId);
+                                // ✅ CORRECCIÓN: Forzar el monto correcto si el mes está pagado y el monto es mayor que el pagado
+                                let montoMostrar = mes.monto;
+                                if (esPagado && mes.pagado > 0 && mes.pagado < mes.monto) {
+                                    montoMostrar = mes.pagado;
+                                }
 
                                 return (
                                     <div key={mes.clave} className={`flex flex-col justify-between rounded-lg border px-4 py-3 text-xs ${esPagado ? 'border-emerald-100 bg-emerald-50/30' : 'border-gray-100 bg-gray-50'}`}>
@@ -224,7 +220,7 @@ export function PaymentRow({
 
                                             <div className="mt-2 flex justify-between items-end border-t pt-2 font-medium">
                                                 <div className="flex flex-col">
-                                                    <span>${formatearMonto(mes.pagado)} / ${formatearMonto(mes.monto)}</span>
+                                                    <span>${formatearMonto(mes.pagado)} / ${formatearMonto(montoMostrar)}</span>
                                                     {mes.pagado > 0 && (mes.metodoAbono || mes.metodoPago) && (
                                                         <span className="text-[9px] font-bold text-gray-400 uppercase mt-0.5">
                                                             💳 {mes.metodoAbono || mes.metodoPago}
@@ -241,7 +237,7 @@ export function PaymentRow({
                                                     if (!estaBloqueado) {
                                                         onRegisterPayment({
                                                             ...mes,
-                                                            pagoId: mes.pagoId // ← Asegurar que pagoId se pase
+                                                            pagoId: mes.pagoId
                                                         });
                                                     }
                                                 }}
