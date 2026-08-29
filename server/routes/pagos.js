@@ -8,7 +8,7 @@ import cache from "../utils/cache.js";
 const router = express.Router();
 
 // ============================================================
-// FUNCIÓN PARA SINCRONIZAR PAGOS (CON PRESERVACIÓN DE DESCUENTOS)
+// FUNCIÓN PARA SINCRONIZAR PAGOS (EXPORTADA PARA index.js)
 // ============================================================
 export async function sincronizarPagosDesdeInscripciones() {
     const inscripciones = await Inscripcion.find({
@@ -30,8 +30,8 @@ export async function sincronizarPagosDesdeInscripciones() {
         if (id) gruposMap.set(id.toUpperCase(), g);
     }
 
-    let actualizados = 0;
-    let preservados = 0;
+    // 🔥 Usar bulkWrite para mejorar rendimiento
+    const bulkOps = [];
 
     for (const ins of inscripciones) {
         const idAlumno = String(ins.idAlumno || "").trim();
@@ -44,17 +44,33 @@ export async function sincronizarPagosDesdeInscripciones() {
         const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
 
         const grupo = gruposMap.get(grupoId.toUpperCase());
+        const montoBase = Number(ins.montoMensualidad);
 
         // ✅ Verificar si el pago ya existe
         const pagoExistente = await Pago.findOne({ pagoId }).lean();
 
+        let montoPago = montoBase;
+        let descuentoAplicado = 0;
+
         if (pagoExistente) {
-            // ✅ SI EL PAGO YA EXISTE, NO MODIFICAR SU MONTO (preservar descuentos manuales)
-            preservados++;
-            // Solo actualizar los campos que no sean montoPago
-            await Pago.updateOne(
-                { pagoId },
-                {
+            // Si el monto existente es diferente al de la inscripción, es un descuento → PRESERVAR
+            if (pagoExistente.montoPago !== montoBase) {
+                montoPago = pagoExistente.montoPago;
+                descuentoAplicado = montoBase - montoPago;
+                // No agregar a bulkOps porque ya está actualizado y tiene descuento
+                continue;
+            }
+            // Si el monto coincide, no hay cambios
+            if (pagoExistente.montoPago === montoBase) {
+                continue;
+            }
+        }
+
+        // Solo actualizar si es nuevo o hay cambios
+        bulkOps.push({
+            updateOne: {
+                filter: { pagoId },
+                update: {
                     $set: {
                         pagoId,
                         idAlumno,
@@ -62,43 +78,27 @@ export async function sincronizarPagosDesdeInscripciones() {
                         grupoId,
                         nombreCurso: grupo?.nombreCurso || "Curso",
                         diaPago: Number(ins.diaPago) || 1,
-                        fechaInicioPago: fechaInicio,
-                        activo: true,
-                        fechaBaja: null,
-                        estatus: pagoExistente.estatus || "Pendiente", // Mantener estatus existente
-                        // ✅ NO ACTUALIZAR montoPago ni descuentoAplicado
-                    },
-                }
-            );
-        } else {
-            // ✅ Pago nuevo: usar monto de la inscripción
-            const montoBase = Number(ins.montoMensualidad);
-            await Pago.updateOne(
-                { pagoId },
-                {
-                    $set: {
-                        pagoId,
-                        idAlumno,
-                        nombreAlumno: ins.nombreAlumno || idAlumno,
-                        grupoId,
-                        nombreCurso: grupo?.nombreCurso || "Curso",
-                        diaPago: Number(ins.diaPago) || 1,
-                        montoPago: montoBase,
                         fechaInicioPago: fechaInicio,
                         activo: true,
                         fechaBaja: null,
                         estatus: "Pendiente",
-                        descuentoAplicado: 0,
+                        montoPago: montoPago,
+                        descuentoAplicado: descuentoAplicado,
                     },
                 },
-                { upsert: true }
-            );
-            actualizados++;
-        }
+                upsert: true,
+            }
+        });
     }
 
-    console.log(`✅ Sincronización completada. Nuevos: ${actualizados}, Preservados (sin modificar): ${preservados}`);
+    if (bulkOps.length > 0) {
+        const result = await Pago.bulkWrite(bulkOps);
+        console.log(`✅ Sincronización completada: ${result.modifiedCount} modificados, ${result.upsertedCount} nuevos`);
+    } else {
+        console.log(`✅ Sincronización completada: sin cambios`);
+    }
 }
+
 // ============================================================
 // GET /lista-completa – CON FILTRO DE MES Y CACHÉ
 // ============================================================
@@ -127,11 +127,8 @@ router.get("/lista-completa", async (req, res) => {
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
 
-        // 🔥 1. Sincronizar pagos (con preservación de descuentos)
-        await sincronizarPagosDesdeInscripciones();
-
-        // 🔥 2. Limpiar caché después de sincronizar (para que la consulta use datos frescos)
-        cache.flushAll();
+        // ❌ ELIMINAR: await sincronizarPagosDesdeInscripciones();
+        // ❌ ELIMINAR: cache.flushAll();
 
         // Filtro base: solo pagos activos Y con formato de mes (terminan en -YYYY-MM)
         const matchBase = {
@@ -220,8 +217,6 @@ router.get("/lista-completa", async (req, res) => {
                 };
             });
 
-            // ... resto del código sin cambios (filtros, paginación, etc.)
-            // (Mantén el resto de la lógica de filtrado y paginación igual a como estaba)
             const tienePendientesPasados = periodosMensuales.some((m) => {
                 const v = new Date(m.vencimiento);
                 v.setHours(12, 0, 0, 0);
@@ -328,6 +323,11 @@ router.get("/lista-completa", async (req, res) => {
     }
 });
 
-// ... resto de rutas (actualizar-dia, etc.)
+// ============================================================
+// PATCH /actualizar-dia/:id
+// ============================================================
+router.patch("/actualizar-dia/:id", async (req, res) => {
+    // ... (código sin cambios)
+});
 
 export default router;

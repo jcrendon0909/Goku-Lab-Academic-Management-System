@@ -5,6 +5,8 @@ import Pago from "../models/Pago.js";
 import Abono from "../models/Abono.js";
 import Reagendacion from "../models/Reagendacion.js";
 import mongoose from "mongoose";
+import { sincronizarPagosDesdeInscripciones } from "./pagos.js";
+import cache from "../utils/cache.js"; // ✅ Importación agregada
 
 const router = express.Router();
 
@@ -104,6 +106,10 @@ router.patch("/:idAlumno/mover", async (req, res) => {
       { $set: { grupoId: nuevoGrupoId.trim() } }
     );
 
+    // ✅ Sincronizar pagos y limpiar caché después del movimiento
+    await sincronizarPagosDesdeInscripciones();
+    cache.flushAll();
+
     res.status(200).json({
       ok: true,
       mensaje: `Alumno movido de ${grupoActualId} a ${nuevoGrupoId}`,
@@ -178,6 +184,10 @@ router.post("/", async (req, res) => {
 
     await nuevaInscripcion.save();
 
+    // ✅ Sincronizar pagos y limpiar caché después de crear inscripción
+    await sincronizarPagosDesdeInscripciones();
+    cache.flushAll();
+
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     const fechaIns = new Date(fechaInscripcion);
@@ -211,7 +221,7 @@ router.post("/", async (req, res) => {
 });
 
 // ============================================================
-// PATCH – ACTUALIZAR INSCRIPCIÓN
+// PATCH – ACTUALIZAR INSCRIPCIÓN (solo modalidad y comentarios)
 // ============================================================
 router.patch("/:idAlumno/:grupoId", async (req, res) => {
   try {
@@ -278,7 +288,7 @@ router.get("/grupo/:grupoId", async (req, res) => {
 router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
-    const { fechaFin } = req.body; // "2026-07-31" o ISO string
+    const { fechaFin } = req.body;
 
     if (!fechaFin) {
       return res.status(400).json({ error: "Debes especificar la fecha de finalización" });
@@ -297,12 +307,11 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       return res.status(400).json({ error: "El curso ya está finalizado" });
     }
 
-    // Actualizar inscripción
     inscripcion.estatus = "Finalizada";
     inscripcion.fechaFin = fechaCorte;
     await inscripcion.save();
 
-    // 1. Desactivar pagos futuros (fechaInicioPago > fechaCorte)
+    // 1. Desactivar pagos futuros
     const Pago = mongoose.model("Pago");
     const pagosFuturos = await Pago.updateMany(
       { 
@@ -321,7 +330,7 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       }
     );
 
-    // 2. Desactivar reagendaciones futuras para este alumno-grupo
+    // 2. Desactivar reagendaciones futuras
     const Reagendacion = mongoose.model("Reagendacion");
     const reagendacionesFuturas = await Reagendacion.updateMany(
       {
@@ -338,7 +347,7 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       }
     );
 
-    // 3. Opcional: eliminar asistencia futura para este alumno-grupo (no es necesario, pero si existe)
+    // 3. Actualizar asistencias futuras (opcional)
     const Asistencia = mongoose.model("Asistencia");
     await Asistencia.updateMany(
       {
@@ -354,6 +363,10 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       }
     );
 
+    // ✅ Sincronizar pagos y limpiar caché después de finalizar
+    await sincronizarPagosDesdeInscripciones();
+    cache.flushAll();
+
     res.json({
       ok: true,
       mensaje: "Curso finalizado correctamente",
@@ -364,7 +377,6 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
         fechaCorte: fechaCorte.toISOString()
       }
     });
-
   } catch (error) {
     console.error("❌ Error PATCH /inscripciones/finalizar:", error);
     res.status(500).json({ error: error.message });

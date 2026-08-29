@@ -1,6 +1,7 @@
 import express from "express";
 import Inscripcion from "../models/Inscripcion.js";
 import Pago from "../models/Pago.js";
+import { sincronizarPagosDesdeInscripciones } from "./pagos.js";
 
 const router = express.Router();
 
@@ -62,7 +63,8 @@ router.patch("/inscripciones/:id", async (req, res) => {
       cambios,
     });
     await inscripcion.save();
-
+    await sincronizarPagosDesdeInscripciones();
+    cache.flushAll();
     // ============================================================
     // 🔥 SINCRONIZAR PAGOS
     // ============================================================
