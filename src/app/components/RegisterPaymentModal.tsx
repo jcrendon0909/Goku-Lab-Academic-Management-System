@@ -98,7 +98,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
                                 <input
                                     type="number"
-                                    min="1"
+                                    min="0"
                                     step="0.01"
                                     required
                                     value={monto}
@@ -155,7 +155,7 @@ export function RegisterPaymentModal({ payment, onClose, onConfirm }: RegisterPa
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="number"
-                                        min="1"
+                                        min="0"
                                         max="100"
                                         value={descuentoPorcentaje}
                                         onChange={(e) => setDescuentoPorcentaje(Number(e.target.value))}
