@@ -145,6 +145,7 @@ router.patch("/:idAlumno", async (req, res) => {
 router.delete("/:idAlumno", async (req, res) => {
   try {
     const { idAlumno } = req.params;
+    // Verificar si tiene inscripciones activas
     const activas = await Inscripcion.countDocuments({ idAlumno, estatus: "Activa" });
     if (activas > 0) {
       return res.status(409).json({
@@ -152,11 +153,54 @@ router.delete("/:idAlumno", async (req, res) => {
         inscripcionesActivas: activas
       });
     }
+    // Eliminar el alumno
     const alumno = await Alumno.findOneAndDelete({ idAlumno });
-    if (!alumno) return res.status(404).json({ error: "Alumno no encontrado" });
+    if (!alumno) {
+      return res.status(404).json({ error: "Alumno no encontrado" });
+    }
     res.json({ ok: true, mensaje: "Alumno eliminado" });
   } catch (error) {
     console.error("❌ DELETE /alumnos/:idAlumno:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PATCH /:idAlumno/desactivar - Desactivar un alumno (baja lógica)
+router.patch("/:idAlumno/desactivar", async (req, res) => {
+  try {
+    const { idAlumno } = req.params;
+    const { motivo } = req.body;
+
+    // Buscar el alumno
+    const alumno = await Alumno.findOne({ idAlumno });
+    if (!alumno) {
+      return res.status(404).json({ error: "Alumno no encontrado" });
+    }
+
+    // Cambiar estatus a Inactivo
+    alumno.estatus = "Inactivo";
+    alumno.updatedAt = new Date();
+    await alumno.save();
+
+    // Dar de baja todas sus inscripciones activas
+    await Inscripcion.updateMany(
+      { idAlumno, estatus: "Activa" },
+      { 
+        $set: { 
+          estatus: "Inactiva", 
+          fechaBaja: new Date(),
+          motivoBaja: motivo || "Alumno desactivado"
+        } 
+      }
+    );
+
+    res.json({ 
+      ok: true, 
+      mensaje: "Alumno desactivado correctamente",
+      data: alumno
+    });
+  } catch (error) {
+    console.error("❌ PATCH /alumnos/:idAlumno/desactivar:", error);
     res.status(500).json({ error: error.message });
   }
 });

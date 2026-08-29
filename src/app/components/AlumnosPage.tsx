@@ -45,6 +45,7 @@ interface Grupo {
 
 // ----------------------------- COMPONENTE PRINCIPAL -----------------------------
 export function AlumnosPage() {
+  const user = JSON.parse(localStorage.getItem('user') || '{}'); // ✅ Obtener usuario
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -230,6 +231,30 @@ export function AlumnosPage() {
     }
   };
 
+  // ✅ Eliminar alumno (permanentemente)
+  const eliminarAlumno = async (idAlumno: string) => {
+    if (!confirm('¿Eliminar este alumno permanentemente? Esta acción no se puede deshacer.')) return;
+    try {
+      const res = await apiFetch(`/alumnos/${idAlumno}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Error al eliminar');
+      }
+      toast.success('✅ Alumno eliminado correctamente');
+      cargarAlumnos();
+      setAlumnoExpandido(null);
+      setInscripciones(prev => {
+        const newState = { ...prev };
+        delete newState[idAlumno];
+        return newState;
+      });
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
   const abrirModalMover = async (inscripcion: Inscripcion, alumno: Alumno) => {
     setInscripcionSeleccionada(inscripcion);
     setAlumnoActual(alumno);
@@ -303,7 +328,6 @@ export function AlumnosPage() {
   // ----------------------------- FUNCIÓN FINALIZAR CURSO (con modal) -----------------------------
   const abrirModalFinalizar = (idAlumno: string, grupoId: string) => {
     setFinalizarData({ idAlumno, grupoId });
-    // Preestablecer fecha de hoy como default
     const hoy = new Date().toISOString().slice(0, 10);
     setFechaFin(hoy);
     setShowFinalizarModal(true);
@@ -564,6 +588,16 @@ export function AlumnosPage() {
                                     title="Reactivar alumno"
                                   >
                                     🔄
+                                  </button>
+                                )}
+                                {/* ✅ Botón Eliminar */}
+                                {user.rol === 'admin' && (
+                                  <button
+                                    onClick={() => eliminarAlumno(alumno.idAlumno)}
+                                    className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-all hover:scale-110 text-sm font-medium"
+                                    title="Eliminar alumno permanentemente"
+                                  >
+                                    🗑️
                                   </button>
                                 )}
                               </div>
