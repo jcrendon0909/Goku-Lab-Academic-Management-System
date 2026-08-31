@@ -155,11 +155,18 @@ export function construirPeriodosMensuales({
     }
   }
 
+  // Agrupar abonos por mes (clave YYYY-MM)
+  const abonosPorMes = {};
+  abonos.forEach(ab => {
+    const fecha = new Date(ab.fechaAbono);
+    if (!isNaN(fecha.getTime())) {
+      const clave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+      if (!abonosPorMes[clave]) abonosPorMes[clave] = [];
+      abonosPorMes[clave].push(ab);
+    }
+  });
+
   const periodos = [];
-  let bolsaDeDinero = abonos.reduce(
-    (total, abono) => total + Number(abono.montoAbono || 0),
-    0
-  );
 
   for (let indice = mesInicio; indice <= limiteSuperior; indice += 1) {
     const anio = Math.floor(indice / 12);
@@ -167,24 +174,21 @@ export function construirPeriodosMensuales({
     const ultimoDia = new Date(anio, mes + 1, 0).getDate();
     const diaVenc = Math.min(diaPago, ultimoDia);
     const inicioMes = new Date(anio, mes, 1, 0, 0, 0, 0);
-    const finMes = new Date(anio, mes + 1, 0, 23, 59, 59, 999);
     const vencimiento = new Date(anio, mes, diaVenc, 23, 59, 59, 999);
 
-    let pagadoMes = 0;
-    if (bolsaDeDinero >= monto) {
-      pagadoMes = monto;
-      bolsaDeDinero -= monto;
-    } else if (bolsaDeDinero > 0) {
-      pagadoMes = bolsaDeDinero;
-      bolsaDeDinero = 0;
-    }
+    const claveMes = `${anio}-${String(mes + 1).padStart(2, '0')}`;
+    const abonosDelMes = abonosPorMes[claveMes] || [];
+    const pagadoMes = abonosDelMes.reduce((sum, ab) => sum + Number(ab.montoAbono || 0), 0);
+    const tieneAbono = abonosDelMes.length > 0;
 
-    const saldoMes = Math.max(monto - pagadoMes, 0);
     let status = "Pendiente";
 
     if (indice < mesInicio) {
       status = "Programado";
-    } else if (saldoMes < 0.01) {
+    } else if (tieneAbono && pagadoMes === 0) {
+      // ✅ Abono de 0 → mes pagado (descuento total)
+      status = "Pagado";
+    } else if (pagadoMes >= monto) {
       status = "Pagado";
     } else if (indice > mesHoy) {
       status = "Programado";
@@ -196,8 +200,11 @@ export function construirPeriodosMensuales({
       status = "Pendiente";
     }
 
+    const saldoMes = status === "Pagado" ? 0 : Math.max(monto - pagadoMes, 0);
+    const saldo = status === "Programado" ? monto : saldoMes;
+
     periodos.push({
-      clave: `${anio}-${String(mes + 1).padStart(2, "0")}`,
+      clave: claveMes,
       nombreMes: inicioMes.toLocaleDateString("es-MX", {
         month: "long",
         year: "numeric",
@@ -205,7 +212,7 @@ export function construirPeriodosMensuales({
       vencimiento: vencimiento.toISOString(),
       monto,
       pagado: pagadoMes,
-      saldo: status === "Programado" ? monto : saldoMes,
+      saldo,
       status,
     });
   }

@@ -89,6 +89,50 @@ export async function sincronizarPagosDesdeInscripciones() {
                 upsert: true,
             }
         });
+
+        // ============================================================
+        // ✅ CREAR/ACTUALIZAR PAGO BASE (sin mes) para cada inscripción
+        // ============================================================
+        const pagoIdBase = crearPagoId(idAlumno, grupoId); // sin mes
+        // Verificar si ya existe un pago base activo
+        const pagoBaseExistente = await Pago.findOne({ pagoId: pagoIdBase }).lean();
+        if (!pagoBaseExistente) {
+            // Crear el pago base si no existe
+            bulkOps.push({
+                updateOne: {
+                    filter: { pagoId: pagoIdBase },
+                    update: {
+                        $set: {
+                            pagoId: pagoIdBase,
+                            idAlumno,
+                            nombreAlumno: ins.nombreAlumno || idAlumno,
+                            grupoId,
+                            nombreCurso: grupo?.nombreCurso || "Curso",
+                            diaPago: Number(ins.diaPago) || 1,
+                            montoPago: montoBase,
+                            fechaInicioPago: fechaInicio,
+                            activo: true,
+                            fechaBaja: null,
+                            estatus: "Pendiente",
+                            descuentoAplicado: 0,
+                        },
+                    },
+                    upsert: true,
+                }
+            });
+        } else {
+            // Si existe, asegurar que esté activo
+            if (!pagoBaseExistente.activo) {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { pagoId: pagoIdBase },
+                        update: {
+                            $set: { activo: true, fechaBaja: null, updatedAt: new Date() }
+                        }
+                    }
+                });
+            }
+        }
     }
 
     if (bulkOps.length > 0) {
@@ -327,7 +371,28 @@ router.get("/lista-completa", async (req, res) => {
 // PATCH /actualizar-dia/:id
 // ============================================================
 router.patch("/actualizar-dia/:id", async (req, res) => {
-    // ... (código sin cambios)
+    try {
+        const { id } = req.params;
+        const { nuevoDia } = req.body;
+
+        if (!nuevoDia || nuevoDia < 1 || nuevoDia > 31) {
+            return res.status(400).json({ error: "Día de pago inválido (debe ser 1-31)" });
+        }
+
+        const pago = await Pago.findOne({ pagoId: id });
+        if (!pago) {
+            return res.status(404).json({ error: "Pago no encontrado" });
+        }
+
+        pago.diaPago = nuevoDia;
+        pago.updatedAt = new Date();
+        await pago.save();
+
+        res.json({ ok: true, mensaje: "Día de pago actualizado", data: pago });
+    } catch (error) {
+        console.error("Error PATCH /actualizar-dia:", error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 export default router;

@@ -1,6 +1,7 @@
 import express from "express";
 import Abono from "../models/Abono.js";
 import Pago from "../models/Pago.js";
+import Inscripcion from "../models/Inscripcion.js"; // ✅ Importación agregada
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
 import { crearPagoId } from "../utils/pagos.js";
@@ -42,11 +43,33 @@ router.post("/", async (req, res) => {
         // Buscar el pago base
         let pagoBase = await Pago.findOne({ pagoId });
         if (!pagoBase) {
+            // Intentar con pagoId sin mes
             const pagoIdSinMes = crearPagoId(idAlumno, grupoId);
             pagoBase = await Pago.findOne({ pagoId: pagoIdSinMes });
             if (!pagoBase) {
-                console.error(`❌ Pago base no encontrado: ${pagoId}`);
-                return res.status(404).json({ error: "Pago base no encontrado" });
+                // ✅ Crear pago base automáticamente si no existe
+                const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId, estatus: "Activa" });
+                if (!inscripcion) {
+                    console.error(`❌ No se encontró inscripción activa para ${idAlumno} en ${grupoId}`);
+                    return res.status(404).json({ error: "No se encontró inscripción activa para este alumno" });
+                }
+                // Crear pago base automáticamente
+                const pagoIdBase = crearPagoId(idAlumno, grupoId);
+                pagoBase = await Pago.create({
+                    pagoId: pagoIdBase,
+                    idAlumno,
+                    grupoId,
+                    nombreAlumno: nombreAlumno || inscripcion.nombreAlumno,
+                    nombreCurso: inscripcion.nombreCurso || "Curso",
+                    diaPago: inscripcion.diaPago || 1,
+                    montoPago: Number(inscripcion.montoMensualidad),
+                    fechaInicioPago: inscripcion.fechaInicioPago || new Date(),
+                    activo: true,
+                    periodo: "Mes",
+                    estatus: "Pendiente",
+                    descuentoAplicado: 0,
+                });
+                console.log(`✅ Pago base creado automáticamente: ${pagoIdBase}`);
             }
         }
 
