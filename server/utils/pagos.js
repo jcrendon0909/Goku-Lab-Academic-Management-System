@@ -130,6 +130,9 @@ export function cobroAunNoInicia(fechaInicioCobro, hoy = new Date()) {
   return indiceMes(hoy) < indiceMes(inicio);
 }
 
+// ============================================================
+// ✅ FUNCIÓN RESTAURADA (versión original con bolsaDeDinero + abonos de 0)
+// ============================================================
 export function construirPeriodosMensuales({
   fechaInicioCobro,
   diaPagoFijo,
@@ -155,18 +158,23 @@ export function construirPeriodosMensuales({
     }
   }
 
-  // Agrupar abonos por mes (clave YYYY-MM)
-  const abonosPorMes = {};
+  const periodos = [];
+
+  // ✅ Restauramos la bolsa de dinero (asignación secuencial)
+  let bolsaDeDinero = abonos.reduce(
+    (total, abono) => total + Number(abono.montoAbono || 0),
+    0
+  );
+
+  // ✅ Detectamos meses con abono (para abonos de 0)
+  const mesesConAbono = new Set();
   abonos.forEach(ab => {
     const fecha = new Date(ab.fechaAbono);
     if (!isNaN(fecha.getTime())) {
       const clave = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-      if (!abonosPorMes[clave]) abonosPorMes[clave] = [];
-      abonosPorMes[clave].push(ab);
+      mesesConAbono.add(clave);
     }
   });
-
-  const periodos = [];
 
   for (let indice = mesInicio; indice <= limiteSuperior; indice += 1) {
     const anio = Math.floor(indice / 12);
@@ -175,20 +183,24 @@ export function construirPeriodosMensuales({
     const diaVenc = Math.min(diaPago, ultimoDia);
     const inicioMes = new Date(anio, mes, 1, 0, 0, 0, 0);
     const vencimiento = new Date(anio, mes, diaVenc, 23, 59, 59, 999);
-
     const claveMes = `${anio}-${String(mes + 1).padStart(2, '0')}`;
-    const abonosDelMes = abonosPorMes[claveMes] || [];
-    const pagadoMes = abonosDelMes.reduce((sum, ab) => sum + Number(ab.montoAbono || 0), 0);
-    const tieneAbono = abonosDelMes.length > 0;
 
+    // Repartimos el dinero cronológicamente
+    let pagadoMes = 0;
+    if (bolsaDeDinero >= monto) {
+      pagadoMes = monto;
+      bolsaDeDinero -= monto;
+    } else if (bolsaDeDinero > 0) {
+      pagadoMes = bolsaDeDinero;
+      bolsaDeDinero = 0;
+    }
+
+    const saldoMes = Math.max(monto - pagadoMes, 0);
     let status = "Pendiente";
 
     if (indice < mesInicio) {
       status = "Programado";
-    } else if (tieneAbono && pagadoMes === 0) {
-      // ✅ Abono de 0 → mes pagado (descuento total)
-      status = "Pagado";
-    } else if (pagadoMes >= monto) {
+    } else if (saldoMes < 0.01) {
       status = "Pagado";
     } else if (indice > mesHoy) {
       status = "Programado";
@@ -200,8 +212,10 @@ export function construirPeriodosMensuales({
       status = "Pendiente";
     }
 
-    const saldoMes = status === "Pagado" ? 0 : Math.max(monto - pagadoMes, 0);
-    const saldo = status === "Programado" ? monto : saldoMes;
+    // ✅ Si el mes tiene un abono (aunque sea 0) y no se pagó nada, lo marcamos como Pagado
+    if (mesesConAbono.has(claveMes) && pagadoMes === 0 && saldoMes > 0) {
+      status = "Pagado";
+    }
 
     periodos.push({
       clave: claveMes,
@@ -212,7 +226,7 @@ export function construirPeriodosMensuales({
       vencimiento: vencimiento.toISOString(),
       monto,
       pagado: pagadoMes,
-      saldo,
+      saldo: status === "Programado" ? monto : Math.max(monto - pagadoMes, 0),
       status,
     });
   }

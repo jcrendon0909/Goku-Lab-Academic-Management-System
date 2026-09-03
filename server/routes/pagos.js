@@ -94,10 +94,8 @@ export async function sincronizarPagosDesdeInscripciones() {
         // ✅ CREAR/ACTUALIZAR PAGO BASE (sin mes) para cada inscripción
         // ============================================================
         const pagoIdBase = crearPagoId(idAlumno, grupoId); // sin mes
-        // Verificar si ya existe un pago base activo
         const pagoBaseExistente = await Pago.findOne({ pagoId: pagoIdBase }).lean();
         if (!pagoBaseExistente) {
-            // Crear el pago base si no existe
             bulkOps.push({
                 updateOne: {
                     filter: { pagoId: pagoIdBase },
@@ -121,7 +119,6 @@ export async function sincronizarPagosDesdeInscripciones() {
                 }
             });
         } else {
-            // Si existe, asegurar que esté activo
             if (!pagoBaseExistente.activo) {
                 bulkOps.push({
                     updateOne: {
@@ -171,10 +168,6 @@ router.get("/lista-completa", async (req, res) => {
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
 
-        // ❌ ELIMINAR: await sincronizarPagosDesdeInscripciones();
-        // ❌ ELIMINAR: cache.flushAll();
-
-        // Filtro base: solo pagos activos Y con formato de mes (terminan en -YYYY-MM)
         const matchBase = {
             activo: true,
             pagoId: { $regex: /-\d{4}-\d{2}$/ }
@@ -227,7 +220,6 @@ router.get("/lista-completa", async (req, res) => {
             alum.historialAbonos = alum.historialAbonos.concat(abonos);
         }
 
-        // Construir periodos y filtrar según vista
         const hoy = new Date();
         hoy.setHours(12, 0, 0, 0);
         const mesActual = mes ? parseInt(mes) : hoy.getMonth() + 1;
@@ -355,6 +347,24 @@ router.get("/lista-completa", async (req, res) => {
                 totalRecolectado
             }
         };
+
+        // ============================================================
+        // ✅ DEDUPLICAR PERIODOS POR CLAVE (evita duplicados en el frontend)
+        // ============================================================
+        responseData.data = responseData.data.map(item => {
+            if (item.periodosMensuales && Array.isArray(item.periodosMensuales)) {
+                const periodosUnicos = [];
+                const clavesVistas = new Set();
+                for (const periodo of item.periodosMensuales) {
+                    if (!clavesVistas.has(periodo.clave)) {
+                        clavesVistas.add(periodo.clave);
+                        periodosUnicos.push(periodo);
+                    }
+                }
+                item.periodosMensuales = periodosUnicos;
+            }
+            return item;
+        });
 
         cache.set(cacheKey, responseData);
         console.log(`✅ Datos guardados en caché: ${cacheKey}`);
