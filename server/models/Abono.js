@@ -27,7 +27,7 @@ const abonoSchema = new mongoose.Schema(
   }
 );
 
-// Índices compuestos (pagoId ya tiene index:true arriba, NO duplicar)
+// Índice compuesto (pagoId ya tiene index:true arriba, no duplicar)
 abonoSchema.index({ idAlumno: 1, grupoId: 1 });
 
 export default mongoose.model("Abono", abonoSchema, "abonos");
