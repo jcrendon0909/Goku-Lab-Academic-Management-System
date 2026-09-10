@@ -1,7 +1,9 @@
 import { notifyDataChanged } from "../utils/dataSync";
 
 // ✅ CORRECCIÓN: eliminar "/api" para que coincida con el backend
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// ✅ FORZAR URL DEL BACKEND LOCAL
+const API_URL = "http://localhost:4000";
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = localStorage.getItem("token");

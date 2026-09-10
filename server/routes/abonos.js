@@ -1,7 +1,7 @@
 import express from "express";
 import Abono from "../models/Abono.js";
 import Pago from "../models/Pago.js";
-import Inscripcion from "../models/Inscripcion.js"; // ✅ Importación agregada
+import Inscripcion from "../models/Inscripcion.js";
 import Alumno from "../models/Alumno.js";
 import { generarId } from "../utils/generarId.js";
 import { crearPagoId } from "../utils/pagos.js";
@@ -9,225 +9,343 @@ import cache from "../utils/cache.js";
 
 const router = express.Router();
 
+// Helper: normaliza "YYYY-MM-DD" a mediodía local (evita drift de TZ)
+function parseFechaAbono(raw) {
+  if (!raw) return new Date();
+  const [y, m, d] = String(raw).split('-').map(Number);
+  if (!y || !m || !d) return new Date(raw);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+// Helper: encuentra o crea el Pago base (sin sufijo de mes)
+async function getOCrearPagoBase({ pagoId, idAlumno, grupoId, nombreAlumno }) {
+  let pagoBase = await Pago.findOne({ pagoId });
+  if (pagoBase) return pagoBase;
+
+  const pagoIdSinMes = crearPagoId(idAlumno, grupoId);
+  pagoBase = await Pago.findOne({ pagoId: pagoIdSinMes });
+  if (pagoBase) return pagoBase;
+
+  const inscripcion = await Inscripcion.findOne({
+    idAlumno,
+    grupoId,
+    estatus: { $in: ["Activa", "activa", "ACTIVA"] },
+  });
+  if (!inscripcion) return null;
+
+  pagoBase = await Pago.create({
+    pagoId: pagoIdSinMes,
+    idAlumno,
+    grupoId,
+    nombreAlumno: nombreAlumno || inscripcion.nombreAlumno,
+    nombreCurso: inscripcion.nombreCurso || "Curso",
+    diaPago: inscripcion.diaPago || 1,
+    montoPago: Number(inscripcion.montoMensualidad) || 0,
+    fechaInicioPago: inscripcion.fechaInicioPago || new Date(),
+    activo: true,
+    periodo: "Mes",
+    estatus: "Pendiente",
+    descuentoAplicado: 0,
+    tipoPago: "normal",
+  });
+  console.log(`✅ Pago base creado automáticamente: ${pagoIdSinMes}`);
+  return pagoBase;
+}
+
 // ============================================================
-// POST / – REGISTRAR ABONO CON DISTRIBUCIÓN
+// POST / – REGISTRAR ABONO
+// Reglas:
+//   - Si montoAbono = 0 → crea abono $0 y marca el Pago como Pagado.
+//   - Si mesesCubiertos = 1 → abono normal.
+//   - Si mesesCubiertos > 1 (anticipo) → el monto va completo al PRIMER mes,
+//     los demás meses quedan en montoPago: 0 con estatus Pagado.
 // ============================================================
 router.post("/", async (req, res) => {
-    try {
-        const {
-            pagoId,
-            montoAbono,
-            nombreAlumno,
-            metodoAbono,
-            fechaAbono: fechaAbonoRaw,
-            idAlumno,
-            grupoId,
-            esDescuento = false,
-            descuentoPorcentaje = 0,
-            mesesCubiertos = 1,
-            nuevoMontoMensual
-        } = req.body;
+  try {
+    const {
+      pagoId,
+      montoAbono,
+      nombreAlumno,
+      metodoAbono,
+      fechaAbono: fechaAbonoRaw,
+      idAlumno,
+      grupoId,
+      esDescuento = false,
+      descuentoPorcentaje = 0,
+      mesesCubiertos = 1,
+      nuevoMontoMensual,
+    } = req.body;
 
-        // ✅ Validación corregida: permite montoAbono = 0
-        if (!pagoId || montoAbono === undefined || montoAbono === null || montoAbono < 0 || !idAlumno || !grupoId) {
-            return res.status(400).json({ error: "Faltan datos obligatorios o monto inválido" });
-        }
-
-        // Normalizar fechaAbono a hora fija (12:00) para evitar offset de zona horaria
-        let fechaAbono = new Date();
-        if (fechaAbonoRaw) {
-            const [year, month, day] = fechaAbonoRaw.split('-').map(Number);
-            fechaAbono = new Date(year, month - 1, day, 12, 0, 0);
-        }
-
-        // Buscar el pago base
-        let pagoBase = await Pago.findOne({ pagoId });
-        if (!pagoBase) {
-            // Intentar con pagoId sin mes
-            const pagoIdSinMes = crearPagoId(idAlumno, grupoId);
-            pagoBase = await Pago.findOne({ pagoId: pagoIdSinMes });
-            if (!pagoBase) {
-                // ✅ Crear pago base automáticamente si no existe
-                const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId, estatus: "Activa" });
-                if (!inscripcion) {
-                    console.error(`❌ No se encontró inscripción activa para ${idAlumno} en ${grupoId}`);
-                    return res.status(404).json({ error: "No se encontró inscripción activa para este alumno" });
-                }
-                // Crear pago base automáticamente
-                const pagoIdBase = crearPagoId(idAlumno, grupoId);
-                pagoBase = await Pago.create({
-                    pagoId: pagoIdBase,
-                    idAlumno,
-                    grupoId,
-                    nombreAlumno: nombreAlumno || inscripcion.nombreAlumno,
-                    nombreCurso: inscripcion.nombreCurso || "Curso",
-                    diaPago: inscripcion.diaPago || 1,
-                    montoPago: Number(inscripcion.montoMensualidad),
-                    fechaInicioPago: inscripcion.fechaInicioPago || new Date(),
-                    activo: true,
-                    periodo: "Mes",
-                    estatus: "Pendiente",
-                    descuentoAplicado: 0,
-                });
-                console.log(`✅ Pago base creado automáticamente: ${pagoIdBase}`);
-            }
-        }
-
-        const fechaInicio = new Date(pagoBase.fechaInicioPago);
-        const diaPago = pagoBase.diaPago || 1;
-        const montoTotal = Number(montoAbono);
-
-        // ============================================================
-        // ✅ CASO ESPECIAL: ABONO DE $0 (solo trazabilidad)
-        // ============================================================
-        if (montoTotal === 0) {
-            const nuevoAbono = new Abono({
-                abonoId: await generarId("abono"),
-                pagoId,
-                idAlumno,
-                grupoId,
-                nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
-                montoAbono: 0,
-                metodoAbono: metodoAbono || "Efectivo",
-                fechaAbono: fechaAbono,
-                notas: "Abono de $0 (sin pago)",
-            });
-            await nuevoAbono.save();
-
-            cache.flushAll();
-            console.log(`🗑️ Caché invalidada por abono de $0 para ${idAlumno}`);
-
-            return res.status(201).json({
-                message: "Abono de $0 registrado (sin pago)",
-                abono: nuevoAbono,
-            });
-        }
-
-        // ============================================================
-        // ✅ ABONO NORMAL (> 0)
-        // ============================================================
-        const montoPorMes = montoTotal / mesesCubiertos;
-        const montoConDescuento = montoPorMes;
-        const abonosCreados = [];
-
-        for (let i = 0; i < mesesCubiertos; i++) {
-            const mes = new Date(fechaInicio);
-            mes.setMonth(mes.getMonth() + i);
-            const ultimoDiaMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate();
-            const diaReal = Math.min(diaPago, ultimoDiaMes);
-            mes.setDate(diaReal);
-            mes.setHours(12, 0, 0, 0);
-
-            const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, "0")}`;
-            const nuevoPagoId = crearPagoId(idAlumno, grupoId, mesStr);
-
-            let pagoMes = await Pago.findOne({ pagoId: nuevoPagoId });
-            if (!pagoMes) {
-                pagoMes = new Pago({
-                    pagoId: nuevoPagoId,
-                    idAlumno,
-                    grupoId,
-                    nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
-                    nombreCurso: pagoBase.nombreCurso,
-                    diaPago: diaPago,
-                    montoPago: montoConDescuento,
-                    fechaInicioPago: mes,
-                    activo: true,
-                    fechaBaja: null,
-                    periodo: "Mes",
-                    estatus: "Pendiente",
-                    descuentoAplicado: esDescuento ? descuentoPorcentaje : 0,
-                });
-                await pagoMes.save();
-            } else {
-                if (!pagoMes.descuentoAplicado || pagoMes.descuentoAplicado === 0) {
-                    pagoMes.montoPago = montoConDescuento;
-                    pagoMes.descuentoAplicado = esDescuento ? descuentoPorcentaje : 0;
-                    await pagoMes.save();
-                }
-            }
-
-            const nuevoAbono = new Abono({
-                abonoId: await generarId("abono"),
-                pagoId: nuevoPagoId,
-                idAlumno,
-                grupoId,
-                nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
-                montoAbono: montoConDescuento,
-                metodoAbono: metodoAbono || "Efectivo",
-                fechaAbono: fechaAbono,
-                numeroDeabono: String(i + 1),
-                notas: `Abono distribuido para ${mesStr}`,
-            });
-            await nuevoAbono.save();
-
-            if (montoConDescuento >= pagoMes.montoPago) {
-                pagoMes.estatus = "Pagado";
-                pagoMes.fechaPago = fechaAbono;
-                await pagoMes.save();
-            } else {
-                pagoMes.estatus = "Parcial";
-                await pagoMes.save();
-            }
-
-            abonosCreados.push(nuevoAbono);
-        }
-
-        // Cambiar tarifa futura (opcional)
-        if (nuevoMontoMensual && nuevoMontoMensual > 0) {
-            const mesSiguiente = new Date(fechaInicio);
-            mesSiguiente.setMonth(mesSiguiente.getMonth() + mesesCubiertos);
-            mesSiguiente.setHours(12, 0, 0, 0);
-            const mesStrSig = `${mesSiguiente.getFullYear()}-${String(mesSiguiente.getMonth() + 1).padStart(2, "0")}`;
-            const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSig);
-            const pagoFuturo = await Pago.findOne({ pagoId: pagoFuturoId });
-            if (pagoFuturo) {
-                pagoFuturo.montoPago = nuevoMontoMensual;
-                pagoFuturo.descuentoAplicado = 0;
-                await pagoFuturo.save();
-            }
-        }
-
-        cache.flushAll();
-        console.log('🗑️ Caché invalidada por nuevo abono.');
-
-        res.status(201).json({
-            message: `Abono distribuido en ${mesesCubiertos} meses`,
-            abonos: abonosCreados,
-        });
-
-    } catch (error) {
-        console.error("❌ Error al registrar abono distribuido:", error);
-        res.status(500).json({ error: error.message });
+    // Validación
+    if (
+      !pagoId ||
+      montoAbono === undefined ||
+      montoAbono === null ||
+      Number(montoAbono) < 0 ||
+      !idAlumno ||
+      !grupoId
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Faltan datos obligatorios o monto inválido" });
     }
+
+    const fechaAbono = parseFechaAbono(fechaAbonoRaw);
+    const montoTotal = Number(montoAbono);
+    const meses = Math.max(1, Number(mesesCubiertos) || 1);
+
+    // Pago base (o crear)
+    const pagoBase = await getOCrearPagoBase({
+      pagoId,
+      idAlumno,
+      grupoId,
+      nombreAlumno,
+    });
+    if (!pagoBase) {
+      return res
+        .status(404)
+        .json({ error: "No se encontró inscripción activa para este alumno" });
+    }
+
+    const diaPago = pagoBase.diaPago || 1;
+    const fechaInicio = new Date(pagoBase.fechaInicioPago);
+
+    // ============================================================
+    // CASO $0 – "Mes sin pago"
+    // ============================================================
+    if (montoTotal === 0) {
+      const nuevoAbono = new Abono({
+        abonoId: await generarId("abono"),
+        pagoId,
+        idAlumno,
+        grupoId,
+        nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+        montoAbono: 0,
+        metodoAbono: metodoAbono || "Efectivo",
+        fechaAbono,
+        notas: "Abono de $0 (mes sin pago)",
+      });
+      await nuevoAbono.save();
+
+      // Marcar el Pago como Pagado (para que no aparezca como pendiente)
+      const pagoObjetivo = await Pago.findOne({ pagoId });
+      if (pagoObjetivo) {
+        pagoObjetivo.estatus = "Pagado";
+        pagoObjetivo.fechaPago = fechaAbono;
+        pagoObjetivo.notas = "Mes sin pago (abonado en $0)";
+        await pagoObjetivo.save();
+      }
+
+      cache.flushAll();
+      console.log(`✅ Abono de $0 registrado para ${idAlumno} en ${pagoId}`);
+      return res.status(201).json({
+        message: "Abono de $0 registrado. Mes marcado como Pagado.",
+        abono: nuevoAbono,
+      });
+    }
+
+    // ============================================================
+    // CASO NORMAL: 1 mes
+    // ============================================================
+    if (meses === 1) {
+      const pagoMes = await Pago.findOne({ pagoId });
+      const montoMensual = Number(pagoMes?.montoPago || montoTotal);
+
+      const nuevoAbono = new Abono({
+        abonoId: await generarId("abono"),
+        pagoId,
+        idAlumno,
+        grupoId,
+        nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+        montoAbono: montoTotal,
+        metodoAbono: metodoAbono || "Efectivo",
+        fechaAbono,
+        numeroDeabono: "1",
+        notas: `Abono para ${pagoId}`,
+        esDescuento,
+        descuentoPorcentaje: esDescuento ? descuentoPorcentaje : 0,
+      });
+      await nuevoAbono.save();
+
+      if (pagoMes) {
+        pagoMes.estatus = montoTotal >= montoMensual ? "Pagado" : "Parcial";
+        if (montoTotal >= montoMensual) {
+          pagoMes.fechaPago = fechaAbono;
+        }
+        if (esDescuento && descuentoPorcentaje > 0) {
+          pagoMes.descuentoAplicado = descuentoPorcentaje;
+        }
+        await pagoMes.save();
+      }
+
+      // Cambiar tarifa futura (opcional, feature existente)
+      if (nuevoMontoMensual && Number(nuevoMontoMensual) > 0) {
+        const mesSig = new Date(fechaInicio);
+        mesSig.setMonth(mesSig.getMonth() + 1);
+        mesSig.setHours(12, 0, 0, 0);
+        const mesStrSig = `${mesSig.getFullYear()}-${String(
+          mesSig.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSig);
+        await Pago.updateOne(
+          { pagoId: pagoFuturoId },
+          {
+            $set: {
+              montoPago: Number(nuevoMontoMensual),
+              descuentoAplicado: 0,
+            },
+          }
+        );
+      }
+
+      cache.flushAll();
+      return res.status(201).json({
+        message: "Abono registrado",
+        abonos: [nuevoAbono],
+      });
+    }
+
+    // ============================================================
+    // CASO ANTICIPO: mesesCubiertos > 1
+    // El monto completo se refleja en el PRIMER mes.
+    // Los meses posteriores quedan con montoPago: 0 y estatus Pagado.
+    // ============================================================
+    const pagoPrimerMes = await Pago.findOne({ pagoId });
+    if (!pagoPrimerMes) {
+      return res
+        .status(404)
+        .json({ error: "No se encontró el pago del primer mes del anticipo" });
+    }
+
+    // 1) Abono con el monto completo en el PRIMER mes
+    const abonoPrimero = new Abono({
+      abonoId: await generarId("abono"),
+      pagoId,
+      idAlumno,
+      grupoId,
+      nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+      montoAbono: montoTotal,
+      metodoAbono: metodoAbono || "Efectivo",
+      fechaAbono,
+      numeroDeabono: "1",
+      notas: `Anticipo por ${meses} meses (1/${meses})`,
+      mesesCubiertos: meses,
+      esDescuento,
+      descuentoPorcentaje: esDescuento ? descuentoPorcentaje : 0,
+    });
+    await abonoPrimero.save();
+
+    // 2) El primer mes refleja el monto total y queda Pagado
+    pagoPrimerMes.montoPago = montoTotal;
+    pagoPrimerMes.estatus = "Pagado";
+    pagoPrimerMes.fechaPago = fechaAbono;
+    pagoPrimerMes.tipoPago = "adelantado";
+    pagoPrimerMes.notas = `Anticipo ${meses} meses – mes 1 de ${meses}`;
+    await pagoPrimerMes.save();
+
+    const abonosCreados = [abonoPrimero];
+
+    // 3) Los meses siguientes: montoPago 0, estatus Pagado, abono $0 (traza)
+    for (let i = 1; i < meses; i++) {
+      const mes = new Date(fechaInicio);
+      mes.setMonth(mes.getMonth() + i);
+      const ultimoDia = new Date(
+        mes.getFullYear(),
+        mes.getMonth() + 1,
+        0
+      ).getDate();
+      const diaReal = Math.min(diaPago, ultimoDia);
+      mes.setDate(diaReal);
+      mes.setHours(12, 0, 0, 0);
+
+      const mesStr = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}`;
+      const pagoIdMes = crearPagoId(idAlumno, grupoId, mesStr);
+
+      let pagoMes = await Pago.findOne({ pagoId: pagoIdMes });
+      if (!pagoMes) {
+        pagoMes = new Pago({
+          pagoId: pagoIdMes,
+          idAlumno,
+          grupoId,
+          nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+          nombreCurso: pagoBase.nombreCurso,
+          diaPago,
+          montoPago: 0,
+          fechaInicioPago: mes,
+          activo: true,
+          periodo: "Mes",
+          estatus: "Pagado",
+          tipoPago: "adelantado",
+          notas: `Cubierto por anticipo – mes ${i + 1} de ${meses}`,
+        });
+      } else {
+        pagoMes.montoPago = 0;
+        pagoMes.estatus = "Pagado";
+        pagoMes.tipoPago = "adelantado";
+        pagoMes.notas = `Cubierto por anticipo – mes ${i + 1} de ${meses}`;
+      }
+      await pagoMes.save();
+
+      const abonoTraza = new Abono({
+        abonoId: await generarId("abono"),
+        pagoId: pagoIdMes,
+        idAlumno,
+        grupoId,
+        nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
+        montoAbono: 0,
+        metodoAbono: metodoAbono || "Efectivo",
+        fechaAbono,
+        numeroDeabono: String(i + 1),
+        notas: `Cubierto por anticipo (mes ${i + 1} de ${meses})`,
+      });
+      await abonoTraza.save();
+      abonosCreados.push(abonoTraza);
+    }
+
+    cache.flushAll();
+    console.log(
+      `✅ Anticipo de ${meses} meses registrado para ${idAlumno} en ${pagoId}`
+    );
+
+    return res.status(201).json({
+      message: `Anticipo registrado. ${meses} meses cubiertos.`,
+      abonos: abonosCreados,
+    });
+  } catch (error) {
+    console.error("❌ Error al registrar abono:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ============================================================
-// GET /pago/:pagoId – OBTENER ABONOS DE UN PAGO
+// GET /pago/:pagoId
 // ============================================================
 router.get("/pago/:pagoId", async (req, res) => {
-    try {
-        const { pagoId } = req.params;
-        const abonos = await Abono.find({ pagoId }).sort({ fechaAbono: -1 });
-        res.json(abonos);
-    } catch (error) {
-        console.error("❌ Error al obtener abonos:", error);
-        res.status(500).json({ error: error.message });
-    }
+  try {
+    const { pagoId } = req.params;
+    const abonos = await Abono.find({ pagoId }).sort({ fechaAbono: -1 });
+    res.json(abonos);
+  } catch (error) {
+    console.error("❌ Error al obtener abonos:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ============================================================
-// GET /alumno/:idAlumno – OBTENER ABONOS DE UN ALUMNO
+// GET /alumno/:idAlumno
 // ============================================================
 router.get("/alumno/:idAlumno", async (req, res) => {
-    try {
-        const { idAlumno } = req.params;
-        const abonos = await Abono.find({ idAlumno }).sort({ fechaAbono: -1 });
-        res.json(abonos);
-    } catch (error) {
-        console.error("❌ Error al obtener abonos del alumno:", error);
-        res.status(500).json({ error: error.message });
-    }
+  try {
+    const { idAlumno } = req.params;
+    const abonos = await Abono.find({ idAlumno }).sort({ fechaAbono: -1 });
+    res.json(abonos);
+  } catch (error) {
+    console.error("❌ Error al obtener abonos del alumno:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;

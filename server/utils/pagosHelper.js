@@ -2,121 +2,140 @@ import Pago from '../models/Pago.js';
 import Grupo from '../models/Grupo.js';
 import { crearPagoId } from './pagos.js';
 
-export const generarPagosHistoricos = async (inscripcion, marcarComoPagado = true) => {
+/**
+ * Genera (o completa) los pagos mensuales de una inscripción.
+ * - Genera desde fechaInscripcion hasta hoy + `mesesFuturos` meses.
+ * - NO sobreescribe pagos existentes (idempotente).
+ * - `marcarComoPagado = true` marca como Pagado los meses PASADOS.
+ * - Los meses futuros siempre se crean como Pendiente.
+ */
+export const generarPagosHistoricos = async (
+  inscripcion,
+  marcarComoPagado = true,
+  mesesFuturos = 12
+) => {
   try {
-    const { 
-      idAlumno, 
-      grupoId, 
-      _id: idInscripcion, 
-      fechaInscripcion, 
-      diaPago, 
-      nombreAlumno, 
-      fechaBaja, 
-      montoMensualidad 
+    const {
+      idAlumno,
+      grupoId,
+      fechaInscripcion,
+      diaPago,
+      nombreAlumno,
+      montoMensualidad,
     } = inscripcion;
 
-    console.log(`🔍 [pagosHelper] Iniciando para ${nombreAlumno || idAlumno}`);
-    console.log(`🔍 [pagosHelper] montoMensualidad: ${montoMensualidad}`);
+    if (!idAlumno || !grupoId) {
+      console.warn('⚠️ [pagosHelper] Faltan idAlumno o grupoId');
+      return [];
+    }
 
     const grupo = await Grupo.findOne({ IdGrupo: grupoId });
     if (!grupo) throw new Error(`Grupo ${grupoId} no encontrado`);
 
-    console.log(`🔍 [pagosHelper] precioMensualidad del grupo: ${grupo.precioMensualidad}`);
-
     let precioMensual = 0;
     if (montoMensualidad && montoMensualidad > 0) {
       precioMensual = montoMensualidad;
-      console.log(`✅ Usando monto de inscripción: ${precioMensual}`);
     } else if (grupo.precioMensualidad && grupo.precioMensualidad > 0) {
       precioMensual = grupo.precioMensualidad;
-      console.log(`ℹ️ Usando precio del grupo: ${precioMensual}`);
     } else {
-      console.warn(`⚠️ No se puede generar pagos: sin precio.`);
+      console.warn(`⚠️ [pagosHelper] Sin precio. No se generan pagos.`);
       return [];
     }
 
     const nombreCurso = grupo.nombreCurso || 'Curso sin nombre';
-    const diaPagoAlumno = diaPago || 5;
+    const diaPagoAlumno = Math.min(Math.max(Number(diaPago) || 5, 1), 31);
 
-    // ✅ Fecha del primer pago: ajustar al último día del mes si es necesario
-    let fechaPrimerPago = new Date(fechaInscripcion);
-    const ultimoDiaMesInicio = new Date(fechaPrimerPago.getFullYear(), fechaPrimerPago.getMonth() + 1, 0).getDate();
+    // Fecha del primer pago
+    let fechaPrimerPago = new Date(fechaInscripcion || new Date());
+    const ultimoDiaMesInicio = new Date(
+      fechaPrimerPago.getFullYear(),
+      fechaPrimerPago.getMonth() + 1,
+      0
+    ).getDate();
     const diaRealInicio = Math.min(diaPagoAlumno, ultimoDiaMesInicio);
     fechaPrimerPago.setDate(diaRealInicio);
+    fechaPrimerPago.setHours(12, 0, 0, 0);
     if (fechaPrimerPago < fechaInscripcion) {
       fechaPrimerPago = new Date(fechaInscripcion);
+      fechaPrimerPago.setHours(12, 0, 0, 0);
     }
 
-    // 🔥 Ahora el pago inicial también tiene mes
-    const mesStrInicio = `${fechaPrimerPago.getFullYear()}-${String(fechaPrimerPago.getMonth() + 1).padStart(2, "0")}`;
-    const pagoIdInicial = crearPagoId(idAlumno, grupoId, mesStrInicio);
+    const hoy = new Date();
+    hoy.setHours(12, 0, 0, 0);
 
-    const pagoInicial = new Pago({
-      pagoId: pagoIdInicial,
-      idAlumno,
-      grupoId,
-      nombreAlumno,
-      nombreCurso,
-      diaPago: diaPagoAlumno,
-      montoPago: precioMensual,
-      fechaInicioPago: fechaPrimerPago,
-      activo: true,
-      estatus: marcarComoPagado ? 'Pagado' : 'Pendiente',
-      fechaPago: marcarComoPagado ? fechaPrimerPago : null,
-      metodoPago: 'Efectivo',
-      notas: 'Pago generado automáticamente (carga histórica)',
-    });
-    await pagoInicial.save();
-    console.log(`✅ Pago inicial creado: ${fechaPrimerPago.toLocaleDateString()} - $${precioMensual} - ID: ${pagoIdInicial}`);
+    // Límite superior: hoy + mesesFuturos
+    const limiteSuperior = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth() + mesesFuturos,
+      1
+    );
 
-    // ✅ Meses siguientes: ajustar al último día del mes si es necesario
-    let fechaInicio = new Date(fechaPrimerPago);
-    fechaInicio.setDate(1);
-    fechaInicio.setMonth(fechaInicio.getMonth() + 1);
-    fechaInicio.setHours(0, 0, 0, 0);
+    const pagosCreados = [];
 
-    let fechaLimite = new Date();
-    fechaLimite.setDate(1);
-    fechaLimite.setMonth(fechaLimite.getMonth() + 1);
-    fechaLimite.setDate(0);
-    fechaLimite.setHours(23, 59, 59, 999);
+    // Iteramos desde el primer mes hasta el límite
+    let cursor = new Date(
+      fechaPrimerPago.getFullYear(),
+      fechaPrimerPago.getMonth(),
+      1
+    );
 
-    let currentDate = new Date(fechaInicio);
-    const pagosCreados = [pagoInicial];
-
-    while (currentDate <= fechaLimite) {
-      // ✅ Calcular el día real (último día del mes si el día de pago no existe)
-      const ultimoDiaMes = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    while (cursor <= limiteSuperior) {
+      const ultimoDiaMes = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth() + 1,
+        0
+      ).getDate();
       const diaReal = Math.min(diaPagoAlumno, ultimoDiaMes);
-      const fechaVencimiento = new Date(currentDate.getFullYear(), currentDate.getMonth(), diaReal);
-      
-      // 🔥 Ahora cada pago también tiene mes en su ID
-      const mesStr = `${fechaVencimiento.getFullYear()}-${String(fechaVencimiento.getMonth() + 1).padStart(2, "0")}`;
+      const fechaVencimiento = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth(),
+        diaReal,
+        12,
+        0,
+        0,
+        0
+      );
+
+      const mesStr = `${fechaVencimiento.getFullYear()}-${String(
+        fechaVencimiento.getMonth() + 1
+      ).padStart(2, '0')}`;
       const pagoId = crearPagoId(idAlumno, grupoId, mesStr);
 
-      const pago = new Pago({
-        pagoId,
-        idAlumno,
-        grupoId,
-        nombreAlumno,
-        nombreCurso,
-        diaPago: diaPagoAlumno,
-        montoPago: precioMensual,
-        fechaInicioPago: fechaVencimiento,
-        activo: true,
-        estatus: marcarComoPagado ? 'Pagado' : 'Pendiente',
-        fechaPago: marcarComoPagado ? fechaVencimiento : null,
-        metodoPago: 'Efectivo',
-        notas: 'Pago generado automáticamente (carga histórica)',
-      });
+      const existente = await Pago.findOne({ pagoId });
+      if (existente) {
+        pagosCreados.push(existente);
+      } else {
+        const esMesPasado = fechaVencimiento < hoy;
+        const estatus = esMesPasado && marcarComoPagado ? 'Pagado' : 'Pendiente';
 
-      await pago.save();
-      pagosCreados.push(pago);
-      console.log(`✅ Pago creado: ${fechaVencimiento.toLocaleDateString()} - $${precioMensual} - ID: ${pagoId}`);
-      currentDate.setMonth(currentDate.getMonth() + 1);
+        const pago = new Pago({
+          pagoId,
+          idAlumno: String(idAlumno).trim(),
+          grupoId: String(grupoId).trim(),
+          nombreAlumno: nombreAlumno || idAlumno,
+          nombreCurso,
+          diaPago: diaPagoAlumno,
+          montoPago: precioMensual,
+          fechaInicioPago: fechaVencimiento,
+          activo: true,
+          estatus,
+          fechaPago: estatus === 'Pagado' ? fechaVencimiento : null,
+          metodoPago: 'Efectivo',
+          periodo: 'Mes',
+          descuentoAplicado: 0,
+          tipoPago: 'normal',
+          notas: 'Generado automáticamente',
+        });
+        await pago.save();
+        pagosCreados.push(pago);
+      }
+
+      cursor.setMonth(cursor.getMonth() + 1);
     }
 
-    console.log(`📊 Total pagos generados: ${pagosCreados.length}`);
+    console.log(
+      `📊 [pagosHelper] ${pagosCreados.length} pagos generados/verificados para ${idAlumno}-${grupoId}`
+    );
     return pagosCreados;
   } catch (error) {
     console.error('❌ Error en generarPagosHistoricos:', error);
