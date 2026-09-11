@@ -48,7 +48,9 @@ router.patch("/:idAlumno/mover", async (req, res) => {
       estatus: { $in: ["Activa", "activa", "ACTIVA"] },
     });
     if (!inscripcion) {
-      return res.status(404).json({ error: "Inscripción activa no encontrada" });
+      return res
+        .status(404)
+        .json({ error: "Inscripción activa no encontrada" });
     }
 
     const nuevoGrupo = await Grupo.findOne({
@@ -139,7 +141,7 @@ router.get("/alumno/:idAlumno", async (req, res) => {
 });
 
 // ============================================================
-// POST – CREAR INSCRIPCIÓN + GENERAR PAGOS (pasado + 12 meses futuros)
+// POST – CREAR INSCRIPCIÓN + GENERAR PAGOS (pasado + 12 futuros)
 // ============================================================
 router.post("/", async (req, res) => {
   try {
@@ -216,7 +218,7 @@ router.post("/", async (req, res) => {
 });
 
 // ============================================================
-// PATCH – ACTUALIZAR INSCRIPCIÓN
+// PATCH – ACTUALIZAR INSCRIPCIÓN (modalidad y comentarios)
 // ============================================================
 router.patch("/:idAlumno/:grupoId", async (req, res) => {
   try {
@@ -282,6 +284,7 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
     const { fechaFin } = req.body;
+
     if (!fechaFin) {
       return res
         .status(400)
@@ -339,4 +342,9 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("❌ Error PATCH /inscripciones/finalizar:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
