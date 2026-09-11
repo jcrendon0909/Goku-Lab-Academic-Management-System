@@ -58,7 +58,8 @@ async function getOCrearPagoBase({ pagoId, idAlumno, grupoId, nombreAlumno }) {
 //   - Si montoAbono = 0 → crea abono $0 y marca el Pago como Pagado.
 //   - Si mesesCubiertos = 1 → abono normal.
 //   - Si mesesCubiertos > 1 (anticipo) → el monto va completo al PRIMER mes,
-//     los demás meses quedan en montoPago: 0 con estatus Pagado.
+//     los meses siguientes quedan con montoPago: 0 + tipoPago: adelantado.
+//     NO se crean abonos $0 en los meses cubiertos (el Pago ya es la marca).
 // ============================================================
 router.post("/", async (req, res) => {
   try {
@@ -76,7 +77,6 @@ router.post("/", async (req, res) => {
       nuevoMontoMensual,
     } = req.body;
 
-    // Validación
     if (
       !pagoId ||
       montoAbono === undefined ||
@@ -94,7 +94,6 @@ router.post("/", async (req, res) => {
     const montoTotal = Number(montoAbono);
     const meses = Math.max(1, Number(mesesCubiertos) || 1);
 
-    // Pago base (o crear)
     const pagoBase = await getOCrearPagoBase({
       pagoId,
       idAlumno,
@@ -127,7 +126,6 @@ router.post("/", async (req, res) => {
       });
       await nuevoAbono.save();
 
-      // Marcar el Pago como Pagado (para que no aparezca como pendiente)
       const pagoObjetivo = await Pago.findOne({ pagoId });
       if (pagoObjetivo) {
         pagoObjetivo.estatus = "Pagado";
@@ -137,7 +135,6 @@ router.post("/", async (req, res) => {
       }
 
       cache.flushAll();
-      console.log(`✅ Abono de $0 registrado para ${idAlumno} en ${pagoId}`);
       return res.status(201).json({
         message: "Abono de $0 registrado. Mes marcado como Pagado.",
         abono: nuevoAbono,
@@ -178,7 +175,6 @@ router.post("/", async (req, res) => {
         await pagoMes.save();
       }
 
-      // Cambiar tarifa futura (opcional, feature existente)
       if (nuevoMontoMensual && Number(nuevoMontoMensual) > 0) {
         const mesSig = new Date(fechaInicio);
         mesSig.setMonth(mesSig.getMonth() + 1);
@@ -208,7 +204,8 @@ router.post("/", async (req, res) => {
     // ============================================================
     // CASO ANTICIPO: mesesCubiertos > 1
     // El monto completo se refleja en el PRIMER mes.
-    // Los meses posteriores quedan con montoPago: 0 y estatus Pagado.
+    // Los meses siguientes quedan con montoPago: 0 y tipoPago: adelantado.
+    // NO se crean abonos $0 en los meses cubiertos.
     // ============================================================
     const pagoPrimerMes = await Pago.findOne({ pagoId });
     if (!pagoPrimerMes) {
@@ -217,7 +214,7 @@ router.post("/", async (req, res) => {
         .json({ error: "No se encontró el pago del primer mes del anticipo" });
     }
 
-    // 1) Abono con el monto completo en el PRIMER mes
+    // 1) Único abono con el monto completo, en el PRIMER mes
     const abonoPrimero = new Abono({
       abonoId: await generarId("abono"),
       pagoId,
@@ -235,7 +232,7 @@ router.post("/", async (req, res) => {
     });
     await abonoPrimero.save();
 
-    // 2) El primer mes refleja el monto total y queda Pagado
+    // 2) Primer mes = monto total, Pagado, adelantado
     pagoPrimerMes.montoPago = montoTotal;
     pagoPrimerMes.estatus = "Pagado";
     pagoPrimerMes.fechaPago = fechaAbono;
@@ -245,7 +242,8 @@ router.post("/", async (req, res) => {
 
     const abonosCreados = [abonoPrimero];
 
-    // 3) Los meses siguientes: montoPago 0, estatus Pagado, abono $0 (traza)
+    // 3) Meses siguientes: montoPago 0, Pagado, tipoPago adelantado.
+    //    SIN abonos $0 (el Pago ya es la marca de cobertura).
     for (let i = 1; i < meses; i++) {
       const mes = new Date(fechaInicio);
       mes.setMonth(mes.getMonth() + i);
@@ -279,30 +277,18 @@ router.post("/", async (req, res) => {
           periodo: "Mes",
           estatus: "Pagado",
           tipoPago: "adelantado",
+          fechaPago: fechaAbono,
           notas: `Cubierto por anticipo – mes ${i + 1} de ${meses}`,
         });
       } else {
         pagoMes.montoPago = 0;
         pagoMes.estatus = "Pagado";
         pagoMes.tipoPago = "adelantado";
+        pagoMes.fechaPago = fechaAbono;
         pagoMes.notas = `Cubierto por anticipo – mes ${i + 1} de ${meses}`;
       }
       await pagoMes.save();
-
-      const abonoTraza = new Abono({
-        abonoId: await generarId("abono"),
-        pagoId: pagoIdMes,
-        idAlumno,
-        grupoId,
-        nombreAlumno: nombreAlumno || pagoBase.nombreAlumno,
-        montoAbono: 0,
-        metodoAbono: metodoAbono || "Efectivo",
-        fechaAbono,
-        numeroDeabono: String(i + 1),
-        notas: `Cubierto por anticipo (mes ${i + 1} de ${meses})`,
-      });
-      await abonoTraza.save();
-      abonosCreados.push(abonoTraza);
+      // ⚠️ Ya NO se crea abono $0 aquí
     }
 
     cache.flushAll();
