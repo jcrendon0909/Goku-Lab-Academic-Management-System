@@ -1,9 +1,16 @@
 import { notifyDataChanged } from "../utils/dataSync";
 
-// ✅ CORRECCIÓN: eliminar "/api" para que coincida con el backend
-// const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
-// ✅ FORZAR URL DEL BACKEND LOCAL
-const API_URL = "http://localhost:4000";
+// ✅ Usa VITE_API_URL (Cloudflare la inyecta en producción).
+// En desarrollo, cae al default.
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:4000" : "");
+
+if (!API_URL) {
+  console.error(
+    "⛔ VITE_API_URL no está definida. Configúrala en Cloudflare Pages → Settings → Environment variables."
+  );
+}
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = localStorage.getItem("token");
@@ -420,9 +427,6 @@ export async function getPagosConEstatus() {
   return res.json();
 }
 
-// ============================================================
-// ✅ FUNCIÓN CORREGIDA: Acepta idAlumno y grupoId
-// ============================================================
 export async function registrarAbono(data: {
   pagoId: string;
   montoAbono: number;
@@ -432,7 +436,6 @@ export async function registrarAbono(data: {
   idAlumno: string;
   grupoId: string;
   nuevoMontoMensual?: number | null;
-  // 👇 NUEVOS CAMPOS
   esDescuento?: boolean;
   descuentoPorcentaje?: number;
   mesesCubiertos?: number;
@@ -658,7 +661,7 @@ export async function eliminarGasto(id: string) {
   if (!res.ok) throw new Error('Error al eliminar gasto');
   return res.json();
 }
-// ===== EDITAR ABONO =====
+
 export async function editarAbono(
   abonoId: string,
   data: {
