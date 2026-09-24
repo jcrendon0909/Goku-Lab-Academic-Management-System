@@ -26,3 +26,6 @@ Desktop.ini
 .DS_Storewhatsapp-session/
 .cache/
 .env
+.env
+.env.local
+.env.production
