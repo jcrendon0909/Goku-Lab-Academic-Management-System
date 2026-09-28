@@ -27,8 +27,9 @@ import { PagosProfesoresPage } from './components/PagosProfesoresPage';
 import { GastosPage } from './components/GastosPage';
 import { ReporteAsistenciaAlumno } from './components/ReporteAsistenciaAlumno';
 import { ConsultaAsistencias } from './components/ConsultaAsistencias';
+// 🆕 NUEVO: Reporte Global
+import { ReporteGlobal } from './components/ReporteGlobal';
 
-// Dentro de los children del ProtectedRoute:
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -54,26 +55,29 @@ export const router = createBrowserRouter([
       { path: '/grupos', element: <GruposPage /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
       { path: '/reportes/cobranza', element: <ReporteCobranza /> },
+      // 🆕 NUEVA RUTA: Reporte Global
+      { path: '/reportes/global', element: <ReporteGlobal /> },
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
       { path: '/reportes/asistencia-alumno', element: <ReporteAsistenciaAlumno /> },
       { path: '/consultas/asistencias', element: <ConsultaAsistencias /> },
+
       // ============================================================
-      // 🆕 RUTAS DE CURSOS DE VERANO
+      // CURSOS DE VERANO
       // ============================================================
       { path: '/cursos-verano', element: <CursosVeranoPage /> },
       { path: '/cursos-verano/nuevo', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
       { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
-      // ✅ Ruta para consulta de inscripciones (solo admin)
+
+      // ============================================================
+      // CONSULTAS Y ADMIN
+      // ============================================================
       { path: '/inscripciones-consulta', element: <ConsultaInscripciones /> },
-      // ✅ Ruta para el editor de inscripciones (solo admin)
       { path: '/admin/editor-inscripciones', element: <EditorInscripciones /> },
-      // ✅ Ruta para pagos a profesores
       { path: '/pagos-profesores', element: <PagosProfesoresPage /> },
-      // ✅ Ruta para gastos
       { path: '/gastos', element: <GastosPage /> },
     ],
   },
