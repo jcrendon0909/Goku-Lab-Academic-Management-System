@@ -684,3 +684,65 @@ export async function editarAbono(
   notifyDataChanged({ tipo: "pago" });
   return responseData;
 }
+
+// ============================================================
+// REPORTES FINANCIEROS (AGREGADO — módulo de rentabilidad global)
+// ============================================================
+
+export interface FuenteMonto {
+  id: string;
+  label: string;
+  monto: number;
+}
+
+export interface RentabilidadGlobal {
+  periodo: { anio: number; mes: number; mesLabel: string; label: string };
+  ingresos: { fuentes: FuenteMonto[]; total: number };
+  egresos: { fuentes: FuenteMonto[]; total: number };
+  utilidad: number;
+  porcentajeUtilidad: number;
+  desgloseGastos: { categoria: string; monto: number }[];
+  desgloseProfesores: { idProfesor: string; nombre: string; costo: number }[];
+  variacionVsMesAnterior: { monto: number; porcentaje: number | null };
+}
+
+export interface UtilidadMensual {
+  anio: number;
+  meses: {
+    mesNum: number;
+    mesLabel: string;
+    label: string;
+    ingresos: number;
+    gastos: number;
+    costoProfesores: number;
+    egresos: number;
+    utilidad: number;
+    porcentajeUtilidad: number;
+  }[];
+}
+
+export async function getRentabilidadGlobal(filtros?: {
+  mes?: number;
+  anio?: number;
+}): Promise<RentabilidadGlobal> {
+  const params = new URLSearchParams();
+  if (filtros?.mes) params.append("mes", String(filtros.mes));
+  if (filtros?.anio) params.append("anio", String(filtros.anio));
+  const res = await apiFetch(`/reportes/rentabilidad-global?${params.toString()}`);
+  if (!res.ok) throw new Error("Error al obtener rentabilidad global");
+  return res.json();
+}
+
+export async function getUtilidadMensual(anio?: number): Promise<UtilidadMensual> {
+  const params = new URLSearchParams();
+  if (anio) params.append("anio", String(anio));
+  const res = await apiFetch(`/reportes/utilidad-mensual?${params.toString()}`);
+  if (!res.ok) throw new Error("Error al obtener utilidad mensual");
+  return res.json();
+}
+
+export async function restaurarGasto(id: string) {
+  const res = await apiFetch(`/gastos/${id}/restaurar`, { method: "PATCH" });
+  if (!res.ok) throw new Error("Error al restaurar gasto");
+  return res.json();
+}
