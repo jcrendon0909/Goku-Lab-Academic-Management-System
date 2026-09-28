@@ -20,12 +20,25 @@ import { AsistenciaPage } from './components/AsistenciaPage';
 import { CursosVeranoPage } from './components/CursosVeranoPage';
 import { CursoVeranoForm } from './components/CursoVeranoForm';
 import { CursoVeranoDetalle } from './components/CursoVeranoDetalle';
+import { RentabilidadCursoVerano } from './components/RentabilidadCursoVerano';
+import { ConsultaInscripciones } from './components/ConsultaInscripciones';
+import { EditorInscripciones } from './components/EditorInscripciones';
+import { PagosProfesoresPage } from './components/PagosProfesoresPage';
 import { GastosPage } from './components/GastosPage';
+import { ReporteAsistenciaAlumno } from './components/ReporteAsistenciaAlumno';
+import { ConsultaAsistencias } from './components/ConsultaAsistencias';
+// 🆕 NUEVO: Reporte Global de utilidad
 import { ReporteGlobal } from './components/ReporteGlobal';
 
 export const router = createBrowserRouter([
-  { path: '/', Component: LoginPage },
-  { path: '/reset-password', element: <ResetPasswordPage /> },
+  {
+    path: '/',
+    Component: LoginPage,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
   {
     element: (
       <ProtectedRoute>
@@ -40,18 +53,32 @@ export const router = createBrowserRouter([
       { path: '/maestros', element: <ProfesoresPage /> },
       { path: '/cursos', element: <CursosPage /> },
       { path: '/grupos', element: <GruposPage /> },
-      { path: '/gastos', element: <GastosPage /> },
-      { path: '/reportes/global', element: <ReporteGlobal /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
       { path: '/reportes/cobranza', element: <ReporteCobranza /> },
+      // 🆕 RUTA NUEVA: Reporte Global
+      { path: '/reportes/global', element: <ReporteGlobal /> },
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
+      { path: '/reportes/asistencia-alumno', element: <ReporteAsistenciaAlumno /> },
+      { path: '/consultas/asistencias', element: <ConsultaAsistencias /> },
+
+      // ============================================================
+      // CURSOS DE VERANO
+      // ============================================================
       { path: '/cursos-verano', element: <CursosVeranoPage /> },
       { path: '/cursos-verano/nuevo', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
-      { path: '/cursos-verano/:id/rentabilidad', element: <div className="p-8 text-center text-gray-600">Rentabilidad (próximamente)</div> },
+      { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
+
+      // ============================================================
+      // CONSULTAS Y ADMIN
+      // ============================================================
+      { path: '/inscripciones-consulta', element: <ConsultaInscripciones /> },
+      { path: '/admin/editor-inscripciones', element: <EditorInscripciones /> },
+      { path: '/pagos-profesores', element: <PagosProfesoresPage /> },
+      { path: '/gastos', element: <GastosPage /> },
     ],
   },
 ]);
