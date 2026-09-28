@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
-import { 
-  Users, BookOpen, DollarSign, UserCog, 
+import {
+  Users, BookOpen, DollarSign, UserCog,
   BarChart3, Calendar, Clock, ShieldCheck, Sparkles, Rocket,
-  Star, Zap, ClipboardCheck, Grid, Layers, FileText, 
-  TrendingUp, UserPlus, PieChart, Sun, Gift, Award, User
+  Star, Zap, ClipboardCheck, Grid, Layers, FileText,
+  TrendingUp, UserPlus, PieChart, Sun, Gift, Award, User,
+  Receipt, Wallet
 } from 'lucide-react';
 import { esAdmin } from '../../utils/roles';
+import { TarjetaUtilidad } from './TarjetaUtilidad';
 
-// ✅ Definición de tarjetas con roles
 const DASHBOARD_CARDS = [
   { to: "/alumnos", icon: <Users className="h-7 w-7" />, title: "Alumnos", description: "👥 Gestión", color: "from-[#26AAA3] to-[#67A934]", emoji: "🎓", roles: ["admin", "profesor"] },
   { to: "/grupos", icon: <Grid className="h-7 w-7" />, title: "Grupos", description: "📚 Horarios", color: "from-[#67A934] to-[#26AAA3]", emoji: "📋", roles: ["admin", "profesor"] },
@@ -17,6 +18,8 @@ const DASHBOARD_CARDS = [
   { to: "/asistencia", icon: <ClipboardCheck className="h-7 w-7" />, title: "Asistencia", description: "✅ Tomar", color: "from-[#26AAA3] to-[#67A934]", emoji: "📝", roles: ["admin", "profesor"] },
   { to: "/reschedule", icon: <Calendar className="h-7 w-7" />, title: "Reagend.", description: "🔄 Cambios", color: "from-[#67A934] to-[#26AAA3]", emoji: "🗓️", roles: ["admin"] },
   { to: "/calendario", icon: <Clock className="h-7 w-7" />, title: "Calendario", description: "📅 Agenda", color: "from-[#F8B50E] to-[#D61A1F]", emoji: "⏰", roles: ["admin", "profesor"] },
+  { to: "/gastos", icon: <Receipt className="h-7 w-7" />, title: "Gastos", description: "🧾 Egresos", color: "from-[#D61A1F] to-[#F8B50E]", emoji: "💸", roles: ["admin"] },
+  { to: "/reportes/global", icon: <Wallet className="h-7 w-7" />, title: "Reporte Global", description: "📊 Utilidad", color: "from-[#26AAA3] to-[#F8B50E]", emoji: "💎", roles: ["admin"] },
   { to: "/reportes/rentabilidad", icon: <TrendingUp className="h-7 w-7" />, title: "Rentabilidad", description: "📊 Análisis", color: "from-[#26AAA3] to-[#67A934]", emoji: "📈", roles: ["admin"] },
   { to: "/reportes/cobranza", icon: <PieChart className="h-7 w-7" />, title: "Cobranza", description: "💳 Reporte", color: "from-[#F8B50E] to-[#26AAA3]", emoji: "🧾", roles: ["admin"] },
   { to: "/admin/usuarios", icon: <ShieldCheck className="h-7 w-7" />, title: "Usuarios", description: "🔐 Cuentas", color: "from-[#67A934] to-[#F8B50E]", emoji: "👥", roles: ["admin"] },
@@ -30,41 +33,32 @@ export function Dashboard() {
   const isAdmin = esAdmin(user.rol);
   const rol = user.rol || '';
 
-  // ✅ Filtrar tarjetas según el rol
   const cardsVisibles = DASHBOARD_CARDS.filter(card => card.roles.includes(rol));
 
   return (
     <div className="relative h-[80vh] w-full overflow-hidden">
-      {/* Video de fondo */}
-      <video 
-        autoPlay 
-        loop 
-        muted 
+      <video
+        autoPlay
+        loop
+        muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover opacity-15"
         poster="https://media.gokulab.mx/Galery/videos/poster.jpg"
       >
         <source src="https://media.gokulab.mx/Galery/videos/gokulabfondo.mp4" type="video/mp4" />
       </video>
-      
+
       <div className="absolute inset-0 bg-gradient-to-br from-[#26AAA3]/10 via-[#67A934]/5 to-[#F8B50E]/5" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/5" />
-      
-      {/* Contenido */}
+
       <div className="relative z-10 h-full w-full p-4 md:p-6 lg:p-8 overflow-y-auto">
         <div className="w-full max-w-[1440px] mx-auto">
-          
+
           {/* HEADER */}
           <div className="flex items-center justify-between mb-4 bg-white/5 backdrop-blur-sm rounded-2xl p-3 md:p-4 border border-white/10 shadow-xl">
             <div className="flex-shrink-0 transform hover:scale-105 transition-all duration-500 hover:rotate-6">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-2xl ring-2 ring-[#26AAA3]/30 hover:ring-[#F8B50E]/50 transition-all duration-500">
-                <video
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                >
+                <video autoPlay loop muted playsInline className="w-full h-full object-cover">
                   <source src="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4" type="video/mp4" />
                 </video>
               </div>
@@ -80,7 +74,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Mensaje de bienvenida */}
+          {/* Bienvenida */}
           <div className="mb-4 flex flex-col md:flex-row items-center justify-between gap-2 bg-white/5 backdrop-blur-sm rounded-2xl p-3 px-4 border border-white/10">
             <div className="flex items-center gap-3">
               <div className="bg-gradient-to-br from-[#F8B50E] to-[#D61A1F] p-1.5 rounded-full shadow-lg shadow-[#F8B50E]/20">
@@ -102,23 +96,26 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Grid de tarjetas - FILTRADO POR ROL */}
+          {/* ✅ Tarjeta de Utilidad (solo admin) */}
+          {isAdmin && (
+            <div className="mb-4">
+              <TarjetaUtilidad />
+            </div>
+          )}
+
+          {/* Grid de tarjetas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
             {cardsVisibles.map((card) => (
               <CardGoku key={card.to} {...card} />
             ))}
           </div>
 
-          {/* Mensaje para profesores (solo si no es admin) */}
+          {/* Mensaje profesores */}
           {!isAdmin && (
             <div className="mt-4 text-center bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/20">
               <Rocket className="h-10 w-10 mx-auto mb-2 text-[#F8B50E] animate-bounce-slow" />
-              <p className="text-base font-medium text-white">
-                Bienvenido, profesor. 🎯
-              </p>
-              <p className="text-xs text-white/70">
-                Gestiona tus clases y alumnos desde aquí.
-              </p>
+              <p className="text-base font-medium text-white">Bienvenido, profesor. 🎯</p>
+              <p className="text-xs text-white/70">Gestiona tus clases y alumnos desde aquí.</p>
               <p className="text-[10px] text-white/50 mt-1 flex items-center justify-center gap-1">
                 <Star className="h-2.5 w-2.5 text-[#F8B50E]" />
                 <span>GōkuLab - Juega, Aprende y Emprende</span>
@@ -138,18 +135,13 @@ export function Dashboard() {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-6px); }
         }
-        .animate-pulse-slow {
-          animation: pulse-slow 3s ease-in-out infinite;
-        }
-        .animate-bounce-slow {
-          animation: bounce-slow 2s ease-in-out infinite;
-        }
+        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+        .animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
       `}</style>
     </div>
   );
 }
 
-// Componente CardGoku (sin cambios)
 function CardGoku({ to, icon, title, description, color, emoji }: any) {
   return (
     <Link

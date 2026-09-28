@@ -1,6 +1,9 @@
 import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Home, Users, BookOpen, UserCog, Calendar, Repeat, Sun, Eye, Edit2, DollarSign, BarChart, LineChart, ClipboardCheck, CreditCard } from "lucide-react";
+import {
+  LogOut, Home, Users, BookOpen, UserCog, Calendar, Repeat, Sun, Eye, Edit2,
+  DollarSign, BarChart, LineChart, ClipboardCheck, CreditCard, Receipt, Wallet
+} from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface NavItem {
@@ -34,25 +37,22 @@ export function Header() {
     return location.pathname.startsWith(path);
   };
 
-  // ✅ Definición de navegación con roles
   const navItems: NavItem[] = [
-    // General
     { path: '/dashboard', icon: <Home className="w-4 h-4" />, label: 'Panel', roles: ['admin', 'profesor'], category: 'general' },
-    
-    // Académico - Profesores pueden ver Alumnos, Grupos, Cursos
+
     { path: '/alumnos', icon: <Users className="w-4 h-4" />, label: 'Alumnos', roles: ['admin', 'profesor'], category: 'academic' },
     { path: '/grupos', icon: <BookOpen className="w-4 h-4" />, label: 'Grupos', roles: ['admin', 'profesor'], category: 'academic' },
     { path: '/cursos', icon: <BookOpen className="w-4 h-4" />, label: 'Cursos', roles: ['admin', 'profesor'], category: 'academic' },
     { path: '/maestros', icon: <UserCog className="w-4 h-4" />, label: 'Maestros', roles: ['admin'], category: 'academic' },
-    
-    // Finanzas - Solo admin
+
     { path: '/asistencia', icon: <ClipboardCheck className="w-4 h-4" />, label: 'Asistencia', roles: ['admin', 'profesor'], category: 'finance' },
     { path: '/pagos', icon: <CreditCard className="w-4 h-4" />, label: 'Pagos', roles: ['admin'], category: 'finance' },
+    { path: '/gastos', icon: <Receipt className="w-4 h-4" />, label: 'Gastos', roles: ['admin'], category: 'finance' },
+    { path: '/reportes/global', icon: <Wallet className="w-4 h-4" />, label: 'Global', roles: ['admin'], category: 'finance' },
     { path: '/reportes/cobranza', icon: <BarChart className="w-4 h-4" />, label: 'Cobranza', roles: ['admin'], category: 'finance' },
     { path: '/reportes/rentabilidad', icon: <LineChart className="w-4 h-4" />, label: 'Rentabilidad', roles: ['admin'], category: 'finance' },
     { path: '/pagos-profesores', icon: <DollarSign className="w-4 h-4" />, label: 'Pagos Profesores', roles: ['admin'], category: 'finance' },
-    
-    // Administración - Solo admin
+
     { path: '/calendario', icon: <Calendar className="w-4 h-4" />, label: 'Calendario', roles: ['admin', 'profesor'], category: 'admin' },
     { path: '/reschedule', icon: <Repeat className="w-4 h-4" />, label: 'Reagendaciones', roles: ['admin'], category: 'admin' },
     { path: '/admin/usuarios', icon: <Users className="w-4 h-4" />, label: 'Usuarios', roles: ['admin'], category: 'admin' },
@@ -61,16 +61,13 @@ export function Header() {
     { path: '/admin/editor-inscripciones', icon: <Edit2 className="w-4 h-4" />, label: 'Editor', roles: ['admin'], category: 'admin' },
   ];
 
-  // ✅ Filtrar según rol
   const visibleItems = navItems.filter(item => item.roles.includes(rol));
 
-  // Categorías para separadores
   let lastCategory = '';
 
   return (
     <header className="fixed top-0 left-0 right-0 h-12 bg-white/95 backdrop-blur-sm border-b border-gray-100 flex items-center justify-center z-50 shadow-sm">
       <div className="w-full max-w-[1440px] px-4 flex items-center justify-between">
-        {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-shrink-0">
           <div className="w-8 h-8 bg-gradient-to-br from-[#26AAA3] to-[#67A934] rounded-lg flex items-center justify-center shadow-md shadow-[#26AAA3]/30">
             <span className="text-white text-lg font-bold">G</span>
@@ -85,7 +82,6 @@ export function Header() {
           </div>
         </Link>
 
-        {/* Navegación central */}
         <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar px-2">
           <nav className="flex items-center gap-1">
             {visibleItems.map((item, index) => {
@@ -95,17 +91,13 @@ export function Header() {
 
               return (
                 <React.Fragment key={item.path}>
-                  {/* Separador entre categorías */}
-                  {showSeparator && (
-                    <span className="w-px h-6 bg-white/20 mx-1 flex-shrink-0" />
-                  )}
-
+                  {showSeparator && <span className="w-px h-6 bg-white/20 mx-1 flex-shrink-0" />}
                   <Link
                     to={item.path}
                     className={`
                       relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap
-                      ${active 
-                        ? 'text-[#26AAA3] bg-[#26AAA3]/10 font-bold' 
+                      ${active
+                        ? 'text-[#26AAA3] bg-[#26AAA3]/10 font-bold'
                         : 'text-gray-500 hover:text-[#26AAA3] hover:bg-[#26AAA3]/5'
                       }
                     `}
@@ -115,8 +107,6 @@ export function Header() {
                       {item.icon}
                     </span>
                     <span className="hidden sm:inline">{item.label}</span>
-                    
-                    {/* Indicador activo - subrayado animado */}
                     {active && (
                       <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-[#26AAA3] rounded-full animate-pulse" />
                     )}
@@ -127,7 +117,6 @@ export function Header() {
           </nav>
         </div>
 
-        {/* Área de usuario */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="flex items-center gap-2 pl-1">
             <div className="flex flex-col items-end">
@@ -135,14 +124,14 @@ export function Header() {
               <span className="text-[10px] text-gray-500 capitalize">{rolUsuario || 'Usuario'}</span>
             </div>
             <div className="w-8 h-8 bg-gray-100 rounded-full border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-              <ImageWithFallback 
+              <ImageWithFallback
                 src={fotoUrl}
                 alt="Avatar"
                 className="w-full h-full object-cover"
                 fallbackSrc="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop"
               />
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="ml-1 p-1.5 text-gray-400 hover:text-red-500 transition-colors hover:bg-red-50 rounded-lg"
               title="Cerrar sesión"
@@ -154,20 +143,10 @@ export function Header() {
       </div>
 
       <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        .animate-pulse {
-          animation: pulse 1.5s ease-in-out infinite;
-        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-pulse { animation: pulse 1.5s ease-in-out infinite; }
       `}</style>
     </header>
   );

@@ -1,13 +1,21 @@
 import express from "express";
 import Gasto from "../models/Gasto.js";
+import { mesAnioDesdeFecha } from "../utils/periodos.js";
 
 const router = express.Router();
 
-// Obtener gastos con filtros
+// ============================================================
+// GET /gastos — Lista con filtros (excluye eliminados por defecto)
+// ============================================================
 router.get("/", async (req, res) => {
   try {
-    const { mes, anio, categoria } = req.query;
+    const { mes, anio, categoria, incluirEliminados } = req.query;
     const filtro = {};
+
+    // Por defecto solo activos (soft-delete)
+    if (incluirEliminados !== "true") {
+      filtro.activo = { $ne: false };
+    }
     if (mes) filtro.mes = mes;
     if (anio) filtro.anio = parseInt(anio);
     if (categoria) filtro.categoria = categoria;
@@ -20,10 +28,26 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Crear un nuevo gasto
+// ============================================================
+// POST /gastos — Crear (mes/anio se derivan de fecha)
+// ============================================================
 router.post("/", async (req, res) => {
   try {
-    const nuevoGasto = new Gasto(req.body);
+    const { fecha, mes, anio, ...resto } = req.body; // ignoramos mes/anio del cliente
+    const fechaObj = fecha ? new Date(fecha) : new Date();
+    if (isNaN(fechaObj.getTime())) {
+      return res.status(400).json({ error: "Fecha inválida" });
+    }
+    const derivado = mesAnioDesdeFecha(fechaObj);
+
+    const nuevoGasto = new Gasto({
+      ...resto,
+      fecha: fechaObj,
+      mes: derivado.mes,
+      anio: derivado.anio,
+      activo: true,
+      creadoPor: req.user?.usuario || "admin",
+    });
     await nuevoGasto.save();
     res.status(201).json(nuevoGasto);
   } catch (error) {
@@ -32,15 +56,30 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Actualizar un gasto
+// ============================================================
+// PUT /gastos/:id — Actualizar (mes/anio se re-derivan si cambia fecha)
+// ============================================================
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const gastoActualizado = await Gasto.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const { fecha, mes, anio, ...resto } = req.body; // ignoramos mes/anio del cliente
+
+    const update = { ...resto };
+    if (fecha) {
+      const fechaObj = new Date(fecha);
+      if (isNaN(fechaObj.getTime())) {
+        return res.status(400).json({ error: "Fecha inválida" });
+      }
+      const derivado = mesAnioDesdeFecha(fechaObj);
+      update.fecha = fechaObj;
+      update.mes = derivado.mes;
+      update.anio = derivado.anio;
+    }
+
+    const gastoActualizado = await Gasto.findByIdAndUpdate(id, update, {
+      new: true,
+      runValidators: true,
+    });
     if (!gastoActualizado) {
       return res.status(404).json({ error: "Gasto no encontrado" });
     }
@@ -51,17 +90,48 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Eliminar un gasto
+// ============================================================
+// DELETE /gastos/:id — Soft delete (nunca borrado físico)
+// ============================================================
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const gastoEliminado = await Gasto.findByIdAndDelete(id);
+    const gastoEliminado = await Gasto.findByIdAndUpdate(
+      id,
+      {
+        activo: false,
+        eliminadoPor: req.user?.usuario || "admin",
+        fechaEliminacion: new Date(),
+      },
+      { new: true }
+    );
     if (!gastoEliminado) {
       return res.status(404).json({ error: "Gasto no encontrado" });
     }
-    res.json({ ok: true });
+    res.json({ ok: true, gasto: gastoEliminado });
   } catch (error) {
     console.error("Error DELETE /gastos/:id:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// PATCH /gastos/:id/restaurar — Revertir soft delete
+// ============================================================
+router.patch("/:id/restaurar", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const gasto = await Gasto.findByIdAndUpdate(
+      id,
+      { activo: true, eliminadoPor: null, fechaEliminacion: null },
+      { new: true }
+    );
+    if (!gasto) {
+      return res.status(404).json({ error: "Gasto no encontrado" });
+    }
+    res.json(gasto);
+  } catch (error) {
+    console.error("Error PATCH /gastos/:id/restaurar:", error);
     res.status(500).json({ error: error.message });
   }
 });

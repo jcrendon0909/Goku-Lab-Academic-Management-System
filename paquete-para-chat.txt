@@ -1,0 +1,2189 @@
+═══════════════════════════════════════════════════════
+=== server/index.js ===
+═══════════════════════════════════════════════════════
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { connectDB } from "./config/db.js";
+
+console.log("🔍 [1] Iniciando servidor...");
+
+// ============================================================
+// IMPORTACIÓN DE RUTAS
+// ============================================================
+console.log("🔍 [2] Importando rutas...");
+
+import authRoutes from "./routes/auth.js";
+console.log("  ✅ authRoutes importado");
+
+import alumnosRoutes from "./routes/alumnos.js";
+console.log("  ✅ alumnosRoutes importado");
+
+import profesoresRoutes from "./routes/profesores.js";
+console.log("  ✅ profesoresRoutes importado");
+
+import gruposRoutes from "./routes/grupos.js";
+console.log("  ✅ gruposRoutes importado");
+
+import cursosRoutes from "./routes/cursos.js";
+console.log("  ✅ cursosRoutes importado");
+
+import inscripcionesRoutes from "./routes/inscripciones.js";
+console.log("  ✅ inscripcionesRoutes importado");
+
+import pagosRoutes from "./routes/pagos.js";
+console.log("  ✅ pagosRoutes importado");
+
+import abonosRoutes from "./routes/abonos.js";
+console.log("  ✅ abonosRoutes importado");
+
+import reagendacionesRoutes from "./routes/reagendaciones.js";
+console.log("  ✅ reagendacionesRoutes importado");
+
+import calendarioRoutes from "./routes/calendario.js";
+console.log("  ✅ calendarioRoutes importado");
+
+import gastosRoutes from "./routes/gastos.js";
+console.log("  ✅ gastosRoutes importado");
+
+import reportesRoutes from "./routes/reportes.js";
+console.log("  ✅ reportesRoutes importado");
+
+import usuariosRoutes from "./routes/usuarios.js";
+console.log("  ✅ usuariosRoutes importado");
+
+console.log("  ✅ asistenciaRoutes importado");
+
+import cursosVeranoRoutes from "./routes/cursosVerano.js";
+console.log("  ✅ cursosVeranoRoutes importado");
+
+import adminRoutes from "./routes/admin.js";
+console.log("  ✅ adminRoutes importado");
+import asistenciaRoutes from './routes/asistencia.js';
+
+// ✅ NUEVO: Importar rutas de pagos a profesores
+import pagosProfesoresRoutes from "./routes/pagosProfesores.js";
+console.log("  ✅ pagosProfesoresRoutes importado");
+
+// ============================================================
+// WHATSAPP Y CRON (opcional)
+// ============================================================
+console.log("🔍 [3] Importando WhatsApp y Cron...");
+import cron from "node-cron";
+import { initWhatsApp, sendWhatsAppMessage, isWhatsAppReady } from "./utils/whatsapp.js";
+import Pago from "./models/Pago.js";
+console.log("  ✅ WhatsApp y Cron importados");
+
+// ============================================================
+// CONFIGURACIÓN DE ENTORNO
+// ============================================================
+console.log("🔍 [4] Configurando dotenv...");
+dotenv.config();
+console.log("  ✅ dotenv configurado");
+
+// ============================================================
+// CREAR APP EXPRESS
+// ============================================================
+console.log("🔍 [5] Creando app Express...");
+const app = express();
+const PORT = process.env.PORT || 4000;
+console.log(`  ✅ App creada. Puerto: ${PORT}`);
+
+// ============================================================
+// MIDDLEWARES
+// ============================================================
+console.log("🔍 [6] Configurando middlewares...");
+app.use(cors());
+console.log("  ✅ CORS configurado");
+
+// ✅ MIDDLEWARE UTF-8 (asegura caracteres especiales)
+app.use((req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+console.log("  ✅ UTF-8 configurado");
+
+app.use(express.json());
+console.log("  ✅ JSON parser configurado");
+app.use(express.urlencoded({ extended: true }));
+console.log("  ✅ URL-encoded parser configurado");
+
+// ============================================================
+// CONEXIÓN A MONGODB
+// ============================================================
+console.log("🔍 [7] Conectando a MongoDB...");
+connectDB();
+console.log("  ✅ Conexión a MongoDB iniciada (esperando callback)");
+
+// ============================================================
+// MONTAR RUTAS
+// ============================================================
+console.log("🔍 [8] Montando rutas...");
+app.use("/auth", authRoutes);
+console.log("  ✅ /auth montada");
+
+app.use("/alumnos", alumnosRoutes);
+console.log("  ✅ /alumnos montada");
+
+app.use("/profesores", profesoresRoutes);
+console.log("  ✅ /profesores montada");
+
+app.use("/grupos", gruposRoutes);
+console.log("  ✅ /grupos montada");
+
+app.use("/cursos", cursosRoutes);
+console.log("  ✅ /cursos montada");
+
+app.use("/inscripciones", inscripcionesRoutes);
+console.log("  ✅ /inscripciones montada");
+
+app.use("/pagos", pagosRoutes);
+console.log("  ✅ /pagos montada");
+
+app.use("/abonos", abonosRoutes);
+console.log("  ✅ /abonos montada");
+
+app.use("/reagendaciones", reagendacionesRoutes);
+console.log("  ✅ /reagendaciones montada");
+
+app.use("/calendario", calendarioRoutes);
+console.log("  ✅ /calendario montada");
+
+app.use("/gastos", gastosRoutes);
+console.log("  ✅ /gastos montada");
+
+app.use("/reportes", reportesRoutes);
+console.log("  ✅ /reportes montada");
+
+app.use("/usuarios", usuariosRoutes);
+console.log("  ✅ /usuarios montada");
+
+app.use("/asistencia", asistenciaRoutes);
+console.log("  ✅ /asistencia montada");
+
+app.use("/cursos-verano", cursosVeranoRoutes);
+console.log("  ✅ /cursos-verano montada");
+
+app.use("/admin", adminRoutes);
+console.log("  ✅ /admin montada");
+
+// ✅ NUEVO: Montar rutas de pagos a profesores
+app.use("/pagos-profesores", pagosProfesoresRoutes);
+console.log("  ✅ /pagos-profesores montada");
+
+// ============================================================
+// RUTAS ADICIONALES
+// ============================================================
+console.log("🔍 [9] Configurando rutas adicionales...");
+app.get("/", (req, res) => {
+  res.send("API de Goku Lab funcionando");
+});
+console.log("  ✅ / configurada");
+
+app.get("/test-whatsapp", async (req, res) => {
+  try {
+    const result = await Promise.race([
+      (async () => {
+        let intentos = 0;
+        while (!isWhatsAppReady() && intentos < 20) {
+          await new Promise((r) => setTimeout(r, 500));
+          intentos++;
+        }
+        if (!isWhatsAppReady()) {
+          throw new Error("WhatsApp no está listo después de 10 segundos.");
+        }
+        await sendWhatsAppMessage("525555052424", "Hola, esto es una prueba desde Goku Lab.");
+        return { ok: true, mensaje: "Mensaje enviado" };
+      })(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout: la operación tardó más de 15 segundos")), 15000)
+      ),
+    ]);
+    res.json(result);
+  } catch (error) {
+    console.error("❌ Error en /test-whatsapp:", error.message);
+    if (error.message.includes("no está listo") || error.message.includes("Timeout")) {
+      return res.status(503).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+console.log("  ✅ /test-whatsapp configurada");
+
+// ============================================================
+// MANEJO DE ERRORES GLOBAL
+// ============================================================
+console.log("🔍 [10] Configurando middleware de errores...");
+app.use((err, req, res, next) => {
+  console.error("❌ Error global:", err.stack);
+  res.status(500).json({ error: "Error interno del servidor" });
+});
+console.log("  ✅ Middleware de errores configurado");
+
+// ============================================================
+// INICIALIZAR WHATSAPP (ASÍNCRONO)
+// ============================================================
+console.log("🔍 [11] Iniciando WhatsApp (asíncrono)...");
+const startWhatsApp = async () => {
+  console.log("⏳ Iniciando cliente de WhatsApp...");
+  try {
+    await initWhatsApp();
+    console.log("✅ WhatsApp Business listo para usar.");
+  } catch (error) {
+    console.error("❌ No se pudo iniciar WhatsApp:", error.message);
+  }
+};
+
+// ============================================================
+// CRON JOB (RECORDATORIOS)
+// ============================================================
+console.log("🔍 [12] Configurando Cron job...");
+cron.schedule("0 8 * * *", async () => {
+  console.log("⏰ Ejecutando recordatorios de pago por WhatsApp...");
+  if (!isWhatsAppReady()) {
+    console.warn("⚠️ WhatsApp no está listo. Reintentando conectar...");
+    try {
+      await initWhatsApp();
+    } catch (e) {
+      console.error("❌ No se pudo reconectar WhatsApp.");
+      return;
+    }
+  }
+  try {
+    const hoy = new Date().getDate();
+    const pagosPendientes = await Pago.find({
+      diaPago: hoy,
+      estatus: "pendiente",
+    }).populate("idAlumno");
+    console.log(`📋 Encontrados ${pagosPendientes.length} pagos pendientes.`);
+    for (const pago of pagosPendientes) {
+      const alumno = pago.idAlumno;
+      if (alumno && alumno.telefono) {
+        const mensaje = `
+Hola ${alumno.nombreAlumno || "estudiante"},
+Te recordamos que tu pago mensual de $${pago.montoMensualidad || "0"} está pendiente.
+Fecha de corte: ${pago.diaPago} de cada mes.
+Realiza tu pago a través de los medios disponibles en Goku Lab.
+¡Gracias por confiar en nosotros!
+- Goku Lab Team
+        `.trim();
+        try {
+          await sendWhatsAppMessage(alumno.telefono, mensaje);
+          console.log(`📩 Recordatorio enviado a ${alumno.nombreAlumno} (${alumno.telefono})`);
+        } catch (error) {
+          console.error(`❌ Falló envío a ${alumno.nombreAlumno}:`, error.message);
+        }
+      } else {
+        console.warn(`⚠️ Alumno sin teléfono para el pago ${pago._id}`);
+      }
+    }
+    console.log("✅ Proceso de recordatorios finalizado.");
+  } catch (error) {
+    console.error("❌ Error en cron de recordatorios:", error);
+  }
+});
+console.log("⏰ Cron job de recordatorios programado para las 8:00 AM.");
+
+// ============================================================
+// INICIAR SERVIDOR
+// ============================================================
+console.log("🔍 [13] Iniciando servidor HTTP...");
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+});
+console.log("🔍 [14] app.listen() ejecutado (el servidor debería estar escuchando)");
+// ============================================================
+// SINCRONIZACIÓN DE PAGOS (EJECUCIÓN PERIÓDICA)
+// ============================================================
+import { sincronizarPagosDesdeInscripciones } from './routes/pagos.js';
+
+// Función para ejecutar sincronización con manejo de errores
+const ejecutarSincronizacion = async () => {
+    try {
+        console.log('🔄 [SYNC] Iniciando sincronización de pagos...');
+        await sincronizarPagosDesdeInscripciones();
+        console.log('✅ [SYNC] Sincronización completada.');
+    } catch (error) {
+        console.error('❌ [SYNC] Error en sincronización:', error.message);
+    }
+};
+
+// Ejecutar sincronización 5 segundos después de iniciar el servidor
+setTimeout(ejecutarSincronizacion, 5000);
+
+// Programar sincronización cada 5 minutos (300000 ms)
+setInterval(ejecutarSincronizacion, 300000);
+
+console.log('⏰ [SYNC] Sincronización programada cada 5 minutos.');
+
+═══════════════════════════════════════════════════════
+=== server/config/db.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+export const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      dbName: "gestion_academica",
+      family: 4
+    });
+
+    console.log("MongoDB conectado correctamente");
+    console.log("Base usada:", mongoose.connection.name);
+    
+  } catch (error) {
+    console.error("Error al conectar MongoDB:", error.message);
+    process.exit(1);
+  }
+}; 
+
+═══════════════════════════════════════════════════════
+=== server/models/Pago.js ===
+═══════════════════════════════════════════════════════
+import mongoose from 'mongoose';
+
+const pagoSchema = new mongoose.Schema(
+    {
+        // ===== CAMPOS EXISTENTES (se mantienen) =====
+        pagoId: { type: String, required: true, unique: true, index: true },
+        idAlumno: { type: String, default: "", index: true },
+        grupoId: { type: String, default: "", index: true },
+        nombreAlumno: { type: String, required: true },
+        nombreCurso: { type: String, required: true },
+        diaPago: { type: Number, required: true, min: 1, max: 31 },
+        montoPago: { type: Number, required: true },
+        fechaInicioPago: { type: Date, default: Date.now },
+        activo: { type: Boolean, default: true, index: true },
+        fechaBaja: { type: Date, default: null },
+
+        mesCorrespondiente: { type: String },
+        periodo: { type: String, default: "Mes" },
+        anio: { type: Number },
+
+        fechaPago: { type: Date, default: Date.now },
+        metodoPago: { type: String, default: 'Efectivo' },
+        estatus: { type: String, enum: ['Pagado', 'Pendiente', 'Parcial', 'Cancelado'], default: 'Pagado' },
+        notas: { type: String, default: '' },
+        facturaRequerida: { type: Boolean, default: false },
+        facturaEmitida: { type: Boolean, default: false },
+        folioFactura: { type: String, default: '' },
+
+        // ===== NUEVOS CAMPOS PARA DESCUENTOS Y SALDOS =====
+        descuentoAplicado: { type: Number, default: 0, min: 0, max: 100 }, // % de descuento
+        mesesCubiertos: { type: Number, default: 1, min: 1 }, // Para pagos adelantados
+        tipoPago: { 
+            type: String, 
+            enum: ['normal', 'adelantado', 'descuento'], 
+            default: 'normal' 
+        },
+        saldoAFavor: { type: Number, default: 0 }, // Excedente de este pago (para próximos meses)
+        fechaFinCobertura: { type: Date, default: null }, // Hasta cuándo está pagado (para adelantados)
+    },
+    {
+        collection: 'pago',
+        versionKey: false,
+        timestamps: true,
+    }
+);
+
+// Índices adicionales
+pagoSchema.index({ idAlumno: 1, anio: 1, mesCorrespondiente: 1 });
+pagoSchema.index({ grupoId: 1, anio: 1 });
+
+export default mongoose.model('Pago', pagoSchema, 'pago');
+
+═══════════════════════════════════════════════════════
+=== server/models/Abono.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const abonoSchema = new mongoose.Schema(
+  {
+    abonoId: { type: String, required: true, unique: true, index: true },
+    pagoId: { type: String, required: true, index: true },
+    idAlumno: { type: String, required: true, index: true },
+    grupoId: { type: String, required: true, index: true },
+    nombreAlumno: { type: String, required: true },
+    montoAbono: { type: Number, required: true, min: 0 },
+    metodoAbono: { type: String, default: "Efectivo" },
+    fechaAbono: { type: Date, default: Date.now },
+    numeroDeabono: { type: String, default: "" },
+    comprobante: { type: String, default: "" },
+    notas: { type: String, default: "" },
+
+    // ===== CAMPOS PARA DESCUENTOS Y SALDOS =====
+    esDescuento: { type: Boolean, default: false },
+    aplicaSaldoAFavor: { type: Boolean, default: false },
+    mesesCubiertos: { type: Number, default: 1 },
+    descuentoPorcentaje: { type: Number, default: 0 },
+  },
+  {
+    collection: "abonos",
+    versionKey: false,
+    timestamps: true,
+  }
+);
+
+// Índice compuesto (pagoId ya tiene index:true arriba, no duplicar)
+abonoSchema.index({ idAlumno: 1, grupoId: 1 });
+
+export default mongoose.model("Abono", abonoSchema, "abonos");
+
+═══════════════════════════════════════════════════════
+=== server/models/Inscripcion.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const inscripcionSchema = new mongoose.Schema(
+  {
+    idAlumno: { type: String, required: true, index: true },
+    nombreAlumno: { type: String, required: true },
+    grupoId: { type: String, required: true, index: true },
+    modalidad: { type: String, default: "Presencial" },
+    montoMensualidad: { type: Number, required: true },
+    diaPago: { type: Number, required: true, min: 1, max: 31 },
+    fechaInicioPago: { type: Date, required: true },
+    comentarios: { type: String, default: "" },
+    fechaInscripcion: { type: Date, default: Date.now },
+    estatus: {
+      type: String,
+      enum: ["Activa", "Inactiva", "Baja", "Finalizada"],
+      default: "Activa",
+    },
+    fechaFin: { type: Date, default: null },
+    fechaBaja: { type: Date },
+    motivoBaja: { type: String },
+    historialModificaciones: {
+      type: [
+        {
+          fecha: { type: Date, default: Date.now },
+          usuario: { type: String, default: "admin" },
+          cambios: { type: mongoose.Schema.Types.Mixed, default: {} },
+        },
+      ],
+      default: [],
+    },
+  },
+  {
+    timestamps: true,
+    collection: "inscripciones",
+    versionKey: false,
+  }
+);
+
+inscripcionSchema.index({ idAlumno: 1, grupoId: 1 }, { unique: true });
+
+export default mongoose.model("Inscripcion", inscripcionSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/Alumno.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const alumnoSchema = new mongoose.Schema(
+  {
+    // ===== CAMPOS EXISTENTES (se mantienen) =====
+    idAlumno: { type: String, required: true, unique: true },
+    nombreAlumno: { type: String, required: true },
+    telefono: { type: String, default: "" },
+    tutor: { type: String, default: "" },
+    observaciones: { type: String, default: "" },
+    estatus: { type: String, default: "Activo" },
+    saldoAFavor: { type: Number, default: 0 },
+
+    origen: {
+      type: String,
+      enum: ["Naucalpan", "Satélite", "Otro"],
+      default: "Naucalpan"
+    },
+    situacion_percibida: {
+      type: String,
+      enum: ["Estable", "Dudoso", "Salida", "Terminó curso"],
+      default: "Estable"
+    },
+
+    // ===== NUEVOS CAMPOS (agregados sin afectar los existentes) =====
+    email: { type: String, default: "" },
+    fechaNacimiento: { type: Date, default: null },
+    descuento: { type: Number, default: 0, min: 0, max: 100 },
+    notasInternas: { type: String, default: "" },
+  },
+  {
+    collection: "alumnos",
+    timestamps: true
+  }
+);
+
+// ===== ÍNDICES ADICIONALES (para búsquedas rápidas) =====
+alumnoSchema.index({ email: 1 });
+alumnoSchema.index({ nombreAlumno: 1 }); // útil para búsquedas por nombre
+
+const Alumno = mongoose.model("Alumno", alumnoSchema);
+export default Alumno;
+
+═══════════════════════════════════════════════════════
+=== server/models/Grupo.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const grupoSchema = new mongoose.Schema({
+  IdGrupo: { type: String, required: true, unique: true, index: true },
+  idCurso: { type: String, required: true, index: true },
+  nombreCurso: { type: String, required: true },
+  diaClase: { type: String, required: true },
+  horaClase: { type: String, required: true },
+  duracionClase: { type: String, default: "1:30 hr" },
+  idProfesor: { type: String, index: true },
+  nombreProfesor: { type: String, default: "" },
+  // ===== CAMPOS NUEVOS =====
+  precioMensualidad: { type: Number, default: 0 },
+  fechaInicio: { type: Date, default: null },
+  fechaFin: { type: Date, default: null },
+  salon: { type: String, default: "" },
+  // ===== CAMPOS EXISTENTES =====
+  comentario: { type: String, default: "" },
+  CapacidadMaxima: { type: Number, default: 8 },
+  Estatus: { type: String, enum: ["Activo", "Inactivo"], default: "Activo" },
+  fechaCreacion: { type: Date, default: Date.now },
+}, { timestamps: true });
+
+grupoSchema.index({ IdGrupo: 1, idProfesor: 1 });
+
+export default mongoose.model("Grupo", grupoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/Curso.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const cursoSchema = new mongoose.Schema({
+  idCurso: { type: String, required: true, unique: true, index: true },
+  nombreCurso: { type: String, required: true },
+  // ===== CAMPOS NUEVOS =====
+  precioMensualidad: { type: Number, default: 0, min: 0 },
+  duracionMeses: { type: Number, default: 1 },
+  nivel: { type: String, enum: ['Básico', 'Intermedio', 'Avanzado'], default: 'Básico' },
+  categoria: { type: String, default: '' },
+  estatus: { type: String, enum: ["Activo", "Inactivo"], default: "Activo" },
+}, { timestamps: true });
+
+cursoSchema.index({ idCurso: 1, nombreCurso: 1 });
+
+export default mongoose.model("Curso", cursoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/Gasto.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const gastoSchema = new mongoose.Schema(
+  {
+    categoria: {
+      type: String,
+      enum: [
+        "Renta",
+        "Luz",
+        "Agua",
+        "Limpieza",
+        "Internet",
+        "Celular",
+        "Insumos",
+        "Adecuaciones",
+        "Regalias Algorithmics",
+        "Agencia de Publicidad",
+        "Publicidad Meta",
+        "Marco",
+        "Profesores",
+        "Kommo",
+        "Zadarma",
+        "Comisiones",
+        "Otro"
+      ],
+      required: true,
+      index: true
+    },
+    concepto: { type: String, required: true },
+    monto: { type: Number, required: true, min: 0 },
+    fecha: { type: Date, required: true, default: Date.now },
+    mes: {
+      type: String,
+      enum: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
+      required: true
+    },
+    anio: {
+      type: Number,
+      required: true,
+      default: () => new Date().getFullYear(),
+      index: true
+    },
+    comprobante: {
+      type: String,
+      default: ""
+    },
+    observaciones: { type: String, default: "" }
+  },
+  {
+    collection: "gastos",
+    timestamps: true
+  }
+);
+
+gastoSchema.index({ anio: 1, mes: 1, categoria: 1 });
+
+const Gasto = mongoose.model("Gasto", gastoSchema);
+export default Gasto;
+
+═══════════════════════════════════════════════════════
+=== server/models/Profesor.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const profesorSchema = new mongoose.Schema({
+  idProfesor: { type: String, required: true, unique: true },
+  nombre: { type: String, required: true },
+  telefono: { type: String, default: "" },
+  email: { type: String, default: "" },
+  fechaNacimiento: { type: Date, default: null },
+  tipoPago: { type: String, enum: ['por_hora', 'fijo_mensual'], default: 'fijo_mensual' },
+  salarioPorHora: { type: Number, default: 0 },
+  salarioMensual: { type: Number, default: 0 },
+  estatus: { type: String, enum: ['Activo', 'Inactivo'], default: 'Activo' },
+}, { 
+  timestamps: true,
+  collection: 'profesores' // 👈 FORZAR EL NOMBRE DE LA COLECCIÓN
+});
+
+export default mongoose.model('Profesor', profesorSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/PagoProfesor.js ===
+═══════════════════════════════════════════════════════
+import mongoose from 'mongoose';
+
+const pagoProfesorSchema = new mongoose.Schema(
+  {
+    idProfesor: { type: String, required: true, index: true },
+    nombreProfesor: { type: String, required: true },
+    tipoPago: { type: String, enum: ['por_hora', 'fijo_mensual'], required: true },
+    salarioPorHora: { type: Number, default: 0 },
+    salarioMensual: { type: Number, default: 0 },
+
+    // Datos del pago
+    fecha: { type: Date, default: Date.now },
+    horasTrabajadas: { type: Number, default: 0 },
+    montoCalculado: { type: Number, required: true },
+    metodoPago: { type: String, default: 'Efectivo' },
+    observaciones: { type: String, default: '' },
+
+    // Control
+    creadoPor: { type: String, default: 'admin' },
+    activo: { type: Boolean, default: true },
+  },
+  {
+    timestamps: true,
+    collection: 'pagos_profesores',
+    versionKey: false,
+  }
+);
+
+pagoProfesorSchema.index({ idProfesor: 1, fecha: -1 });
+
+export default mongoose.model('PagoProfesor', pagoProfesorSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/PagoProfesorVerano.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const pagoProfesorVeranoSchema = new mongoose.Schema({
+  idCursoVerano: { type: String, required: true, index: true },
+  idProfesor: { type: String, required: true },
+  montoTotal: { type: Number, required: true },
+  periodo: { type: String, required: true },
+  pagado: { type: Boolean, default: false },
+  fechaPago: { type: Date, default: null },
+}, { timestamps: true });
+
+export default mongoose.model('PagoProfesorVerano', pagoProfesorVeranoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/RegistroHorasProfesorVerano.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const registroHorasProfesorVeranoSchema = new mongoose.Schema({
+  idCursoVerano: { type: String, required: true, index: true },
+  idProfesor: { type: String, required: true },
+  fecha: { type: Date, required: true },
+  horas: { type: Number, required: true },
+  observaciones: { type: String, default: "" },
+  createdAt: { type: Date, default: Date.now }
+});
+
+export default mongoose.model('RegistroHorasProfesorVerano', registroHorasProfesorVeranoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/CursoVerano.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const cursoVeranoSchema = new mongoose.Schema({
+  idCursoVerano: { type: String, required: true, unique: true },
+  nombre: { type: String, required: true },
+  modalidad: { type: String, enum: ['verano', 'preverano'], default: 'verano' },
+  año: { type: Number, required: true },
+  fechaInicio: { type: Date, required: true },
+  fechaFin: { type: Date, required: true },
+  descripcion: { type: String, default: "" },
+  estatus: { type: String, enum: ['activo', 'finalizado', 'cancelado'], default: 'activo' },
+  profesorPrincipal: { type: String, default: "" },
+}, { timestamps: true });
+
+export default mongoose.model('CursoVerano', cursoVeranoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/InscripcionVerano.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const inscripcionVeranoSchema = new mongoose.Schema({
+  idCursoVerano: { type: String, required: true, index: true },
+  idAlumno: { type: String, required: true },
+  nombreAlumno: { type: String, required: true },
+  montoPago: { type: Number, required: true },
+  semanasPagadas: { type: Number, required: true, min: 1, max: 12 },
+  fechaInicio: { type: Date, required: true },
+  fechaFin: { type: Date, required: true },
+  notas: { type: String, default: "" },
+}, { timestamps: true });
+
+export default mongoose.model('InscripcionVerano', inscripcionVeranoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/models/AsignacionProfesorVerano.js ===
+═══════════════════════════════════════════════════════
+import mongoose from "mongoose";
+
+const asignacionProfesorVeranoSchema = new mongoose.Schema({
+  idCursoVerano: { type: String, required: true, index: true },
+  idProfesor: { type: String, required: true },
+  dias: { type: [Number], required: true, default: [] },
+  horasPorDia: { type: Number, required: true, default: 0 },
+  costoHora: { type: Number, required: true, default: 0 },
+  semanas: { type: Number, required: true, default: 1 },
+}, { timestamps: true });
+
+// Índice único para evitar duplicados por curso + profesor
+asignacionProfesorVeranoSchema.index(
+  { idCursoVerano: 1, idProfesor: 1 },
+  { unique: true }
+);
+
+export default mongoose.model('AsignacionProfesorVerano', asignacionProfesorVeranoSchema);
+
+═══════════════════════════════════════════════════════
+=== server/routes/gastos.js ===
+═══════════════════════════════════════════════════════
+import express from "express";
+import Gasto from "../models/Gasto.js";
+
+const router = express.Router();
+
+// Obtener gastos con filtros
+router.get("/", async (req, res) => {
+  try {
+    const { mes, anio, categoria } = req.query;
+    const filtro = {};
+    if (mes) filtro.mes = mes;
+    if (anio) filtro.anio = parseInt(anio);
+    if (categoria) filtro.categoria = categoria;
+
+    const gastos = await Gasto.find(filtro).sort({ fecha: -1 });
+    res.json(gastos);
+  } catch (error) {
+    console.error("Error GET /gastos:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Crear un nuevo gasto
+router.post("/", async (req, res) => {
+  try {
+    const nuevoGasto = new Gasto(req.body);
+    await nuevoGasto.save();
+    res.status(201).json(nuevoGasto);
+  } catch (error) {
+    console.error("Error POST /gastos:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Actualizar un gasto
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const gastoActualizado = await Gasto.findByIdAndUpdate(
+      id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!gastoActualizado) {
+      return res.status(404).json({ error: "Gasto no encontrado" });
+    }
+    res.json(gastoActualizado);
+  } catch (error) {
+    console.error("Error PUT /gastos/:id:", error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Eliminar un gasto
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const gastoEliminado = await Gasto.findByIdAndDelete(id);
+    if (!gastoEliminado) {
+      return res.status(404).json({ error: "Gasto no encontrado" });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Error DELETE /gastos/:id:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
+
+═══════════════════════════════════════════════════════
+=== server/routes/reportes.js ===
+═══════════════════════════════════════════════════════
+import express from "express";
+import Abono from "../models/Abono.js";
+import Pago from "../models/Pago.js";
+import Grupo from "../models/Grupo.js";
+import Profesor from "../models/Profesor.js";
+import Alumno from "../models/Alumno.js";
+import Inscripcion from "../models/Inscripcion.js";
+import Gasto from "../models/Gasto.js";
+import PagoProfesor from "../models/PagoProfesor.js";
+
+const router = express.Router();
+
+// ============================================================
+// GET /pagos - Reporte de cobranza
+// ============================================================
+router.get("/pagos", async (req, res) => {
+  try {
+    const { mes, anio } = req.query;
+
+    const filtro = {};
+    if (mes && anio) {
+      const fechaInicio = new Date(anio, mes - 1, 1);
+      const fechaFin = new Date(anio, mes, 0, 23, 59, 59);
+      filtro.fechaAbono = { $gte: fechaInicio, $lte: fechaFin };
+    }
+
+    const abonos = await Abono.find(filtro).lean();
+
+    const abonosConNombre = abonos.map((abono) => ({
+      fecha: abono.fechaAbono || abono.createdAt,
+      estudiante: abono.nombreAlumno || "Alumno desconocido",
+      monto: abono.montoAbono || 0,
+      metodoPago: abono.metodoAbono || "Efectivo",
+      concepto: "Abono",
+      factura: false,
+      recibidoPor: abono.recibidoPor || "Sistema",
+      saldoAFavor: abono.saldoAFavor || 0,
+      observaciones: abono.observaciones || "",
+      periodoFacturacion: abono.periodoFacturacion || "",
+      estatus: abono.estatus || "",
+      notas: abono.notas || "",
+      grupoId: abono.grupoId || "",
+    }));
+
+    const totales = await Abono.aggregate([
+      { $match: filtro },
+      {
+        $group: {
+          _id: {
+            mes: { $month: "$fechaAbono" },
+            anio: { $year: "$fechaAbono" },
+          },
+          total: { $sum: "$montoAbono" },
+          cantidad: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.anio": -1, "_id.mes": -1 } },
+    ]);
+
+    res.json({
+      abonos: abonosConNombre,
+      totales: totales,
+    });
+  } catch (error) {
+    console.error("❌ Error en GET /reportes/pagos:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// GET /rentabilidad-profesores - Reporte de rentabilidad (CORREGIDO)
+// ============================================================
+router.get("/rentabilidad-profesores", async (req, res) => {
+  try {
+    // Usar mes y año actual por defecto
+    const hoy = new Date();
+    const mes = req.query.mes || (hoy.getMonth() + 1).toString();
+    const anio = req.query.anio || hoy.getFullYear().toString();
+
+    console.log(`📊 Reporte rentabilidad - Mes: ${mes}, Año: ${anio}`);
+
+    const mesNum = parseInt(mes);
+    const anioNum = parseInt(anio);
+
+    // Fechas exactas para el filtro
+    const fechaInicio = new Date(anioNum, mesNum - 1, 1);
+    const fechaFin = new Date(anioNum, mesNum, 1);
+
+    console.log(`📅 Filtro de fechas: ${fechaInicio} a ${fechaFin}`);
+
+    // ============================================================
+    // 1. INGRESOS: Abonos del mes, con lookup a grupos y profesores
+    // ============================================================
+    const filtroAbonos = {
+      fechaAbono: { $gte: fechaInicio, $lt: fechaFin }
+    };
+
+    const abonos = await Abono.aggregate([
+      { $match: filtroAbonos },
+      {
+        $lookup: {
+          from: "grupos",
+          localField: "grupoId",
+          foreignField: "IdGrupo",
+          as: "grupoInfo",
+        },
+      },
+      { $unwind: { path: "$grupoInfo", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "profesores",
+          localField: "grupoInfo.idProfesor",
+          foreignField: "idProfesor",
+          as: "profesorInfo",
+        },
+      },
+      { $unwind: { path: "$profesorInfo", preserveNullAndEmptyArrays: true } },
+    ]);
+
+    console.log(`📊 Abonos del mes: ${abonos.length}`);
+
+    // Agrupar ingresos por profesor
+    const ingresosPorProfesor = {};
+    for (const abono of abonos) {
+      const profesorId = abono.profesorInfo?.idProfesor || "sin-profesor";
+      const profesorNombre = abono.profesorInfo?.nombre || "Sin profesor";
+      const grupoId = abono.grupoId;
+      const grupoNombre = abono.grupoInfo?.nombreCurso || "Sin grupo";
+      const monto = abono.montoAbono || 0;
+      const idAlumno = abono.idAlumno;
+
+      if (!ingresosPorProfesor[profesorId]) {
+        ingresosPorProfesor[profesorId] = {
+          idProfesor: profesorId,
+          nombre: profesorNombre,
+          ingresos: 0,
+          grupos: {},
+        };
+      }
+
+      if (!ingresosPorProfesor[profesorId].grupos[grupoId]) {
+        ingresosPorProfesor[profesorId].grupos[grupoId] = {
+          idGrupo: grupoId,
+          nombreCurso: grupoNombre,
+          ingresosGrupo: 0,
+          alumnos: new Set(),
+        };
+      }
+
+      ingresosPorProfesor[profesorId].ingresos += monto;
+      ingresosPorProfesor[profesorId].grupos[grupoId].ingresosGrupo += monto;
+      if (idAlumno) {
+        ingresosPorProfesor[profesorId].grupos[grupoId].alumnos.add(idAlumno);
+      }
+    }
+
+    // ============================================================
+    // 2. COSTOS: Pagos a profesores del mes, con lookup a profesores
+    // ============================================================
+    const filtroPagosProf = {
+      fecha: { $gte: fechaInicio, $lt: fechaFin },
+      activo: true,
+    };
+
+    const pagosProfesores = await PagoProfesor.aggregate([
+      { $match: filtroPagosProf },
+      {
+        $lookup: {
+          from: "profesores",
+          localField: "idProfesor",
+          foreignField: "idProfesor",
+          as: "profesorInfo",
+        },
+      },
+      { $unwind: { path: "$profesorInfo", preserveNullAndEmptyArrays: true } },
+    ]);
+
+    console.log(`💰 Pagos activos a profesores en el mes: ${pagosProfesores.length}`);
+
+    // Agrupar costos por profesor (usando el nombre de la colección profesores)
+    const costosPorProfesor = {};
+    for (const pago of pagosProfesores) {
+      const profesorId = pago.profesorInfo?.idProfesor || pago.idProfesor || "sin-profesor";
+      const profesorNombre = pago.profesorInfo?.nombre || pago.nombreProfesor || "Sin profesor";
+
+      if (!costosPorProfesor[profesorId]) {
+        costosPorProfesor[profesorId] = {
+          idProfesor: profesorId,
+          nombre: profesorNombre,
+          costoTotal: 0,
+          pagos: [],
+        };
+      }
+      costosPorProfesor[profesorId].costoTotal += pago.montoCalculado || 0;
+      costosPorProfesor[profesorId].pagos.push(pago);
+    }
+
+    // ============================================================
+    // 3. COMBINAR TODOS LOS PROFESORES (ingresos + costos)
+    // ============================================================
+    const todosLosProfesores = new Set([
+      ...Object.keys(ingresosPorProfesor),
+      ...Object.keys(costosPorProfesor),
+    ]);
+
+    console.log(`👨‍🏫 Profesores encontrados: ${todosLosProfesores.size}`);
+
+    const profesoresData = Array.from(todosLosProfesores).map((profesorId) => {
+      const profIngresos = ingresosPorProfesor[profesorId] || {
+        idProfesor: profesorId,
+        nombre: "Sin profesor",
+        ingresos: 0,
+        grupos: {},
+      };
+      const profCostos = costosPorProfesor[profesorId] || {
+        idProfesor: profesorId,
+        nombre: "Sin profesor",
+        costoTotal: 0,
+        pagos: [],
+      };
+
+      // Priorizar el nombre de ingresos (que viene del profesor real) sobre el de costos
+      const nombre = profIngresos.nombre !== "Sin profesor" ? profIngresos.nombre : profCostos.nombre;
+
+      const ingresos = profIngresos.ingresos;
+      const costo = profCostos.costoTotal;
+      const utilidad = ingresos - costo;
+      const porcentaje = ingresos > 0 ? (utilidad / ingresos) * 100 : 0;
+
+      const gruposData = Object.values(profIngresos.grupos).map((g) => ({
+        idGrupo: g.idGrupo,
+        nombreCurso: g.nombreCurso,
+        ingresosGrupo: g.ingresosGrupo,
+        cantidadAlumnos: g.alumnos.size,
+      }));
+
+      return {
+        idProfesor: profesorId,
+        nombre: nombre,
+        ingresos: Math.round(ingresos * 100) / 100,
+        costo: Math.round(costo * 100) / 100,
+        utilidad: Math.round(utilidad * 100) / 100,
+        porcentaje: Math.round(porcentaje * 100) / 100,
+        cantidadGrupos: gruposData.length,
+        cantidadAlumnos: gruposData.reduce((sum, g) => sum + g.cantidadAlumnos, 0),
+        grupos: gruposData,
+        // Para depuración (opcional)
+        abonos: profIngresos.abonos || [],
+        pagos: profCostos.pagos || [],
+      };
+    });
+
+    // 🔥 FILTRO FINAL: Solo mostrar profesores con actividad (ingresos > 0 o costos > 0)
+    const profesoresFiltrados = profesoresData.filter(prof => 
+      prof.ingresos > 0 || prof.costo > 0 || prof.cantidadGrupos > 0
+    );
+
+    // Ordenar por ingresos (mayor a menor)
+    profesoresFiltrados.sort((a, b) => b.ingresos - a.ingresos);
+
+    console.log(`📊 Profesores en respuesta: ${profesoresFiltrados.length}`);
+
+    res.json(profesoresFiltrados);
+
+  } catch (error) {
+    console.error("❌ Error en GET /reportes/rentabilidad-profesores:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
+
+═══════════════════════════════════════════════════════
+=== server/routes/finanzas.js ===
+═══════════════════════════════════════════════════════
+import express from "express";
+import Pago from "../models/Pago.js";
+import Alumno from "../models/Alumno.js";
+import Gasto from "../models/Gasto.js";
+
+const router = express.Router();
+
+// --- 1. Resumen General: Ingresos, Gastos, Utilidad ---
+router.get("/resumen", async (req, res) => {
+    try {
+        const { anio = new Date().getFullYear(), mes } = req.query;
+
+        // Construir filtro de fecha para el año (y mes si se proporciona)
+        const filtroAnio = { anio: parseInt(anio) };
+        if (mes) filtroAnio.mes = mes;
+
+        // Total de Ingresos (suma de montos de pago de alumnos activos o estables)
+        // Aquí puedes filtrar por situación_percibida si quieres (ej: solo "Estable" y "Terminó curso")
+        const ingresos = await Pago.aggregate([
+            { $match: { ...filtroAnio, activo: true } },
+            { $group: { _id: null, total: { $sum: "$montoPago" } } }
+        ]);
+
+        // Total de Gastos
+        const gastos = await Gasto.aggregate([
+            { $match: filtroAnio },
+            { $group: { _id: null, total: { $sum: "$monto" } } }
+        ]);
+
+        const totalIngresos = ingresos.length > 0 ? ingresos[0].total : 0;
+        const totalGastos = gastos.length > 0 ? gastos[0].total : 0;
+        const utilidad = totalIngresos - totalGastos;
+        const porcentajeUtilidad = totalIngresos > 0 ? (utilidad / totalIngresos) * 100 : 0;
+
+        res.json({
+            anio: parseInt(anio),
+            mes: mes || "Anual",
+            ingresos: totalIngresos,
+            gastos: totalGastos,
+            utilidad,
+            porcentajeUtilidad: parseFloat(porcentajeUtilidad.toFixed(2))
+        });
+    } catch (error) {
+        console.error("ERROR RESUMEN FINANCIERO:", error);
+        res.status(500).json({ error: "Error al obtener resumen financiero", detalle: error.message });
+    }
+});
+
+// --- 2. Rentabilidad por Profesor ---
+router.get("/rentabilidad-profesores", async (req, res) => {
+    try {
+        const { anio = new Date().getFullYear(), mes } = req.query;
+
+        // Filtro de año para pagos
+        const filtroAnio = { anio: parseInt(anio) };
+        if (mes) filtroAnio.mes = mes;
+
+        // 1. Ingresos por profesor: sumar montos de pago agrupados por profesor
+        // Nota: Asumimos que el profesor se obtiene del curso en Inscripcion o del pago.
+        // Para este ejemplo, usaremos un campo `profesor` en Pago (si no existe, podemos obtenerlo de Inscripcion).
+        // Como no tenemos ese campo en Pago, haremos un lookup con Inscripcion.
+        const ingresosPorProfesor = await Pago.aggregate([
+            { $match: { ...filtroAnio, activo: true } },
+            {
+                $lookup: {
+                    from: "inscripciones",
+                    localField: "idAlumno",
+                    foreignField: "idAlumno",
+                    as: "inscripcion"
+                }
+            },
+            { $unwind: { path: "$inscripcion", preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: "$inscripcion.profesor", // Asumiendo que Inscripcion tiene campo `profesor`
+                    totalIngresos: { $sum: "$montoPago" },
+                    alumnos: { $addToSet: "$idAlumno" }
+                }
+            },
+            {
+                $project: {
+                    profesor: { $ifNull: ["$_id", "Sin Profesor"] },
+                    totalIngresos: 1,
+                    numAlumnos: { $size: "$alumnos" },
+                    _id: 0
+                }
+            }
+        ]);
+
+        // 2. Costo por profesor (lo obtienes de una tabla de configuración o de un modelo Profesor)
+        // Aquí puedes mockearlo o consultar un modelo Profesor si existe.
+        // Por ahora, usaremos un objeto en memoria para simular.
+        const costoPorProfesor = {
+            "Ana Karina Matías": 13000,
+            "Eduardo Castro": 6400,
+            "José Daniel Piña": 0,
+            "Adam": 0,
+            "Claudia Sierra": 0,
+            "Juan Carlos Rendón": 0,
+            "Krishna": 1200,
+            "Robotica": 2400,
+            "Daniel Altamirano": 3200,
+            "Lizbeth": 2400
+        };
+
+        // 3. Combinar y calcular utilidad
+        const resultado = ingresosPorProfesor.map(item => {
+            const costo = costoPorProfesor[item.profesor] || 0;
+            const utilidad = item.totalIngresos - costo;
+            const porcentajeUtilidad = item.totalIngresos > 0 ? (utilidad / item.totalIngresos) * 100 : 0;
+
+            return {
+                profesor: item.profesor,
+                alumnos: item.numAlumnos,
+                ingresos: item.totalIngresos,
+                costo,
+                utilidad,
+                porcentajeUtilidad: parseFloat(porcentajeUtilidad.toFixed(2))
+            };
+        });
+
+        res.json(resultado);
+    } catch (error) {
+        console.error("ERROR RENTABILIDAD PROFESORES:", error);
+        res.status(500).json({ error: "Error al obtener rentabilidad por profesor", detalle: error.message });
+    }
+});
+
+// --- 3. (Opcional) Ingresos por Curso y Mes ---
+router.get("/ingresos-por-curso", async (req, res) => {
+    try {
+        const { anio = new Date().getFullYear() } = req.query;
+
+        const ingresosPorCurso = await Pago.aggregate([
+            { $match: { anio: parseInt(anio), activo: true } },
+            {
+                $group: {
+                    _id: { mes: "$mesCorrespondiente", curso: "$nombreCurso" },
+                    total: { $sum: "$montoPago" }
+                }
+            },
+            {
+                $group: {
+                    _id: "$_id.mes",
+                    cursos: { $push: { nombre: "$_id.curso", total: "$total" } },
+                    totalMes: { $sum: "$total" }
+                }
+            },
+            { $sort: { "_id": 1 } } // Ordenar por mes
+        ]);
+
+        res.json(ingresosPorCurso);
+    } catch (error) {
+        console.error("ERROR INGRESOS POR CURSO:", error);
+        res.status(500).json({ error: "Error al obtener ingresos por curso", detalle: error.message });
+    }
+});
+
+// --- 4. (Opcional) Lista de Gastos con Filtros ---
+router.get("/gastos", async (req, res) => {
+    try {
+        const { mes, anio, categoria } = req.query;
+        const filtro = {};
+        if (mes) filtro.mes = mes;
+        if (anio) filtro.anio = parseInt(anio);
+        if (categoria) filtro.categoria = categoria;
+
+        const gastos = await Gasto.find(filtro).sort({ fecha: -1 });
+        res.json(gastos);
+    } catch (error) {
+        console.error("ERROR LISTA GASTOS:", error);
+        res.status(500).json({ error: "Error al obtener gastos", detalle: error.message });
+    }
+});
+
+// --- 5. (Opcional) Crear un Gasto ---
+router.post("/gastos", async (req, res) => {
+    try {
+        const nuevoGasto = new Gasto(req.body);
+        await nuevoGasto.save();
+        res.status(201).json(nuevoGasto);
+    } catch (error) {
+        console.error("ERROR CREAR GASTO:", error);
+        res.status(400).json({ error: "Error al crear gasto", detalle: error.message });
+    }
+});
+
+export default router;
+
+═══════════════════════════════════════════════════════
+=== server/routes/pagosProfesores.js ===
+═══════════════════════════════════════════════════════
+import express from 'express';
+import PagoProfesor from '../models/PagoProfesor.js';
+import Profesor from '../models/Profesor.js';
+
+const router = express.Router();
+
+// GET / - Obtener todos los pagos (con filtros opcionales)
+router.get('/', async (req, res) => {
+  try {
+    const { idProfesor, desde, hasta } = req.query;
+    const filtro = {};
+    if (idProfesor) filtro.idProfesor = idProfesor;
+    if (desde || hasta) {
+      filtro.fecha = {};
+      if (desde) filtro.fecha.$gte = new Date(desde);
+      if (hasta) filtro.fecha.$lte = new Date(hasta);
+    }
+    const pagos = await PagoProfesor.find(filtro).sort({ fecha: -1 }).lean();
+    res.json(pagos);
+  } catch (error) {
+    console.error('❌ GET /pagos-profesores:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST / - Crear un pago (con cálculo automático)
+router.post('/', async (req, res) => {
+  try {
+    const { idProfesor, fecha, horasTrabajadas, metodoPago, observaciones } = req.body;
+
+    // Obtener datos del profesor
+    const profesor = await Profesor.findOne({ idProfesor }).lean();
+    if (!profesor) {
+      return res.status(404).json({ error: 'Profesor no encontrado' });
+    }
+
+    // Calcular monto automáticamente
+    let montoCalculado = 0;
+    let tipoPago = profesor.tipoPago || 'fijo_mensual';
+
+    if (tipoPago === 'por_hora') {
+      const salarioPorHora = Number(profesor.salarioPorHora) || 0;
+      montoCalculado = (Number(horasTrabajadas) || 0) * salarioPorHora;
+    } else {
+      // fijo_mensual: se calcula proporcional a semanas trabajadas (1 semana = 1/4 del salario mensual)
+      const salarioMensual = Number(profesor.salarioMensual) || 0;
+      const semanas = Number(horasTrabajadas) || 1; // si no se especifica, se asume 1 semana
+      montoCalculado = (salarioMensual / 4) * semanas;
+    }
+
+    const nuevoPago = new PagoProfesor({
+      idProfesor,
+      nombreProfesor: profesor.nombre,
+      tipoPago,
+      salarioPorHora: profesor.salarioPorHora || 0,
+      salarioMensual: profesor.salarioMensual || 0,
+      fecha: fecha || new Date(),
+      horasTrabajadas: Number(horasTrabajadas) || 0,
+      montoCalculado,
+      metodoPago: metodoPago || 'Efectivo',
+      observaciones: observaciones || '',
+      creadoPor: req.user?.usuario || 'admin',
+    });
+
+    await nuevoPago.save();
+    res.status(201).json(nuevoPago);
+  } catch (error) {
+    console.error('❌ POST /pagos-profesores:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /:id - Editar pago (recalcula si cambian horas o datos)
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fecha, horasTrabajadas, metodoPago, observaciones } = req.body;
+
+    const pago = await PagoProfesor.findById(id);
+    if (!pago) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+
+    // Si se actualizan horas, recalcular monto
+    let montoCalculado = pago.montoCalculado;
+    if (horasTrabajadas !== undefined) {
+      const horas = Number(horasTrabajadas) || 0;
+      if (pago.tipoPago === 'por_hora') {
+        montoCalculado = horas * (pago.salarioPorHora || 0);
+      } else {
+        const semanas = horas || 1;
+        montoCalculado = (pago.salarioMensual / 4) * semanas;
+      }
+    }
+
+    pago.fecha = fecha || pago.fecha;
+    pago.horasTrabajadas = Number(horasTrabajadas) || pago.horasTrabajadas;
+    pago.montoCalculado = montoCalculado;
+    if (metodoPago) pago.metodoPago = metodoPago;
+    if (observaciones !== undefined) pago.observaciones = observaciones;
+    pago.updatedAt = new Date();
+
+    await pago.save();
+    res.json(pago);
+  } catch (error) {
+    console.error('❌ PATCH /pagos-profesores/:id:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /:id - Eliminar pago (soft delete)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pago = await PagoProfesor.findByIdAndUpdate(
+      id,
+      { activo: false, updatedAt: new Date() },
+      { new: true }
+    );
+    if (!pago) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+    res.json({ ok: true, mensaje: 'Pago eliminado' });
+  } catch (error) {
+    console.error('❌ DELETE /pagos-profesores/:id:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
+
+═══════════════════════════════════════════════════════
+=== server/utils/generarId.js ===
+═══════════════════════════════════════════════════════
+import Counter from "../models/Counter.js";
+
+const prefijos = {
+  alumno: 'ALU',
+  profesor: 'PROF',
+  grupo: 'GRU',
+  curso: 'CUR',
+  inscripcion: 'INS',
+  pago: 'PAG',
+  abono: 'ABO',
+  reagendacion: 'REA',
+  usuario: 'USR',
+  cursoVerano: 'CV',
+};
+
+export const generarId = async (tipo) => {
+  const prefijo = prefijos[tipo];
+  if (!prefijo) {
+    throw new Error(`Tipo de ID desconocido: ${tipo}`);
+  }
+
+  // Obtener el siguiente número de secuencia usando el modelo Counter
+  const counter = await Counter.findOneAndUpdate(
+    { nombre: tipo },
+    { $inc: { secuencia: 1 } },
+    { new: true, upsert: true, returnDocument: 'after' }
+  );
+
+  const numero = String(counter.secuencia).padStart(3, '0');
+  return `${prefijo}${numero}`;
+};
+
+═══════════════════════════════════════════════════════
+=== server/utils/cache.js ===
+═══════════════════════════════════════════════════════
+import NodeCache from 'node-cache';
+const cache = new NodeCache({ stdTTL: 300 }); // 5 minutos de vida
+export default cache;
+
+═══════════════════════════════════════════════════════
+=== src/services/api.ts ===
+═══════════════════════════════════════════════════════
+import { notifyDataChanged } from "../utils/dataSync";
+
+// ✅ Usa VITE_API_URL (Cloudflare la inyecta en producción).
+// En desarrollo, cae al default.
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:4000" : "");
+
+if (!API_URL) {
+  console.error(
+    "⛔ VITE_API_URL no está definida. Configúrala en Cloudflare Pages → Settings → Environment variables."
+  );
+}
+
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = localStorage.getItem("token");
+  const headers = new Headers(init?.headers);
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      window.location.href = "/";
+    }
+    throw new Error("Sesión expirada. Inicia sesión de nuevo.");
+  }
+
+  return res;
+}
+
+export const loginService = async (usuario: string, password: string) => {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ usuario, password }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Error al iniciar sesión");
+  }
+
+  const data = await response.json();
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("user", JSON.stringify(data.user));
+  return data;
+};
+
+export async function getCalendario() {
+  const res = await apiFetch("/calendario");
+  if (!res.ok) throw new Error("Error al obtener calendario");
+  return res.json();
+}
+
+export async function getReagendaciones() {
+  const res = await apiFetch("/reagendaciones");
+  if (!res.ok) throw new Error("Error al obtener reagendaciones");
+  return res.json();
+}
+
+export async function crearReagendacion(data: any) {
+  const res = await apiFetch("/reagendaciones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const detalle = responseData.detalle ? ` (${responseData.detalle})` : "";
+    throw new Error((responseData.error || "Error al guardar reagendación") + detalle);
+  }
+  notifyDataChanged({ tipo: "reagendacion" });
+  return responseData;
+}
+
+export async function getProfesores() {
+  const res = await apiFetch("/profesores");
+  if (!res.ok) throw new Error("Error al obtener profesores");
+  return res.json();
+}
+
+export async function crearProfesor(data: {
+  nombre: string;
+  fechaNacimiento?: string | null;
+  salarioPorHora?: number;
+  tipoPago?: 'por_hora' | 'fijo_mensual';
+  salarioMensual?: number;
+  crearUsuario?: boolean;
+  usuario?: string;
+  password?: string;
+}) {
+  const res = await apiFetch("/profesores", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return responseData;
+}
+
+export async function renombrarProfesor(idProfesor: string, nombre: string) {
+  const res = await apiFetch(`/profesores/${idProfesor}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombre }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al editar el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
+}
+
+export async function actualizarEstatusProfesor(
+  idProfesor: string,
+  estatus: "Activo" | "Inactivo"
+) {
+  const res = await apiFetch(`/profesores/${idProfesor}/estatus`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estatus }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al actualizar el maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
+}
+
+export async function eliminarProfesor(idProfesor: string) {
+  const res = await apiFetch(`/profesores/${idProfesor}`, { method: "DELETE" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al dar de baja al maestro");
+  notifyDataChanged({ tipo: "profesor" });
+  return data;
+}
+
+export async function reasignarProfesorGrupo(grupoId: string, idProfesor: string) {
+  const res = await apiFetch(`/grupos/${grupoId}/profesor`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idProfesor }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al reasignar el profesor");
+  notifyDataChanged({ tipo: "grupo" });
+  return data;
+}
+
+export async function getGrupos() {
+  const res = await apiFetch("/grupos");
+  if (!res.ok) throw new Error("Error al obtener grupos");
+  return res.json();
+}
+
+export async function getCursos() {
+  const res = await apiFetch("/cursos");
+  if (!res.ok) throw new Error("Error al obtener cursos");
+  return res.json();
+}
+
+export async function crearCurso(nombreCurso: string) {
+  const res = await apiFetch("/cursos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombreCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al crear el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
+}
+
+export async function renombrarCurso(idCurso: string, nombreCurso: string) {
+  const res = await apiFetch(`/cursos/${idCurso}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nombreCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al editar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
+}
+
+export async function actualizarEstatusCurso(
+  idCurso: string,
+  estatus: "Activo" | "Inactivo"
+) {
+  const res = await apiFetch(`/cursos/${idCurso}/estatus`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estatus }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al actualizar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
+}
+
+export async function eliminarCurso(idCurso: string) {
+  const res = await apiFetch(`/cursos/${idCurso}`, { method: "DELETE" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al borrar el curso");
+  notifyDataChanged({ tipo: "curso" });
+  return data;
+}
+
+export async function reasignarCursoGrupo(grupoId: string, idCurso: string) {
+  const res = await apiFetch(`/grupos/${grupoId}/curso`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idCurso }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al reasignar el curso");
+  notifyDataChanged({ tipo: "grupo" });
+  return data;
+}
+
+export async function getAlumnos(busqueda: string = "") {
+  const path = busqueda ? `/alumnos?q=${encodeURIComponent(busqueda)}` : "/alumnos";
+  const res = await apiFetch(path);
+  if (!res.ok) throw new Error("Error al obtener alumnos");
+  return res.json();
+}
+
+export async function actualizarAlumno(
+  idAlumno: string,
+  data: {
+    nombreAlumno?: string;
+    telefono?: string;
+    tutor?: string;
+    observaciones?: string;
+    estatus?: string;
+  }
+) {
+  const res = await apiFetch(`/alumnos/${idAlumno}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al actualizar alumno");
+  notifyDataChanged({ tipo: "alumno" });
+  return responseData;
+}
+
+export async function eliminarAlumno(idAlumno: string) {
+  const res = await apiFetch(`/alumnos/${idAlumno}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const activas = responseData.detalle?.inscripcionesActivas;
+    const extra =
+      activas != null
+        ? ` Tiene ${activas} curso(s) activo(s): usa «Dar de baja» en cada curso primero.`
+        : "";
+    throw new Error((responseData.error || "Error al eliminar alumno") + extra);
+  }
+  notifyDataChanged({ tipo: "eliminar-alumno" });
+  return responseData;
+}
+
+export async function desactivarAlumno(idAlumno: string) {
+  const res = await apiFetch(`/alumnos/${idAlumno}/desactivar`, { method: "PATCH" });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al desactivar alumno");
+  notifyDataChanged({ tipo: "alumno" });
+  return responseData;
+}
+
+export async function crearAlumno(data: {
+  nombreAlumno: string;
+  telefono?: string;
+  tutor?: string;
+  observaciones?: string;
+  estatus?: string;
+}) {
+  const res = await apiFetch("/alumnos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear alumno");
+  notifyDataChanged({ tipo: "alumno" });
+  return responseData;
+}
+
+export async function getInscripciones() {
+  const res = await apiFetch("/inscripciones");
+  if (!res.ok) throw new Error("Error al obtener inscripciones");
+  return res.json();
+}
+
+export async function guardarNotasAlumno(data: { idAlumno: string; observaciones: string }) {
+  const res = await apiFetch(`/alumnos/${data.idAlumno}/nota`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ observaciones: data.observaciones }),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al guardar la nota del alumno");
+  notifyDataChanged({ tipo: "alumno" });
+  return responseData;
+}
+
+export async function crearInscripcion(data: {
+  idAlumno: string;
+  nombreAlumno: string;
+  grupoId: string;
+  modalidad?: string;
+  fechaInscripcion?: string;
+  montoMensualidad?: number;
+  diaPago?: number;
+  fechaInicioPago?: string;
+  comentarios?: string;
+}) {
+  const res = await apiFetch("/inscripciones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear inscripción");
+  notifyDataChanged({ tipo: "inscripcion" });
+  return responseData;
+}
+
+export async function actualizarInscripcionAlumno(
+  idAlumno: string,
+  grupoId: string,
+  data: { modalidad?: string; comentarios?: string }
+) {
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al actualizar inscripción");
+  notifyDataChanged({ tipo: "inscripcion" });
+  return responseData;
+}
+
+export async function getInscripcionesPorGrupo(grupoId: string) {
+  const res = await apiFetch(`/inscripciones/grupo/${grupoId}`);
+  if (!res.ok) throw new Error("Error al obtener inscripciones del grupo");
+  return res.json();
+}
+
+export async function getInscripcionesPorAlumno(idAlumno: string) {
+  const res = await apiFetch(`/inscripciones/alumno/${idAlumno}`);
+  if (!res.ok) throw new Error("Error al obtener inscripciones del alumno");
+  return res.json();
+}
+
+export async function crearGrupoConAlumno(data: {
+  fechaInscripcion?: string;
+  grupo: {
+    idCurso?: string;
+    nombreCurso: string;
+    diaClase: string;
+    horaClase: string;
+    duracionClase?: string;
+    idProfesor?: string;
+    nombreProfesor: string;
+    comentario?: string;
+    comentarioGrupo?: string;
+    capacidadMaxima: number;
+    fechaCreacion?: string;
+    Estatus?: string;
+  };
+  alumnoExistente?: {
+    idAlumno: string;
+    nombreAlumno?: string;
+    nombre?: string;
+    modalidad?: string;
+  };
+  alumnoNuevo?: {
+    nombreAlumno: string;
+    telefono?: string;
+    tutor?: string;
+    observaciones?: string;
+    estatus?: string;
+    modalidad?: string;
+  };
+  datosPago?: {
+    montoMensualidad: number;
+    diaPago: number;
+    fechaInicioPago: string;
+    comentarios?: string;
+  };
+}) {
+  const res = await apiFetch("/grupos/crear-con-alumno", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al crear grupo con alumno");
+  notifyDataChanged({ tipo: "inscripcion" });
+  return responseData;
+}
+
+export async function actualizarComentarioGrupo(grupoId: string, comentario: string) {
+  const res = await apiFetch(`/grupos/${grupoId}/comentario`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comentario }),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al actualizar comentario del grupo");
+  notifyDataChanged({ tipo: "grupo" });
+  return responseData;
+}
+
+export async function getPagosConEstatus() {
+  const res = await apiFetch("/pagos/lista-completa");
+  if (!res.ok) throw new Error("Error al obtener la lista de pagos");
+  return res.json();
+}
+
+export async function registrarAbono(data: {
+  pagoId: string;
+  montoAbono: number;
+  nombreAlumno: string;
+  metodoAbono: string;
+  fechaAbono?: string;
+  idAlumno: string;
+  grupoId: string;
+  nuevoMontoMensual?: number | null;
+  esDescuento?: boolean;
+  descuentoPorcentaje?: number;
+  mesesCubiertos?: number;
+  aplicaSaldoAFavor?: boolean;
+}) {
+  const res = await apiFetch("/abonos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Error al registrar el abono");
+  }
+  const responseData = await res.json();
+  notifyDataChanged({ tipo: "pago" });
+  return responseData;
+}
+
+export async function eliminarReagendacion(id: string) {
+  const res = await apiFetch(`/reagendaciones/${id}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al eliminar reagendación");
+  notifyDataChanged({ tipo: "reagendacion" });
+  return responseData;
+}
+
+export async function eliminarReagendacionAlumno(idAlumno: string, idGrupoNuevo: string) {
+  const res = await apiFetch(`/reagendaciones/alumno/${idAlumno}/${idGrupoNuevo}`, {
+    method: "DELETE",
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al eliminar reagendación");
+  notifyDataChanged({ tipo: "reagendacion" });
+  return responseData;
+}
+
+export async function bajaAlumnoDeGrupo(idAlumno: string, grupoId: string) {
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const detalle = responseData.detalle;
+    let mensaje = responseData.error || "Error al dar de baja al alumno";
+    if (responseData.detalle && typeof responseData.detalle === "string") {
+      mensaje = `${mensaje} (${responseData.detalle})`;
+    }
+    if (detalle?.saldoPendiente > 0) {
+      mensaje = `${mensaje} (saldo: $${Number(detalle.saldoPendiente).toFixed(2)})`;
+    }
+    throw new Error(mensaje);
+  }
+  notifyDataChanged({ tipo: "baja" });
+  return responseData;
+}
+
+export async function eliminarHistorialCursoBaja(idAlumno: string, grupoId: string) {
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/historial`, {
+    method: "DELETE",
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al eliminar el curso del sistema");
+  notifyDataChanged({ tipo: "eliminar-historial-curso" });
+  return responseData;
+}
+
+export async function reactivarInscripcion(
+  idAlumno: string,
+  grupoId: string,
+  data?: { fechaInicioPago?: string }
+) {
+  const res = await apiFetch(`/inscripciones/${idAlumno}/${grupoId}/reactivar`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data || {}),
+  });
+  const responseData = await res.json();
+  if (!res.ok) throw new Error(responseData.error || "Error al reactivar el curso");
+  notifyDataChanged({ tipo: "reactivar" });
+  return responseData;
+}
+
+export async function eliminarGrupo(grupoId: string) {
+  const res = await apiFetch(`/grupos/${grupoId}`, { method: "DELETE" });
+  const responseData = await res.json();
+  if (!res.ok) {
+    const lista =
+      Array.isArray(responseData.alumnos) && responseData.alumnos.length > 0
+        ? `\n${responseData.alumnos
+            .map((a: { nombreAlumno?: string; idAlumno?: string }) => `• ${a.nombreAlumno || a.idAlumno}`)
+            .join("\n")}`
+        : "";
+    throw new Error((responseData.error || "Error al eliminar grupo") + lista);
+  }
+  notifyDataChanged({ tipo: "grupo" });
+  return responseData;
+}
+
+export const actualizarDiaPago = async (pagoId: string, nuevoDia: number) => {
+  const response = await apiFetch(`/pagos/actualizar-dia/${pagoId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nuevoDia }),
+  });
+  const responseData = await response.json();
+  if (!response.ok) throw new Error(responseData.error || "Error al actualizar día de pago");
+  notifyDataChanged({ tipo: "pago" });
+  return responseData;
+};
+
+export async function actualizarDatosExtraProfesor(
+  idProfesor: string,
+  data: {
+    fechaNacimiento?: Date | string | null;
+    salarioPorHora?: number;
+    tipoPago?: "por_hora" | "fijo_mensual";
+    salarioMensual?: number;
+  }
+) {
+  const res = await apiFetch(`/profesores/${idProfesor}/datos-extra`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json();
+  if (!res.ok) {
+    throw new Error(responseData.error || "Error al actualizar datos extra del profesor");
+  }
+  notifyDataChanged({ tipo: "profesor" });
+  return responseData;
+}
+
+export async function getRentabilidadProfesores(filtros?: {
+  mes?: string;
+  anio?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filtros?.mes) params.append("mes", filtros.mes);
+  if (filtros?.anio) params.append("anio", filtros.anio);
+
+  const res = await apiFetch(`/reportes/rentabilidad-profesores?${params.toString()}`);
+  if (!res.ok) throw new Error("Error al obtener rentabilidad de profesores");
+  return res.json();
+}
+
+export async function solicitarResetPassword(usuario: string) {
+  const res = await apiFetch("/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ usuario }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al solicitar el restablecimiento");
+  return data;
+}
+
+export async function resetPassword(token: string, nuevaPassword: string) {
+  const res = await apiFetch("/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, nuevaPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al restablecer la contraseña");
+  return data;
+}
+
+export async function resetPasswordPorAdmin(idUsuario: string) {
+  const res = await apiFetch(`/usuarios/${idUsuario}/reset-password`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al generar token");
+  return data.token;
+}
+
+export const actualizarModalidadReagendacion = async (
+  reagendacionId: string,
+  modalidad: string
+) => {
+  const res = await apiFetch(`/reagendaciones/${reagendacionId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modalidad }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al actualizar modalidad');
+  return data;
+};
+
+export async function getGastos(filtros?: { mes?: string; anio?: number; categoria?: string }) {
+  const params = new URLSearchParams();
+  if (filtros?.mes) params.append('mes', filtros.mes);
+  if (filtros?.anio) params.append('anio', String(filtros.anio));
+  if (filtros?.categoria) params.append('categoria', filtros.categoria);
+
+  const res = await apiFetch(`/gastos?${params.toString()}`);
+  if (!res.ok) throw new Error('Error al obtener gastos');
+  return res.json();
+}
+
+export async function crearGasto(data: any) {
+  const res = await apiFetch('/gastos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Error al crear gasto');
+  return res.json();
+}
+
+export async function actualizarGasto(id: string, data: any) {
+  const res = await apiFetch(`/gastos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Error al actualizar gasto');
+  return res.json();
+}
+
+export async function eliminarGasto(id: string) {
+  const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Error al eliminar gasto');
+  return res.json();
+}
+
+export async function editarAbono(
+  abonoId: string,
+  data: {
+    montoAbono?: number;
+    fechaAbono?: string;
+    metodoAbono?: string;
+    notas?: string;
+  }
+) {
+  const res = await apiFetch(`/abonos/${abonoId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Error al editar el abono");
+  }
+  const responseData = await res.json();
+  notifyDataChanged({ tipo: "pago" });
+  return responseData;
+}
+

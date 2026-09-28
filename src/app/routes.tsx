@@ -20,16 +20,12 @@ import { AsistenciaPage } from './components/AsistenciaPage';
 import { CursosVeranoPage } from './components/CursosVeranoPage';
 import { CursoVeranoForm } from './components/CursoVeranoForm';
 import { CursoVeranoDetalle } from './components/CursoVeranoDetalle';
+import { GastosPage } from './components/GastosPage';
+import { ReporteGlobal } from './components/ReporteGlobal';
 
 export const router = createBrowserRouter([
-  {
-    path: '/',
-    Component: LoginPage,
-  },
-  {
-    path: '/reset-password',
-    element: <ResetPasswordPage />,
-  },
+  { path: '/', Component: LoginPage },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   {
     element: (
       <ProtectedRoute>
@@ -44,12 +40,13 @@ export const router = createBrowserRouter([
       { path: '/maestros', element: <ProfesoresPage /> },
       { path: '/cursos', element: <CursosPage /> },
       { path: '/grupos', element: <GruposPage /> },
+      { path: '/gastos', element: <GastosPage /> },
+      { path: '/reportes/global', element: <ReporteGlobal /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
       { path: '/reportes/cobranza', element: <ReporteCobranza /> },
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
-      // Cursos de Verano
       { path: '/cursos-verano', element: <CursosVeranoPage /> },
       { path: '/cursos-verano/nuevo', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
