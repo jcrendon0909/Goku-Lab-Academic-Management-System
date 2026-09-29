@@ -18,22 +18,22 @@ const reagendacionSchema = new mongoose.Schema(
     idProfesorOriginal: { type: String, default: "" },
     idProfesorNuevo: { type: String, default: "" },
 
-    // ✅ CAMBIO CRÍTICO: Fechas como Date (ISO 8601), nunca como strings
+    // ✅ Fechas como Date (ISO 8601), nunca como strings
     fechaHoraOriginal: { type: Date, default: null },
     fechaHoraNueva: { type: Date, default: null },
 
-    // ✅ NUEVO: Tipo de reagendación (temporal = una sola clase, permanente = cambio definitivo)
+    // ✅ Tipo de reagendación
     tipoReagendacion: {
       type: String,
       enum: ["temporal", "permanente"],
-      default: "temporal"
+      default: "temporal",
     },
 
-    // ✅ NUEVO: Notificación al profesor
+    // ✅ Notificación al profesor
     notificacionProfesor: {
       enviada: { type: Boolean, default: false },
       fechaEnvio: { type: Date, default: null },
-      idProfesor: { type: String, default: "" }
+      idProfesor: { type: String, default: "" },
     },
 
     duracion: { type: String, default: "2 horas" },
@@ -41,20 +41,41 @@ const reagendacionSchema = new mongoose.Schema(
 
     motivo: { type: String, default: "Reagendado desde sistema" },
     comentario: { type: String, default: "" },
-    // ✅ FechaMovimiento también como Date
     FechaMovimiento: { type: Date, default: () => new Date() },
-    estatus: { type: String, enum: ["reagendado", "cancelado"], default: "reagendado" },
+    estatus: {
+      type: String,
+      enum: ["reagendado", "cancelado"],
+      default: "reagendado",
+    },
+
+    // ===== NUEVOS: vínculo con SesionClase =====
+    // Sesión original de la que sale el alumno (para marcar 'reagendado' allí)
+    idSesionOrigen: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SesionClase",
+      default: null,
+      index: true,
+    },
+    // Sesión nueva (el grupo prestado en la fecha nueva)
+    idSesionDestino: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SesionClase",
+      default: null,
+      index: true,
+    },
+    // ¿Ya sabemos si el alumno asistió a la nueva?
+    asistioAlDestino: { type: Boolean, default: false },
   },
   {
     timestamps: true,
     collection: "reagendaciones",
-    versionKey: false
+    versionKey: false,
   }
 );
 
-// ✅ Índices para búsquedas rápidas
 reagendacionSchema.index({ idAlumno: 1, idGrupoOrigen: 1 });
 reagendacionSchema.index({ idGrupoNuevo: 1 });
 reagendacionSchema.index({ createdAt: -1 });
+reagendacionSchema.index({ idProfesorNuevo: 1, fechaHoraNueva: 1 });
 
 export default mongoose.model("Reagendacion", reagendacionSchema);

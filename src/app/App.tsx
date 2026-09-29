@@ -29,6 +29,7 @@ import { ReporteAsistenciaAlumno } from './components/ReporteAsistenciaAlumno';
 import { ConsultaAsistencias } from './components/ConsultaAsistencias';
 // 🆕 NUEVO: Reporte Global
 import { ReporteGlobal } from './components/ReporteGlobal';
+import { ReporteAsistenciaProfesor } from './components/ReporteAsistenciaProfesor';
 
 export const router = createBrowserRouter([
   {
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
       { path: '/reportes/asistencia-alumno', element: <ReporteAsistenciaAlumno /> },
+      { path: '/reportes/asistencia-profesor', element: <ReporteAsistenciaProfesor /> },
       { path: '/consultas/asistencias', element: <ConsultaAsistencias /> },
 
       // ============================================================

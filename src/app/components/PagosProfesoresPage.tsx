@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import BackgroundVideo from './BackgroundVideo';
-import { RefreshCw, Plus, Edit2, Trash2, DollarSign, User, Calendar, Clock } from 'lucide-react';
+import { RefreshCw, Plus, Edit2, Trash2, DollarSign, BarChart3, Loader2 } from 'lucide-react';
+
+// ============================================================
+// TIPOS
+// ============================================================
 
 interface PagoProfesor {
   _id: string;
@@ -27,8 +31,44 @@ interface Profesor {
   salarioPorHora?: number;
   salarioMensual?: number;
   estatus?: string;
-  Estatus?: string; // por si viene con mayúscula
+  Estatus?: string;
 }
+
+// ============================================================
+// HELPERS DE FECHA
+// ============================================================
+
+/** Parsea la fecha de un pago sin corrimiento de timezone */
+function parseFechaPago(fechaRaw: string): Date {
+  const fechaStr = String(fechaRaw).split('T')[0];
+  return new Date(fechaStr + 'T12:00:00');
+}
+
+/** Devuelve el lunes de la semana de una fecha en "YYYY-MM-DD" */
+function lunesDeSemana(fecha: Date): string {
+  const d = new Date(fecha);
+  const dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  d.setDate(d.getDate() - dow);
+  return d.toLocaleDateString('en-CA');
+}
+
+/** Devuelve el domingo de la semana del lunes dado en "YYYY-MM-DD" */
+function domingoDeSemana(lunes: string): string {
+  const d = new Date(lunes + 'T12:00:00');
+  d.setDate(d.getDate() + 6);
+  return d.toLocaleDateString('en-CA');
+}
+
+/** Semana actual: { desde, hasta } */
+function semanaActual() {
+  const hoy = new Date();
+  const lunes = lunesDeSemana(hoy);
+  return { desde: lunes, hasta: domingoDeSemana(lunes) };
+}
+
+// ============================================================
+// COMPONENTE
+// ============================================================
 
 export function PagosProfesoresPage() {
   const [pagos, setPagos] = useState<PagoProfesor[]>([]);
@@ -36,6 +76,9 @@ export function PagosProfesoresPage() {
   const [cargando, setCargando] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editando, setEditando] = useState<PagoProfesor | null>(null);
+
+  // Mapa de horas de asistencia por (profesor, semana)
+  const [horasAsistencia, setHorasAsistencia] = useState<Record<string, number>>({});
 
   // Filtros
   const [filtroProfesor, setFiltroProfesor] = useState('');
@@ -45,12 +88,22 @@ export function PagosProfesoresPage() {
   // Formulario
   const [formIdProfesor, setFormIdProfesor] = useState('');
   const [formFecha, setFormFecha] = useState('');
-  const [formHoras, setFormHoras] = useState('1'); // default 1 semana
+  const [formHoras, setFormHoras] = useState('1');
   const [formMetodo, setFormMetodo] = useState('Efectivo');
   const [formObservaciones, setFormObservaciones] = useState('');
   const [formMontoCalculado, setFormMontoCalculado] = useState(0);
   const [formTipoPago, setFormTipoPago] = useState<'por_hora' | 'fijo_mensual'>('fijo_mensual');
   const [formSalarioBase, setFormSalarioBase] = useState(0);
+
+  // Estado del botón "Sugerir horas"
+  const [sugerirDesde, setSugerirDesde] = useState(semanaActual().desde);
+  const [sugerirHasta, setSugerirHasta] = useState(semanaActual().hasta);
+  const [sugerirCargando, setSugerirCargando] = useState(false);
+  const [sugerirInfo, setSugerirInfo] = useState('');
+
+  // ============================================================
+  // CARGA DE DATOS
+  // ============================================================
 
   const cargarDatos = async () => {
     try {
@@ -66,12 +119,8 @@ export function PagosProfesoresPage() {
       const pagosData = await pagosRes.json();
       const profesoresData = await profesoresRes.json();
 
-      console.log('✅ Profesores cargados:', profesoresData.length);
-      console.log('✅ Primer profesor:', profesoresData[0]);
-
       setPagos(pagosData);
 
-      // Filtrar profesores activos (verificar ambos posibles nombres de campo)
       const profesoresActivos = profesoresData.filter((p: any) => {
         const estatus = p.estatus || p.Estatus || '';
         return estatus === 'Activo' || estatus === 'activo' || estatus === '';
@@ -90,7 +139,53 @@ export function PagosProfesoresPage() {
     cargarDatos();
   }, []);
 
-  // Calcular monto al seleccionar profesor o cambiar horas
+  // ============================================================
+  // CARGA DE HORAS DE ASISTENCIA (por pago de tipo por_hora)
+  // ============================================================
+
+  useEffect(() => {
+    const cargarHorasAsistencia = async () => {
+      const pagosPorHora = pagos.filter((p) => p.tipoPago === 'por_hora' && p.activo !== false);
+      if (pagosPorHora.length === 0) {
+        setHorasAsistencia({});
+        return;
+      }
+
+      // Recolectar pares únicos (profesor, lunes de la semana)
+      const claves = new Set<string>();
+      pagosPorHora.forEach((p) => {
+        const lunes = lunesDeSemana(parseFechaPago(p.fecha));
+        claves.add(`${p.idProfesor}__${lunes}`);
+      });
+
+      const nuevas: Record<string, number> = {};
+      await Promise.all(
+        Array.from(claves).map(async (clave) => {
+          const [idProf, lunes] = clave.split('__');
+          const domingo = domingoDeSemana(lunes);
+          try {
+            const res = await apiFetch(
+              `/asistencia/reportes/profesor/${idProf}?desde=${lunes}&hasta=${domingo}`
+            );
+            if (res.ok) {
+              const data = await res.json();
+              nuevas[clave] = data.horasTrabajadas || 0;
+            }
+          } catch {
+            // silencio: si falla, simplemente no mostramos comparativa
+          }
+        })
+      );
+      setHorasAsistencia(nuevas);
+    };
+
+    if (pagos.length > 0) cargarHorasAsistencia();
+  }, [pagos]);
+
+  // ============================================================
+  // CÁLCULO DE MONTO
+  // ============================================================
+
   const calcularMonto = (idProfesor: string, horas: string) => {
     const prof = profesores.find((p) => p.idProfesor === idProfesor);
     if (!prof) {
@@ -110,7 +205,6 @@ export function PagosProfesoresPage() {
       salarioBase = prof.salarioPorHora || 0;
       monto = horasNum * salarioBase;
     } else {
-      // fijo_mensual: cada semana = salarioMensual / 4
       salarioBase = prof.salarioMensual || 0;
       const semanas = horasNum || 1;
       monto = (salarioBase / 4) * semanas;
@@ -123,6 +217,7 @@ export function PagosProfesoresPage() {
   const handleProfesorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
     setFormIdProfesor(id);
+    setSugerirInfo('');
     const monto = calcularMonto(id, formHoras);
     setFormMontoCalculado(monto);
   };
@@ -134,6 +229,57 @@ export function PagosProfesoresPage() {
     setFormMontoCalculado(monto);
   };
 
+  // ============================================================
+  // SUGERIR HORAS DESDE ASISTENCIA
+  // ============================================================
+
+  const sugerirHorasDesdeAsistencia = async () => {
+    if (!formIdProfesor) {
+      toast.warning('Selecciona un profesor primero');
+      return;
+    }
+    if (!sugerirDesde || !sugerirHasta) {
+      toast.warning('Elige el rango de fechas');
+      return;
+    }
+    if (sugerirHasta < sugerirDesde) {
+      toast.warning('La fecha "Hasta" no puede ser anterior a "Desde"');
+      return;
+    }
+
+    try {
+      setSugerirCargando(true);
+      const res = await apiFetch(
+        `/asistencia/reportes/profesor/${formIdProfesor}?desde=${sugerirDesde}&hasta=${sugerirHasta}`
+      );
+      if (!res.ok) throw new Error('No se pudo obtener la asistencia');
+      const data = await res.json();
+
+      const horas = Number(data.horasTrabajadas) || 0;
+      setFormHoras(String(horas));
+      const monto = calcularMonto(formIdProfesor, String(horas));
+      setFormMontoCalculado(monto);
+
+      if (horas === 0) {
+        setSugerirInfo(`📊 ${data.dadas || 0} sesiones dadas en el rango (0 hrs)`);
+        toast.warning('No hay sesiones dadas en ese rango. Revisa las fechas o pasa lista.');
+      } else {
+        setSugerirInfo(
+          `📊 ${data.dadas} sesión(es) dada(s) · ${horas} hrs en el rango`
+        );
+        toast.success(`Sugerido: ${horas} hrs`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo obtener la asistencia');
+    } finally {
+      setSugerirCargando(false);
+    }
+  };
+
+  // ============================================================
+  // GUARDAR / EDITAR / ELIMINAR
+  // ============================================================
+
   const handleGuardar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formIdProfesor) {
@@ -143,7 +289,7 @@ export function PagosProfesoresPage() {
     try {
       const payload = {
         idProfesor: formIdProfesor,
-        fecha: formFecha || new Date().toISOString().split('T')[0],
+        fecha: formFecha || new Date().toLocaleDateString('en-CA'),
         horasTrabajadas: Number(formHoras) || 0,
         metodoPago: formMetodo,
         observaciones: formObservaciones,
@@ -178,18 +324,27 @@ export function PagosProfesoresPage() {
     setFormMontoCalculado(0);
     setFormTipoPago('fijo_mensual');
     setFormSalarioBase(0);
+    setSugerirInfo('');
+    const s = semanaActual();
+    setSugerirDesde(s.desde);
+    setSugerirHasta(s.hasta);
   };
 
   const handleEditar = (pago: PagoProfesor) => {
     setEditando(pago);
     setFormIdProfesor(pago.idProfesor);
-    setFormFecha(pago.fecha.split('T')[0]);
+    setFormFecha(String(pago.fecha).split('T')[0]);
     setFormHoras(String(pago.horasTrabajadas));
     setFormMetodo(pago.metodoPago);
     setFormObservaciones(pago.observaciones);
     setFormMontoCalculado(pago.montoCalculado);
     setFormTipoPago(pago.tipoPago);
     setFormSalarioBase(pago.tipoPago === 'por_hora' ? pago.salarioPorHora : pago.salarioMensual);
+    setSugerirInfo('');
+    // Preseleccionar la semana del pago
+    const lunes = lunesDeSemana(parseFechaPago(pago.fecha));
+    setSugerirDesde(lunes);
+    setSugerirHasta(domingoDeSemana(lunes));
     setMostrarForm(true);
   };
 
@@ -205,19 +360,23 @@ export function PagosProfesoresPage() {
     }
   };
 
-  // Filtros
+  // ============================================================
+  // FILTRADO
+  // ============================================================
+
   const pagosFiltrados = pagos
     .filter((p) => p.activo !== false)
+    .filter((p) => (filtroProfesor ? p.idProfesor === filtroProfesor : true))
     .filter((p) => {
-      if (filtroProfesor) return p.idProfesor === filtroProfesor;
+      if (fechaInicio) {
+        return String(p.fecha).split('T')[0] >= fechaInicio;
+      }
       return true;
     })
     .filter((p) => {
-      if (fechaInicio) return p.fecha >= fechaInicio;
-      return true;
-    })
-    .filter((p) => {
-      if (fechaFin) return p.fecha <= fechaFin;
+      if (fechaFin) {
+        return String(p.fecha).split('T')[0] <= fechaFin;
+      }
       return true;
     });
 
@@ -233,9 +392,11 @@ export function PagosProfesoresPage() {
   }
 
   const decorativeVideos: { src: string; position: any }[] = [];
-
-  // Resumen de totales
   const totalPagos = pagosFiltrados.reduce((sum, p) => sum + p.montoCalculado, 0);
+
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <BackgroundVideo
@@ -320,7 +481,8 @@ export function PagosProfesoresPage() {
                 <tr className="bg-gradient-to-r from-[#1E293B] to-[#334155] text-white">
                   <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Profesor</th>
                   <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Fecha</th>
-                  <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Horas</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Horas pagadas</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Horas asistencia</th>
                   <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Monto</th>
                   <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider">Método</th>
                   <th className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider max-w-[150px] truncate">Observaciones</th>
@@ -330,39 +492,84 @@ export function PagosProfesoresPage() {
               <tbody className="divide-y divide-white/10">
                 {pagosFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-white/60 italic">
+                    <td colSpan={8} className="px-4 py-8 text-center text-white/60 italic">
                       🧐 No hay pagos registrados
                     </td>
                   </tr>
                 ) : (
-                  pagosFiltrados.map((p) => (
-                    <tr key={p._id} className="hover:bg-white/10 transition-colors">
-                      <td className="px-3 py-2 whitespace-nowrap font-medium text-white">{p.nombreProfesor}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-white/80">{new Date(p.fecha).toLocaleDateString()}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right text-white/80">{p.horasTrabajadas}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right font-bold text-[#F8B50E]">${Number(p.montoCalculado).toFixed(2)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-white/80">{p.metodoPago}</td>
-                      <td className="px-3 py-2 text-white/60 max-w-[150px] truncate" title={p.observaciones}>
-                        {p.observaciones || '-'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right">
-                        <button
-                          onClick={() => handleEditar(p)}
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all hover:scale-110"
-                          title="Editar"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEliminar(p._id)}
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-rose-400 hover:text-rose-300 transition-all hover:scale-110 ml-1"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  pagosFiltrados.map((p) => {
+                    // Buscar horas de asistencia para este pago
+                    let horasAsist: number | null = null;
+                    if (p.tipoPago === 'por_hora') {
+                      const lunes = lunesDeSemana(parseFechaPago(p.fecha));
+                      const clave = `${p.idProfesor}__${lunes}`;
+                      if (clave in horasAsistencia) {
+                        horasAsist = horasAsistencia[clave];
+                      }
+                    }
+
+                    const cuadra =
+                      horasAsist !== null && Math.abs(horasAsist - p.horasTrabajadas) < 0.01;
+
+                    return (
+                      <tr key={p._id} className="hover:bg-white/10 transition-colors">
+                        <td className="px-3 py-2 whitespace-nowrap font-medium text-white">
+                          {p.nombreProfesor}
+                          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full uppercase ${p.tipoPago === 'por_hora' ? 'bg-blue-500/30 text-blue-200' : 'bg-emerald-500/30 text-emerald-200'}`}>
+                            {p.tipoPago === 'por_hora' ? 'Hora' : 'Fijo'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-white/80">
+                          {parseFechaPago(p.fecha).toLocaleDateString('es-ES', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right text-white/80">
+                          {p.horasTrabajadas}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right">
+                          {p.tipoPago === 'fijo_mensual' ? (
+                            <span className="text-white/40 text-xs">—</span>
+                          ) : horasAsist === null ? (
+                            <span className="text-white/40 text-xs">cargando…</span>
+                          ) : (
+                            <span
+                              className={`font-bold ${cuadra ? 'text-emerald-300' : 'text-amber-300'}`}
+                              title={cuadra ? 'Coincide con la asistencia' : 'No coincide con la asistencia'}
+                            >
+                              {horasAsist}
+                              {cuadra ? ' ✅' : ' ⚠️'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right font-bold text-[#F8B50E]">
+                          ${Number(p.montoCalculado).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-white/80">{p.metodoPago}</td>
+                        <td className="px-3 py-2 text-white/60 max-w-[150px] truncate" title={p.observaciones}>
+                          {p.observaciones || '-'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right">
+                          <button
+                            onClick={() => handleEditar(p)}
+                            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-all hover:scale-110"
+                            title="Editar"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEliminar(p._id)}
+                            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-rose-400 hover:text-rose-300 transition-all hover:scale-110 ml-1"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -386,6 +593,7 @@ export function PagosProfesoresPage() {
                   </span>
                 )}
               </div>
+
               <form onSubmit={handleGuardar} className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Profesor *</label>
@@ -405,10 +613,8 @@ export function PagosProfesoresPage() {
                       </option>
                     ))}
                   </select>
-                  {profesores.length === 0 && (
-                    <p className="text-xs text-amber-500 mt-1">⚠️ No hay profesores activos. Verifica la base de datos.</p>
-                  )}
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha</label>
@@ -425,7 +631,7 @@ export function PagosProfesoresPage() {
                     </label>
                     <input
                       type="number"
-                      step={formTipoPago === 'por_hora' ? '0.5' : '1'}
+                      step={formTipoPago === 'por_hora' ? '0.25' : '1'}
                       value={formHoras}
                       onChange={handleHorasChange}
                       className="w-full border-2 border-[#1E293B]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
@@ -434,6 +640,53 @@ export function PagosProfesoresPage() {
                     />
                   </div>
                 </div>
+
+                {/* Sugerir horas desde asistencia (solo para por_hora) */}
+                {formTipoPago === 'por_hora' && formIdProfesor && (
+                  <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                      <BarChart3 className="w-4 h-4" />
+                      Sugerir horas desde asistencia
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 items-end">
+                      <div>
+                        <label className="block text-[11px] text-blue-700 font-medium mb-1">Desde</label>
+                        <input
+                          type="date"
+                          value={sugerirDesde}
+                          onChange={(e) => setSugerirDesde(e.target.value)}
+                          className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-blue-700 font-medium mb-1">Hasta</label>
+                        <input
+                          type="date"
+                          value={sugerirHasta}
+                          onChange={(e) => setSugerirHasta(e.target.value)}
+                          className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={sugerirHorasDesdeAsistencia}
+                        disabled={sugerirCargando}
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {sugerirCargando ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <BarChart3 className="w-3.5 h-3.5" />
+                        )}
+                        Calcular
+                      </button>
+                    </div>
+                    {sugerirInfo && (
+                      <p className="text-xs text-blue-800 font-medium">{sugerirInfo}</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
                     Salario base {formTipoPago === 'por_hora' ? '(por hora)' : '(mensual)'}
@@ -442,12 +695,14 @@ export function PagosProfesoresPage() {
                     ${formSalarioBase.toFixed(2)}
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Monto calculado</label>
                   <div className="text-3xl font-bold text-[#1E293B] bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-xl px-4 py-3 border-2 border-emerald-200">
                     ${formMontoCalculado.toFixed(2)}
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Método de pago</label>
                   <select
@@ -461,6 +716,7 @@ export function PagosProfesoresPage() {
                     <option value="Cheque">Cheque</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Observaciones</label>
                   <input
@@ -471,6 +727,7 @@ export function PagosProfesoresPage() {
                     placeholder="Notas adicionales (ej. semana del 1 al 7 de julio)"
                   />
                 </div>
+
                 <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
                   <button
                     type="button"

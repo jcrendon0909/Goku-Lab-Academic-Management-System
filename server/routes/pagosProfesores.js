@@ -4,6 +4,33 @@ import Profesor from '../models/Profesor.js';
 
 const router = express.Router();
 
+// ============================================================
+// HELPERS DE FECHA (evitan corrimiento de timezone)
+// ============================================================
+
+/**
+ * Convierte "2026-09-29" a Date a T12:00:00.000Z.
+ * El mediodía UTC nunca cae en otro día calendario en México.
+ */
+function parseFechaCalendario(fechaInput) {
+  if (!fechaInput) return new Date();
+  if (fechaInput instanceof Date) return fechaInput;
+  const fechaStr = String(fechaInput).split('T')[0];
+  return new Date(fechaStr + 'T12:00:00.000Z');
+}
+
+/**
+ * Devuelve { inicio, fin } del día en UTC a partir de "YYYY-MM-DD".
+ * Se usa para filtros: incluye TODO el día, no solo desde medianoche UTC.
+ */
+function rangoDiaUTC(fechaInput) {
+  const fechaStr = String(fechaInput).split('T')[0];
+  return {
+    inicio: new Date(fechaStr + 'T00:00:00.000Z'),
+    fin: new Date(fechaStr + 'T23:59:59.999Z'),
+  };
+}
+
 // GET / - Obtener todos los pagos (con filtros opcionales)
 router.get('/', async (req, res) => {
   try {
@@ -12,8 +39,8 @@ router.get('/', async (req, res) => {
     if (idProfesor) filtro.idProfesor = idProfesor;
     if (desde || hasta) {
       filtro.fecha = {};
-      if (desde) filtro.fecha.$gte = new Date(desde);
-      if (hasta) filtro.fecha.$lte = new Date(hasta);
+      if (desde) filtro.fecha.$gte = rangoDiaUTC(desde).inicio;
+      if (hasta) filtro.fecha.$lte = rangoDiaUTC(hasta).fin;
     }
     const pagos = await PagoProfesor.find(filtro).sort({ fecha: -1 }).lean();
     res.json(pagos);
@@ -28,13 +55,11 @@ router.post('/', async (req, res) => {
   try {
     const { idProfesor, fecha, horasTrabajadas, metodoPago, observaciones } = req.body;
 
-    // Obtener datos del profesor
     const profesor = await Profesor.findOne({ idProfesor }).lean();
     if (!profesor) {
       return res.status(404).json({ error: 'Profesor no encontrado' });
     }
 
-    // Calcular monto automáticamente
     let montoCalculado = 0;
     let tipoPago = profesor.tipoPago || 'fijo_mensual';
 
@@ -42,9 +67,8 @@ router.post('/', async (req, res) => {
       const salarioPorHora = Number(profesor.salarioPorHora) || 0;
       montoCalculado = (Number(horasTrabajadas) || 0) * salarioPorHora;
     } else {
-      // fijo_mensual: se calcula proporcional a semanas trabajadas (1 semana = 1/4 del salario mensual)
       const salarioMensual = Number(profesor.salarioMensual) || 0;
-      const semanas = Number(horasTrabajadas) || 1; // si no se especifica, se asume 1 semana
+      const semanas = Number(horasTrabajadas) || 1;
       montoCalculado = (salarioMensual / 4) * semanas;
     }
 
@@ -54,7 +78,7 @@ router.post('/', async (req, res) => {
       tipoPago,
       salarioPorHora: profesor.salarioPorHora || 0,
       salarioMensual: profesor.salarioMensual || 0,
-      fecha: fecha || new Date(),
+      fecha: parseFechaCalendario(fecha),
       horasTrabajadas: Number(horasTrabajadas) || 0,
       montoCalculado,
       metodoPago: metodoPago || 'Efectivo',
@@ -81,7 +105,6 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Pago no encontrado' });
     }
 
-    // Si se actualizan horas, recalcular monto
     let montoCalculado = pago.montoCalculado;
     if (horasTrabajadas !== undefined) {
       const horas = Number(horasTrabajadas) || 0;
@@ -93,8 +116,8 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
-    pago.fecha = fecha || pago.fecha;
-    pago.horasTrabajadas = Number(horasTrabajadas) || pago.horasTrabajadas;
+    if (fecha !== undefined) pago.fecha = parseFechaCalendario(fecha);
+    if (horasTrabajadas !== undefined) pago.horasTrabajadas = Number(horasTrabajadas) || 0;
     pago.montoCalculado = montoCalculado;
     if (metodoPago) pago.metodoPago = metodoPago;
     if (observaciones !== undefined) pago.observaciones = observaciones;
