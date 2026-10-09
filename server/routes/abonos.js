@@ -205,8 +205,7 @@ router.post("/", async (req, res) => {
       await nuevoAbono.save();
 
       if (pagoMes) {
-        // ✅ FIX: un abono con descuento aplicado se considera saldado
-        // aunque el monto sea menor al montoPago original.
+        // Un pago con descuento se considera saldado
         const cubreConDescuento =
           esDescuento && descuentoPorcentaje > 0 && montoTotal > 0;
         const pagoCompleto = cubreConDescuento || montoTotal >= montoMensual;
@@ -221,23 +220,82 @@ router.post("/", async (req, res) => {
         await pagoMes.save();
       }
 
+      // ============================================================
+      // CAMBIO DE TARIFA FUTURA
+      // Actualiza TODOS los meses pendientes/parciales siguientes al abono.
+      // ============================================================
       if (nuevoMontoMensual && Number(nuevoMontoMensual) > 0) {
-        const mesSig = new Date(fechaInicio);
-        mesSig.setMonth(mesSig.getMonth() + 1);
-        mesSig.setHours(12, 0, 0, 0);
-        const mesStrSig = `${mesSig.getFullYear()}-${String(
-          mesSig.getMonth() + 1
-        ).padStart(2, "0")}`;
-        const pagoFuturoId = crearPagoId(idAlumno, grupoId, mesStrSig);
-        await Pago.updateOne(
-          { pagoId: pagoFuturoId },
-          {
-            $set: {
-              montoPago: Number(nuevoMontoMensual),
-              descuentoAplicado: 0,
-            },
+        const nuevaTarifa = Number(nuevoMontoMensual);
+
+        // Extraer el mes del pagoId actual (formato: ALUxxx-GRUyyy-YYYY-MM)
+        const match = pagoId.match(/-(\d{4})-(\d{2})$/);
+
+        if (match) {
+          const anioAbono = parseInt(match[1]);
+          const mesAbono = parseInt(match[2]);
+
+          // Calcular el mes siguiente al abono
+          let anioSig = anioAbono;
+          let mesSig = mesAbono + 1;
+          if (mesSig > 12) {
+            mesSig = 1;
+            anioSig++;
           }
-        );
+
+          const fechaInicioFuturos = new Date(anioSig, mesSig - 1, 1, 0, 0, 0, 0);
+
+          // Buscar TODOS los pagos futuros pendientes/parciales
+          const pagosFuturos = await Pago.find({
+            idAlumno,
+            grupoId,
+            fechaInicioPago: { $gte: fechaInicioFuturos },
+            estatus: { $in: ["Pendiente", "Parcial"] },
+            activo: true,
+          }).sort({ fechaInicioPago: 1 });
+
+          console.log(
+            `💱 Aplicando nueva tarifa $${nuevaTarifa} a ${pagosFuturos.length} meses futuros`
+          );
+
+          for (const pagoFut of pagosFuturos) {
+            const montoAnterior = pagoFut.montoPago;
+            pagoFut.montoPago = nuevaTarifa;
+            pagoFut.descuentoAplicado = 0;
+            pagoFut.notas =
+              (pagoFut.notas || "") +
+              ` [Tarifa actualizada $${montoAnterior} → $${nuevaTarifa} desde ${anioSig}-${String(mesSig).padStart(2, "0")}]`;
+            await pagoFut.save();
+            console.log(`  ✅ ${pagoFut.pagoId}: $${montoAnterior} → $${nuevaTarifa}`);
+          }
+
+          // Actualizar la inscripción con la nueva tarifa base
+          const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId });
+          if (inscripcion && inscripcion.montoMensualidad !== nuevaTarifa) {
+            const tarifaAnterior = inscripcion.montoMensualidad;
+            inscripcion.montoMensualidad = nuevaTarifa;
+            inscripcion.historialModificaciones =
+              inscripcion.historialModificaciones || [];
+            inscripcion.historialModificaciones.push({
+              fecha: new Date(),
+              usuario: "admin",
+              cambios: {
+                montoMensualidad: {
+                  old: tarifaAnterior,
+                  new: nuevaTarifa,
+                  razon: "Cambio de tarifa desde abono",
+                },
+              },
+            });
+            await inscripcion.save();
+            console.log(
+              `✅ Inscripción actualizada: $${tarifaAnterior} → $${nuevaTarifa}`
+            );
+          }
+        } else {
+          console.warn(
+            `⚠️  No se pudo extraer mes del pagoId: ${pagoId}. No se aplicó nueva tarifa.`
+          );
+        }
       }
 
       cache.flushAll();
