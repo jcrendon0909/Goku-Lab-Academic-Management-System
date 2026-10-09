@@ -19,18 +19,11 @@ function parseFechaAbono(raw) {
 
 // ============================================================
 // Helper: recalcular Pago basado en sus abonos
-// - No toca anticipos (tipoPago === 'adelantado')
-// - Reglas:
-//     suma >= montoPago → Pagado
-//     0 < suma < montoPago → Parcial
-//     suma = 0 pero hay abonos $0 → Pagado (mes sin pago)
-//     sin abonos → Pendiente
 // ============================================================
 async function recalcularPagoDesdeAbonos(pagoId) {
   const pago = await Pago.findOne({ pagoId });
   if (!pago) return { ok: false, reason: 'Pago no encontrado' };
 
-  // Guardarraíl: no tocar anticipos
   if (pago.tipoPago === 'adelantado') {
     return {
       ok: true,
@@ -57,7 +50,6 @@ async function recalcularPagoDesdeAbonos(pagoId) {
   } else if (totalAbonado > 0) {
     nuevoEstatus = 'Parcial';
   } else {
-    // totalAbonado === 0 pero hay abonos → mes sin pago
     nuevoEstatus = 'Pagado';
     nuevaFechaPago = abonos[0].fechaAbono;
   }
@@ -213,8 +205,14 @@ router.post("/", async (req, res) => {
       await nuevoAbono.save();
 
       if (pagoMes) {
-        pagoMes.estatus = montoTotal >= montoMensual ? "Pagado" : "Parcial";
-        if (montoTotal >= montoMensual) {
+        // ✅ FIX: un abono con descuento aplicado se considera saldado
+        // aunque el monto sea menor al montoPago original.
+        const cubreConDescuento =
+          esDescuento && descuentoPorcentaje > 0 && montoTotal > 0;
+        const pagoCompleto = cubreConDescuento || montoTotal >= montoMensual;
+
+        pagoMes.estatus = pagoCompleto ? "Pagado" : "Parcial";
+        if (pagoCompleto) {
           pagoMes.fechaPago = fechaAbono;
         }
         if (esDescuento && descuentoPorcentaje > 0) {
@@ -346,7 +344,6 @@ router.post("/", async (req, res) => {
 
 // ============================================================
 // PUT /:abonoId – EDITAR ABONO
-// Campos editables: montoAbono, fechaAbono, metodoAbono, notas
 // ============================================================
 router.put("/:abonoId", async (req, res) => {
   try {
@@ -358,7 +355,6 @@ router.put("/:abonoId", async (req, res) => {
       return res.status(404).json({ error: "Abono no encontrado" });
     }
 
-    // Validaciones
     if (montoAbono !== undefined) {
       const monto = Number(montoAbono);
       if (isNaN(monto) || monto < 0) {
@@ -385,7 +381,6 @@ router.put("/:abonoId", async (req, res) => {
 
     await abono.save();
 
-    // Recalcular el Pago asociado
     const resultado = await recalcularPagoDesdeAbonos(abono.pagoId);
 
     cache.flushAll();
@@ -417,7 +412,6 @@ router.delete("/:abonoId", async (req, res) => {
 
     const pagoId = abono.pagoId;
 
-    // Guardarraíl: advertir si es anticipo
     const pago = await Pago.findOne({ pagoId });
     if (pago && pago.tipoPago === "adelantado") {
       console.warn(
@@ -427,7 +421,6 @@ router.delete("/:abonoId", async (req, res) => {
 
     await Abono.deleteOne({ _id: abono._id });
 
-    // Recalcular el Pago
     const resultado = await recalcularPagoDesdeAbonos(pagoId);
 
     cache.flushAll();
