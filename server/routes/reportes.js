@@ -7,12 +7,11 @@ import Alumno from "../models/Alumno.js";
 import Inscripcion from "../models/Inscripcion.js";
 import Gasto from "../models/Gasto.js";
 import PagoProfesor from "../models/PagoProfesor.js";
-import { rangoMes, redondear } from "../utils/periodos.js";
 
 const router = express.Router();
 
 // ============================================================
-// GET /pagos - Reporte de cobranza (SIN CAMBIOS)
+// GET /pagos - Reporte de cobranza
 // ============================================================
 router.get("/pagos", async (req, res) => {
   try {
@@ -28,6 +27,7 @@ router.get("/pagos", async (req, res) => {
     const abonos = await Abono.find(filtro).lean();
 
     const abonosConNombre = abonos.map((abono) => ({
+      abonoId: abono.abonoId || "",
       fecha: abono.fechaAbono || abono.createdAt,
       estudiante: abono.nombreAlumno || "Alumno desconocido",
       monto: abono.montoAbono || 0,
@@ -36,11 +36,12 @@ router.get("/pagos", async (req, res) => {
       factura: false,
       recibidoPor: abono.recibidoPor || "Sistema",
       saldoAFavor: abono.saldoAFavor || 0,
-      observaciones: abono.observaciones || "",
+      observaciones: abono.notas || abono.observaciones || "",
       periodoFacturacion: abono.periodoFacturacion || "",
       estatus: abono.estatus || "",
       notas: abono.notas || "",
       grupoId: abono.grupoId || "",
+      pagoId: abono.pagoId || "",
     }));
 
     const totales = await Abono.aggregate([
@@ -69,7 +70,7 @@ router.get("/pagos", async (req, res) => {
 });
 
 // ============================================================
-// GET /rentabilidad-profesores - (SIN CAMBIOS)
+// GET /rentabilidad-profesores
 // ============================================================
 router.get("/rentabilidad-profesores", async (req, res) => {
   try {
@@ -84,8 +85,6 @@ router.get("/rentabilidad-profesores", async (req, res) => {
 
     const fechaInicio = new Date(anioNum, mesNum - 1, 1);
     const fechaFin = new Date(anioNum, mesNum, 1);
-
-    console.log(`📅 Filtro de fechas: ${fechaInicio} a ${fechaFin}`);
 
     const filtroAbonos = {
       fechaAbono: { $gte: fechaInicio, $lt: fechaFin },
@@ -231,8 +230,6 @@ router.get("/rentabilidad-profesores", async (req, res) => {
         cantidadGrupos: gruposData.length,
         cantidadAlumnos: gruposData.reduce((sum, g) => sum + g.cantidadAlumnos, 0),
         grupos: gruposData,
-        abonos: profIngresos.abonos || [],
-        pagos: profCostos.pagos || [],
       };
     });
 
@@ -247,202 +244,6 @@ router.get("/rentabilidad-profesores", async (req, res) => {
     res.json(profesoresFiltrados);
   } catch (error) {
     console.error("❌ Error en GET /reportes/rentabilidad-profesores:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================================
-// GET /rentabilidad-global — NUEVO
-// Ingresos (abonos) − Gastos operativos − Nómina profesores
-// ============================================================
-router.get("/rentabilidad-global", async (req, res) => {
-  try {
-    const hoy = new Date();
-    const anio = parseInt(req.query.anio) || hoy.getFullYear();
-    const mes = parseInt(req.query.mes) || hoy.getMonth() + 1;
-
-    if (mes < 1 || mes > 12) {
-      return res.status(400).json({ error: "Mes inválido (1-12)" });
-    }
-
-    const { fechaInicio, fechaFin, mesLabel, label } = rangoMes(anio, mes);
-
-    // ---- Ingresos: SOLO abonos (fuente de verdad de dinero cobrado) ----
-    const ingresosAgg = await Abono.aggregate([
-      { $match: { fechaAbono: { $gte: fechaInicio, $lt: fechaFin } } },
-      { $group: { _id: null, total: { $sum: "$montoAbono" } } },
-    ]);
-    const totalAbonos = ingresosAgg[0]?.total || 0;
-
-    // ---- Egresos: gastos operativos (excluye categoría "Profesores") ----
-    const gastosAgg = await Gasto.aggregate([
-      {
-        $match: {
-          fecha: { $gte: fechaInicio, $lt: fechaFin },
-          activo: { $ne: false },
-          categoria: { $ne: "Profesores" },
-        },
-      },
-      { $group: { _id: "$categoria", monto: { $sum: "$monto" } } },
-      { $sort: { monto: -1 } },
-    ]);
-    const totalGastos = gastosAgg.reduce((s, g) => s + (g.monto || 0), 0);
-
-    // ---- Egresos: nómina profesores ----
-    const nominaAgg = await PagoProfesor.aggregate([
-      {
-        $match: {
-          fecha: { $gte: fechaInicio, $lt: fechaFin },
-          activo: true,
-        },
-      },
-      {
-        $group: {
-          _id: "$idProfesor",
-          nombre: { $first: "$nombreProfesor" },
-          monto: { $sum: "$montoCalculado" },
-        },
-      },
-      { $sort: { monto: -1 } },
-    ]);
-    const totalNomina = nominaAgg.reduce((s, p) => s + (p.monto || 0), 0);
-
-    const totalEgresos = totalGastos + totalNomina;
-    const utilidad = totalAbonos - totalEgresos;
-    const porcentajeUtilidad = totalAbonos > 0 ? (utilidad / totalAbonos) * 100 : 0;
-
-    // ---- Variación vs mes anterior ----
-    const anioAnt = mes === 1 ? anio - 1 : anio;
-    const mesAnt = mes === 1 ? 12 : mes - 1;
-    const rangoAnt = rangoMes(anioAnt, mesAnt);
-
-    const [abonosAntAgg, gastosAntAgg, nominaAntAgg] = await Promise.all([
-      Abono.aggregate([
-        { $match: { fechaAbono: { $gte: rangoAnt.fechaInicio, $lt: rangoAnt.fechaFin } } },
-        { $group: { _id: null, total: { $sum: "$montoAbono" } } },
-      ]),
-      Gasto.aggregate([
-        {
-          $match: {
-            fecha: { $gte: rangoAnt.fechaInicio, $lt: rangoAnt.fechaFin },
-            activo: { $ne: false },
-            categoria: { $ne: "Profesores" },
-          },
-        },
-        { $group: { _id: null, total: { $sum: "$monto" } } },
-      ]),
-      PagoProfesor.aggregate([
-        { $match: { fecha: { $gte: rangoAnt.fechaInicio, $lt: rangoAnt.fechaFin }, activo: true } },
-        { $group: { _id: null, total: { $sum: "$montoCalculado" } } },
-      ]),
-    ]);
-
-    const utilidadAnterior =
-      (abonosAntAgg[0]?.total || 0) -
-      (gastosAntAgg[0]?.total || 0) -
-      (nominaAntAgg[0]?.total || 0);
-
-    const variacionMonto = utilidad - utilidadAnterior;
-    const variacionPorcentaje =
-      utilidadAnterior !== 0
-        ? (variacionMonto / Math.abs(utilidadAnterior)) * 100
-        : null;
-
-    res.json({
-      periodo: { anio, mes, mesLabel, label },
-      ingresos: {
-        fuentes: [{ id: "abonos", label: "Cobrado (abonos)", monto: redondear(totalAbonos) }],
-        total: redondear(totalAbonos),
-      },
-      egresos: {
-        fuentes: [
-          { id: "gastos_operativos", label: "Gastos operativos", monto: redondear(totalGastos) },
-          { id: "nomina_profesores", label: "Nómina profesores", monto: redondear(totalNomina) },
-        ],
-        total: redondear(totalEgresos),
-      },
-      utilidad: redondear(utilidad),
-      porcentajeUtilidad: redondear(porcentajeUtilidad),
-      desgloseGastos: gastosAgg.map((g) => ({
-        categoria: g._id,
-        monto: redondear(g.monto),
-      })),
-      desgloseProfesores: nominaAgg.map((p) => ({
-        idProfesor: p._id,
-        nombre: p.nombre || "Sin nombre",
-        costo: redondear(p.monto),
-      })),
-      variacionVsMesAnterior: {
-        monto: redondear(variacionMonto),
-        porcentaje: variacionPorcentaje !== null ? redondear(variacionPorcentaje) : null,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Error en GET /reportes/rentabilidad-global:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================================
-// GET /utilidad-mensual — NUEVO
-// Serie de 12 meses del año solicitado.
-// ============================================================
-router.get("/utilidad-mensual", async (req, res) => {
-  try {
-    const hoy = new Date();
-    const anio = parseInt(req.query.anio) || hoy.getFullYear();
-    const inicio = new Date(anio, 0, 1);
-    const fin = new Date(anio + 1, 0, 1);
-
-    const [abonosPorMes, gastosPorMes, nominaPorMes] = await Promise.all([
-      Abono.aggregate([
-        { $match: { fechaAbono: { $gte: inicio, $lt: fin } } },
-        { $group: { _id: { $month: "$fechaAbono" }, total: { $sum: "$montoAbono" } } },
-      ]),
-      Gasto.aggregate([
-        {
-          $match: {
-            fecha: { $gte: inicio, $lt: fin },
-            activo: { $ne: false },
-            categoria: { $ne: "Profesores" },
-          },
-        },
-        { $group: { _id: { $month: "$fecha" }, total: { $sum: "$monto" } } },
-      ]),
-      PagoProfesor.aggregate([
-        { $match: { fecha: { $gte: inicio, $lt: fin }, activo: true } },
-        { $group: { _id: { $month: "$fecha" }, total: { $sum: "$montoCalculado" } } },
-      ]),
-    ]);
-
-    const abonosMap = Object.fromEntries(abonosPorMes.map((x) => [x._id, x.total]));
-    const gastosMap = Object.fromEntries(gastosPorMes.map((x) => [x._id, x.total]));
-    const nominaMap = Object.fromEntries(nominaPorMes.map((x) => [x._id, x.total]));
-
-    const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
-    const meses = Array.from({ length: 12 }, (_, i) => {
-      const mesNum = i + 1;
-      const abonos = abonosMap[mesNum] || 0;
-      const gastos = gastosMap[mesNum] || 0;
-      const nomina = nominaMap[mesNum] || 0;
-      const utilidad = abonos - gastos - nomina;
-      return {
-        mesNum,
-        mesLabel: MESES[i],
-        label: `${MESES[i]} ${anio}`,
-        ingresos: redondear(abonos),
-        gastos: redondear(gastos),
-        costoProfesores: redondear(nomina),
-        egresos: redondear(gastos + nomina),
-        utilidad: redondear(utilidad),
-        porcentajeUtilidad: abonos > 0 ? redondear((utilidad / abonos) * 100) : 0,
-      };
-    });
-
-    res.json({ anio, meses });
-  } catch (error) {
-    console.error("❌ Error en GET /reportes/utilidad-mensual:", error);
     res.status(500).json({ error: error.message });
   }
 });
