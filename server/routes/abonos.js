@@ -17,7 +17,65 @@ function parseFechaAbono(raw) {
   return new Date(y, m - 1, d, 12, 0, 0);
 }
 
-// Helper: encuentra o crea el Pago base (sin sufijo de mes)
+// ============================================================
+// Helper: recalcular Pago basado en sus abonos
+// - No toca anticipos (tipoPago === 'adelantado')
+// - Reglas:
+//     suma >= montoPago → Pagado
+//     0 < suma < montoPago → Parcial
+//     suma = 0 pero hay abonos $0 → Pagado (mes sin pago)
+//     sin abonos → Pendiente
+// ============================================================
+async function recalcularPagoDesdeAbonos(pagoId) {
+  const pago = await Pago.findOne({ pagoId });
+  if (!pago) return { ok: false, reason: 'Pago no encontrado' };
+
+  // Guardarraíl: no tocar anticipos
+  if (pago.tipoPago === 'adelantado') {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'Es un anticipo, no se recalcula automáticamente',
+    };
+  }
+
+  const abonos = await Abono.find({ pagoId }).lean();
+  const tieneAbonos = abonos.length > 0;
+  const totalAbonado = abonos.reduce((s, a) => s + (a.montoAbono || 0), 0);
+
+  let nuevoEstatus;
+  let nuevaFechaPago = null;
+
+  if (!tieneAbonos) {
+    nuevoEstatus = 'Pendiente';
+  } else if (totalAbonado >= pago.montoPago) {
+    nuevoEstatus = 'Pagado';
+    const ultimo = abonos.sort(
+      (a, b) => new Date(b.fechaAbono).getTime() - new Date(a.fechaAbono).getTime()
+    )[0];
+    nuevaFechaPago = ultimo.fechaAbono;
+  } else if (totalAbonado > 0) {
+    nuevoEstatus = 'Parcial';
+  } else {
+    // totalAbonado === 0 pero hay abonos → mes sin pago
+    nuevoEstatus = 'Pagado';
+    nuevaFechaPago = abonos[0].fechaAbono;
+  }
+
+  pago.estatus = nuevoEstatus;
+  pago.fechaPago = nuevaFechaPago;
+  await pago.save();
+
+  return {
+    ok: true,
+    pagoId,
+    nuevoEstatus,
+    totalAbonado,
+    abonosCount: abonos.length,
+  };
+}
+
+// Helper: encuentra o crea el Pago base
 async function getOCrearPagoBase({ pagoId, idAlumno, grupoId, nombreAlumno }) {
   let pagoBase = await Pago.findOne({ pagoId });
   if (pagoBase) return pagoBase;
@@ -54,12 +112,6 @@ async function getOCrearPagoBase({ pagoId, idAlumno, grupoId, nombreAlumno }) {
 
 // ============================================================
 // POST / – REGISTRAR ABONO
-// Reglas:
-//   - Si montoAbono = 0 → crea abono $0 y marca el Pago como Pagado.
-//   - Si mesesCubiertos = 1 → abono normal.
-//   - Si mesesCubiertos > 1 (anticipo) → el monto va completo al PRIMER mes,
-//     los meses siguientes quedan con montoPago: 0 + tipoPago: adelantado.
-//     NO se crean abonos $0 en los meses cubiertos (el Pago ya es la marca).
 // ============================================================
 router.post("/", async (req, res) => {
   try {
@@ -109,9 +161,7 @@ router.post("/", async (req, res) => {
     const diaPago = pagoBase.diaPago || 1;
     const fechaInicio = new Date(pagoBase.fechaInicioPago);
 
-    // ============================================================
-    // CASO $0 – "Mes sin pago"
-    // ============================================================
+    // CASO $0
     if (montoTotal === 0) {
       const nuevoAbono = new Abono({
         abonoId: await generarId("abono"),
@@ -141,9 +191,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ============================================================
     // CASO NORMAL: 1 mes
-    // ============================================================
     if (meses === 1) {
       const pagoMes = await Pago.findOne({ pagoId });
       const montoMensual = Number(pagoMes?.montoPago || montoTotal);
@@ -201,12 +249,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ============================================================
-    // CASO ANTICIPO: mesesCubiertos > 1
-    // El monto completo se refleja en el PRIMER mes.
-    // Los meses siguientes quedan con montoPago: 0 y tipoPago: adelantado.
-    // NO se crean abonos $0 en los meses cubiertos.
-    // ============================================================
+    // CASO ANTICIPO
     const pagoPrimerMes = await Pago.findOne({ pagoId });
     if (!pagoPrimerMes) {
       return res
@@ -214,7 +257,6 @@ router.post("/", async (req, res) => {
         .json({ error: "No se encontró el pago del primer mes del anticipo" });
     }
 
-    // 1) Único abono con el monto completo, en el PRIMER mes
     const abonoPrimero = new Abono({
       abonoId: await generarId("abono"),
       pagoId,
@@ -232,7 +274,6 @@ router.post("/", async (req, res) => {
     });
     await abonoPrimero.save();
 
-    // 2) Primer mes = monto total, Pagado, adelantado
     pagoPrimerMes.montoPago = montoTotal;
     pagoPrimerMes.estatus = "Pagado";
     pagoPrimerMes.fechaPago = fechaAbono;
@@ -242,8 +283,6 @@ router.post("/", async (req, res) => {
 
     const abonosCreados = [abonoPrimero];
 
-    // 3) Meses siguientes: montoPago 0, Pagado, tipoPago adelantado.
-    //    SIN abonos $0 (el Pago ya es la marca de cobertura).
     for (let i = 1; i < meses; i++) {
       const mes = new Date(fechaInicio);
       mes.setMonth(mes.getMonth() + i);
@@ -288,7 +327,6 @@ router.post("/", async (req, res) => {
         pagoMes.notas = `Cubierto por anticipo – mes ${i + 1} de ${meses}`;
       }
       await pagoMes.save();
-      // ⚠️ Ya NO se crea abono $0 aquí
     }
 
     cache.flushAll();
@@ -302,6 +340,108 @@ router.post("/", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error al registrar abono:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// PUT /:abonoId – EDITAR ABONO
+// Campos editables: montoAbono, fechaAbono, metodoAbono, notas
+// ============================================================
+router.put("/:abonoId", async (req, res) => {
+  try {
+    const { abonoId } = req.params;
+    const { montoAbono, fechaAbono, metodoAbono, notas } = req.body;
+
+    const abono = await Abono.findOne({ abonoId });
+    if (!abono) {
+      return res.status(404).json({ error: "Abono no encontrado" });
+    }
+
+    // Validaciones
+    if (montoAbono !== undefined) {
+      const monto = Number(montoAbono);
+      if (isNaN(monto) || monto < 0) {
+        return res.status(400).json({ error: "Monto inválido" });
+      }
+      abono.montoAbono = monto;
+    }
+
+    if (fechaAbono !== undefined) {
+      const fecha = parseFechaAbono(fechaAbono);
+      if (isNaN(fecha.getTime())) {
+        return res.status(400).json({ error: "Fecha inválida" });
+      }
+      abono.fechaAbono = fecha;
+    }
+
+    if (metodoAbono !== undefined) {
+      abono.metodoAbono = String(metodoAbono).trim() || "Efectivo";
+    }
+
+    if (notas !== undefined) {
+      abono.notas = String(notas).trim();
+    }
+
+    await abono.save();
+
+    // Recalcular el Pago asociado
+    const resultado = await recalcularPagoDesdeAbonos(abono.pagoId);
+
+    cache.flushAll();
+
+    console.log(`✏️ Abono editado: ${abonoId} | pagoId: ${abono.pagoId}`);
+
+    res.json({
+      message: "Abono actualizado",
+      abono,
+      recalculo: resultado,
+    });
+  } catch (error) {
+    console.error("❌ Error al editar abono:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// DELETE /:abonoId – ELIMINAR ABONO
+// ============================================================
+router.delete("/:abonoId", async (req, res) => {
+  try {
+    const { abonoId } = req.params;
+
+    const abono = await Abono.findOne({ abonoId });
+    if (!abono) {
+      return res.status(404).json({ error: "Abono no encontrado" });
+    }
+
+    const pagoId = abono.pagoId;
+
+    // Guardarraíl: advertir si es anticipo
+    const pago = await Pago.findOne({ pagoId });
+    if (pago && pago.tipoPago === "adelantado") {
+      console.warn(
+        `⚠️ Eliminando abono de un Pago marcado como anticipo: ${abonoId} | ${pagoId}`
+      );
+    }
+
+    await Abono.deleteOne({ _id: abono._id });
+
+    // Recalcular el Pago
+    const resultado = await recalcularPagoDesdeAbonos(pagoId);
+
+    cache.flushAll();
+
+    console.log(`🗑️ Abono eliminado: ${abonoId} | pagoId: ${pagoId}`);
+
+    res.json({
+      message: "Abono eliminado",
+      abonoId,
+      pagoId,
+      recalculo: resultado,
+    });
+  } catch (error) {
+    console.error("❌ Error al eliminar abono:", error);
     res.status(500).json({ error: error.message });
   }
 });

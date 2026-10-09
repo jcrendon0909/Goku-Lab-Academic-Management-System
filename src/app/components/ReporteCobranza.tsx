@@ -5,6 +5,9 @@ import * as XLSX from 'xlsx';
 import BackgroundVideo from './BackgroundVideo';
 
 interface Abono {
+  abonoId?: string;
+  pagoId?: string;
+  grupoId?: string;
   fecha: string;
   estudiante: string;
   monto: number;
@@ -27,11 +30,23 @@ export function ReporteCobranza() {
   const [anio, setAnio] = useState('');
   const [totalGeneral, setTotalGeneral] = useState(0);
 
-  // 🔍 NUEVO: Estado para filtro por alumno
   const [filtroAlumno, setFiltroAlumno] = useState('');
-
-  // 🔄 NUEVO: Estado para ordenamiento
   const [ordenConfig, setOrdenConfig] = useState<{ key: keyof Abono; direccion: 'asc' | 'desc' } | null>(null);
+
+  // Estado para edición
+  const [editandoAbono, setEditandoAbono] = useState<Abono | null>(null);
+  const [formData, setFormData] = useState({
+    monto: 0,
+    fecha: '',
+    metodo: 'Efectivo',
+    notas: '',
+  });
+
+  // Estado para eliminar
+  const [eliminandoAbono, setEliminandoAbono] = useState<Abono | null>(null);
+
+  // Estado de loading en modales
+  const [guardando, setGuardando] = useState(false);
 
   const cargarReporte = async () => {
     try {
@@ -58,14 +73,12 @@ export function ReporteCobranza() {
     cargarReporte();
   }, []);
 
-  // 🔍 NUEVO: Filtrar abonos por alumno
   const abonosFiltrados = useMemo(() => {
     if (!filtroAlumno.trim()) return abonos;
     const busqueda = filtroAlumno.toLowerCase().trim();
     return abonos.filter(a => a.estudiante.toLowerCase().includes(busqueda));
   }, [abonos, filtroAlumno]);
 
-  // 🔄 NUEVO: Ordenar abonos
   const abonosOrdenados = useMemo(() => {
     if (!ordenConfig) return abonosFiltrados;
     const { key, direccion } = ordenConfig;
@@ -84,7 +97,6 @@ export function ReporteCobranza() {
     return sorted;
   }, [abonosFiltrados, ordenConfig]);
 
-  // 🔄 NUEVO: Manejar clic en encabezado para ordenar
   const handleSort = (key: keyof Abono) => {
     setOrdenConfig(prev => {
       if (prev?.key === key) {
@@ -123,6 +135,103 @@ export function ReporteCobranza() {
     cargarReporte();
   };
 
+  // ─────────────────────────────────────────────────────────
+  // Handlers de edición
+  // ─────────────────────────────────────────────────────────
+  const abrirEditar = (abono: Abono) => {
+    const fechaISO = new Date(abono.fecha).toISOString().slice(0, 10);
+    setEditandoAbono(abono);
+    setFormData({
+      monto: abono.monto,
+      fecha: fechaISO,
+      metodo: abono.metodoPago || 'Efectivo',
+      notas: abono.notas || abono.observaciones || '',
+    });
+  };
+
+  const cerrarEditar = () => {
+    setEditandoAbono(null);
+  };
+
+  const guardarEdicion = async () => {
+    if (!editandoAbono?.abonoId) {
+      toast.error('Este abono no tiene ID. Actualiza el backend.');
+      return;
+    }
+
+    if (formData.monto < 0 || isNaN(formData.monto)) {
+      toast.error('Monto inválido');
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const res = await apiFetch(`/abonos/${editandoAbono.abonoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          montoAbono: formData.monto,
+          fechaAbono: formData.fecha,
+          metodoAbono: formData.metodo,
+          notas: formData.notas,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al editar abono');
+      }
+
+      toast.success('Abono actualizado');
+      cerrarEditar();
+      await cargarReporte();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Error al editar abono');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────
+  // Handlers de eliminar
+  // ─────────────────────────────────────────────────────────
+  const abrirEliminar = (abono: Abono) => {
+    setEliminandoAbono(abono);
+  };
+
+  const cerrarEliminar = () => {
+    setEliminandoAbono(null);
+  };
+
+  const confirmarEliminar = async () => {
+    if (!eliminandoAbono?.abonoId) {
+      toast.error('Este abono no tiene ID. Actualiza el backend.');
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const res = await apiFetch(`/abonos/${eliminandoAbono.abonoId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al eliminar abono');
+      }
+
+      toast.success('Abono eliminado');
+      cerrarEliminar();
+      await cargarReporte();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Error al eliminar abono');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   if (cargando) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -136,7 +245,6 @@ export function ReporteCobranza() {
 
   const decorativeVideos: { src: string; position: any }[] = [];
 
-  // 🔄 NUEVO: Helper para mostrar ícono de orden
   const getSortIcon = (key: keyof Abono) => {
     if (ordenConfig?.key !== key) return '⇅';
     return ordenConfig.direccion === 'asc' ? '↑' : '↓';
@@ -181,7 +289,6 @@ export function ReporteCobranza() {
                   min="2020"
                 />
               </div>
-              {/* 🔍 NUEVO: Filtro por alumno */}
               <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 border border-white/20">
                 <span className="text-white text-xs font-medium">👤</span>
                 <input
@@ -213,7 +320,7 @@ export function ReporteCobranza() {
             </div>
           </div>
 
-          {/* Tarjetas de totales por mes */}
+          {/* Tarjetas de totales */}
           {totales.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 flex-shrink-0">
               {totales.map((t, i) => {
@@ -240,7 +347,6 @@ export function ReporteCobranza() {
                   </div>
                 );
               })}
-              {/* Total general */}
               {abonos.length > 0 && (
                 <div className="bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 p-4 rounded-2xl shadow-lg text-white transform hover:scale-105 transition-all duration-300 relative overflow-hidden">
                   <div className="absolute inset-0 bg-white/10 animate-pulse-slow"></div>
@@ -256,7 +362,7 @@ export function ReporteCobranza() {
             </div>
           )}
 
-          {/* Tabla detallada */}
+          {/* Tabla */}
           <div className="bg-white/60 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-white/20 flex-1 flex flex-col min-h-0 h-[55vh]">
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full table-auto divide-y divide-gray-200 text-sm">
@@ -307,19 +413,22 @@ export function ReporteCobranza() {
                     <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap min-w-[150px]">
                       Observaciones
                     </th>
+                    <th className="px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white/50 divide-y divide-gray-200">
                   {abonosOrdenados.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 italic">
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500 italic">
                         🧐 No hay movimientos para el período seleccionado.
                       </td>
                     </tr>
                   ) : (
                     abonosOrdenados.map((a, i) => (
                       <tr
-                        key={i}
+                        key={a.abonoId || i}
                         className={`hover:bg-white/60 transition-all duration-200 hover:shadow-md ${
                           i % 2 === 0 ? 'bg-white/30' : 'bg-white/10'
                         }`}
@@ -366,6 +475,24 @@ export function ReporteCobranza() {
                         <td className="px-4 py-2.5 text-sm text-gray-600 truncate max-w-xs">
                           {a.observaciones || '-'}
                         </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => abrirEditar(a)}
+                              className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors"
+                              title="Editar abono"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => abrirEliminar(a)}
+                              className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
+                              title="Eliminar abono"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -383,6 +510,163 @@ export function ReporteCobranza() {
           )}
         </div>
       </BackgroundVideo>
+
+      {/* ═══════════ MODAL EDITAR ═══════════ */}
+      {editandoAbono && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              ✏️ Editar abono
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Estudiante
+                </label>
+                <input
+                  type="text"
+                  value={editandoAbono.estudiante}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Monto
+                </label>
+                <input
+                  type="number"
+                  value={formData.monto}
+                  onChange={(e) => setFormData({ ...formData, monto: Number(e.target.value) })}
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={formData.fecha}
+                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Método de pago
+                </label>
+                <select
+                  value={formData.metodo}
+                  onChange={(e) => setFormData({ ...formData, metodo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3]"
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Notas
+                </label>
+                <textarea
+                  value={formData.notas}
+                  onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3] resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={cerrarEditar}
+                disabled={guardando}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarEdicion}
+                disabled={guardando}
+                className="px-4 py-2 bg-gradient-to-r from-[#26AAA3] to-[#67A934] text-white rounded-lg text-sm font-bold hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {guardando ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ MODAL ELIMINAR ═══════════ */}
+      {eliminandoAbono && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-2xl">
+                ⚠️
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">
+                ¿Eliminar este abono?
+              </h3>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Estudiante:</span>
+                <span className="font-semibold text-gray-900">{eliminandoAbono.estudiante}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Fecha:</span>
+                <span className="font-semibold text-gray-900">
+                  {new Date(eliminandoAbono.fecha).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Monto:</span>
+                <span className="font-semibold text-red-600">
+                  ${Number(eliminandoAbono.monto).toFixed(2)}
+                </span>
+              </div>
+              {eliminandoAbono.pagoId && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Pago:</span>
+                  <span className="font-mono text-xs text-gray-700">{eliminandoAbono.pagoId}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4">
+              Esta acción no se puede deshacer. El pago asociado se recalculará automáticamente.
+            </p>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={cerrarEliminar}
+                disabled={guardando}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarEliminar}
+                disabled={guardando}
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg text-sm font-bold hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {guardando ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse-slow {
