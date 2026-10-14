@@ -141,7 +141,7 @@ router.get("/alumno/:idAlumno", async (req, res) => {
 });
 
 // ============================================================
-// POST – CREAR INSCRIPCIÓN + GENERAR PAGOS (pasado + 12 futuros)
+// POST – CREAR INSCRIPCIÓN + GENERAR PAGOS
 // ============================================================
 router.post("/", async (req, res) => {
   try {
@@ -185,7 +185,6 @@ router.post("/", async (req, res) => {
 
     await sincronizarPagosDesdeInscripciones();
 
-    // ✅ SIEMPRE generar pagos (pasado + 12 meses futuros)
     try {
       const pagosGenerados = await generarPagosHistoricos(
         nuevaInscripcion,
@@ -218,36 +217,164 @@ router.post("/", async (req, res) => {
 });
 
 // ============================================================
-// PATCH – ACTUALIZAR INSCRIPCIÓN (modalidad y comentarios)
+// PATCH – ACTUALIZAR INSCRIPCIÓN (todos los campos + recálculo)
 // ============================================================
 router.patch("/:idAlumno/:grupoId", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
-    const { modalidad, comentarios } = req.body;
-    const update = {};
-    if (modalidad) update.modalidad = modalidad;
-    if (comentarios !== undefined) update.comentarios = comentarios;
+    const {
+      modalidad,
+      comentarios,
+      montoMensualidad,
+      diaPago,
+      fechaInicioPago,
+      estatus,
+    } = req.body;
 
-    const inscripcion = await Inscripcion.findOneAndUpdate(
-      { idAlumno, grupoId },
-      { $set: update },
-      { new: true }
-    );
+    const inscripcion = await Inscripcion.findOne({ idAlumno, grupoId });
     if (!inscripcion) {
       return res.status(404).json({ error: "Inscripción no encontrada" });
     }
-    res.json(inscripcion);
+
+    const cambios = {};
+    const historial = [];
+
+    if (modalidad && modalidad !== inscripcion.modalidad) {
+      cambios.modalidad = modalidad;
+      historial.push({ campo: "modalidad", de: inscripcion.modalidad, a: modalidad });
+    }
+    if (comentarios !== undefined && comentarios !== inscripcion.comentarios) {
+      cambios.comentarios = comentarios;
+    }
+    if (
+      montoMensualidad !== undefined &&
+      Number(montoMensualidad) !== inscripcion.montoMensualidad
+    ) {
+      cambios.montoMensualidad = Number(montoMensualidad);
+      historial.push({
+        campo: "montoMensualidad",
+        de: inscripcion.montoMensualidad,
+        a: Number(montoMensualidad),
+      });
+    }
+    if (diaPago !== undefined && Number(diaPago) !== inscripcion.diaPago) {
+      cambios.diaPago = Number(diaPago);
+      historial.push({ campo: "diaPago", de: inscripcion.diaPago, a: Number(diaPago) });
+    }
+    if (fechaInicioPago !== undefined) {
+      const fechaNueva = new Date(fechaInicioPago);
+      const fechaActual = new Date(inscripcion.fechaInicioPago);
+      if (
+        !isNaN(fechaNueva.getTime()) &&
+        fechaNueva.toDateString() !== fechaActual.toDateString()
+      ) {
+        cambios.fechaInicioPago = fechaNueva;
+        historial.push({
+          campo: "fechaInicioPago",
+          de: fechaActual,
+          a: fechaNueva,
+        });
+      }
+    }
+    if (estatus && estatus !== inscripcion.estatus) {
+      cambios.estatus = estatus;
+      historial.push({ campo: "estatus", de: inscripcion.estatus, a: estatus });
+    }
+
+    if (Object.keys(cambios).length === 0) {
+      return res.json({ ok: true, mensaje: "Sin cambios", inscripcion });
+    }
+
+    // Aplicar cambios
+    Object.assign(inscripcion, cambios);
+    if (historial.length > 0) {
+      inscripcion.historialModificaciones =
+        inscripcion.historialModificaciones || [];
+      inscripcion.historialModificaciones.push({
+        fecha: new Date(),
+        usuario: "admin",
+        cambios: historial,
+      });
+    }
+    await inscripcion.save();
+
+    let pagosActualizados = 0;
+    let pagosRegenerados = 0;
+
+    // Si cambió la FECHA DE INICIO: borrar pagos NO pagados y regenerar
+    if (cambios.fechaInicioPago !== undefined) {
+      const eliminados = await Pago.deleteMany({
+        idAlumno,
+        grupoId,
+        estatus: { $nin: ["Pagado"] },
+      });
+
+      const regenerados = await generarPagosHistoricos(inscripcion, false, 12);
+      pagosRegenerados = regenerados.length;
+
+      console.log(
+        `🔄 Regenerados pagos por cambio de fecha: ${eliminados.deletedCount} eliminados, ${pagosRegenerados} creados`
+      );
+    } else if (
+      cambios.montoMensualidad !== undefined ||
+      cambios.diaPago !== undefined
+    ) {
+      // Actualizar pagos pendientes/parciales sin regenerar
+      const pagosAfectados = await Pago.find({
+        idAlumno,
+        grupoId,
+        estatus: { $in: ["Pendiente", "Parcial"] },
+        activo: true,
+      });
+
+      for (const pago of pagosAfectados) {
+        if (cambios.montoMensualidad !== undefined) {
+          pago.montoPago = cambios.montoMensualidad;
+        }
+        if (cambios.diaPago !== undefined) {
+          const mesActual = new Date(pago.fechaInicioPago);
+          const nuevoDia = cambios.diaPago;
+          const ultimoDiaMes = new Date(
+            mesActual.getFullYear(),
+            mesActual.getMonth() + 1,
+            0
+          ).getDate();
+          const diaReal = Math.min(nuevoDia, ultimoDiaMes);
+          mesActual.setDate(diaReal);
+          mesActual.setHours(12, 0, 0, 0);
+          pago.fechaInicioPago = mesActual;
+        }
+        await pago.save();
+        pagosActualizados++;
+      }
+    }
+
+    cache.flushAll();
+
+    res.json({
+      ok: true,
+      mensaje: "Inscripción actualizada",
+      inscripcion,
+      pagosActualizados,
+      pagosRegenerados,
+    });
   } catch (error) {
+    console.error("Error PATCH /inscripciones:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================================
-// DELETE
+// DELETE – Eliminar inscripción
+// Query param: ?mode=pending (default) | full
+//   - pending: borra inscripción + pagos pendientes/parciales
+//   - full:    borra inscripción + TODOS los pagos + TODOS los abonos
 // ============================================================
 router.delete("/:idAlumno/:grupoId", async (req, res) => {
   try {
     const { idAlumno, grupoId } = req.params;
+    const mode = req.query.mode || "pending";
+
     const inscripcion = await Inscripcion.findOneAndDelete({
       idAlumno,
       grupoId,
@@ -255,8 +382,41 @@ router.delete("/:idAlumno/:grupoId", async (req, res) => {
     if (!inscripcion) {
       return res.status(404).json({ error: "Inscripción no encontrada" });
     }
-    res.json({ ok: true, mensaje: "Inscripción eliminada" });
+
+    let pagosBorrados = 0;
+    let abonosBorrados = 0;
+
+    if (mode === "full") {
+      // Borrar TODOS los pagos y abonos de este grupo para este alumno
+      const resPagos = await Pago.deleteMany({ idAlumno, grupoId });
+      const resAbonos = await Abono.deleteMany({ idAlumno, grupoId });
+      pagosBorrados = resPagos.deletedCount;
+      abonosBorrados = resAbonos.deletedCount;
+    } else {
+      // Solo borrar pagos Pendiente/Parcial
+      const resPagos = await Pago.deleteMany({
+        idAlumno,
+        grupoId,
+        estatus: { $in: ["Pendiente", "Parcial"] },
+      });
+      pagosBorrados = resPagos.deletedCount;
+    }
+
+    cache.flushAll();
+
+    console.log(
+      `🗑️ Inscripción eliminada: ${idAlumno}/${grupoId} | mode: ${mode} | pagos: ${pagosBorrados} | abonos: ${abonosBorrados}`
+    );
+
+    res.json({
+      ok: true,
+      mensaje: "Inscripción eliminada",
+      mode,
+      pagosBorrados,
+      abonosBorrados,
+    });
   } catch (error) {
+    console.error("Error DELETE /inscripciones:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -320,7 +480,7 @@ router.patch("/:idAlumno/:grupoId/finalizar", async (req, res) => {
       {
         $set: {
           activo: false,
-          estatus: "Inactivo",
+          estatus: "Cancelado",
           fechaBaja: new Date(),
           notas: `Curso finalizado el ${fechaCorte
             .toISOString()

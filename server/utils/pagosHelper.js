@@ -4,10 +4,10 @@ import { crearPagoId } from './pagos.js';
 
 /**
  * Genera (o completa) los pagos mensuales de una inscripción.
- * - Genera desde fechaInscripcion hasta hoy + `mesesFuturos` meses.
+ * - Usa `fechaInicioPago` como base (dato real de cobro).
+ * - Fallback: si la inscripción vieja no tiene `fechaInicioPago`, usa `fechaInscripcion`.
+ * - Genera desde esa fecha hasta esa fecha + `mesesFuturos` meses.
  * - NO sobreescribe pagos existentes (idempotente).
- * - `marcarComoPagado = true` marca como Pagado los meses PASADOS.
- * - Los meses futuros siempre se crean como Pendiente.
  */
 export const generarPagosHistoricos = async (
   inscripcion,
@@ -18,6 +18,7 @@ export const generarPagosHistoricos = async (
     const {
       idAlumno,
       grupoId,
+      fechaInicioPago,
       fechaInscripcion,
       diaPago,
       nombreAlumno,
@@ -26,6 +27,15 @@ export const generarPagosHistoricos = async (
 
     if (!idAlumno || !grupoId) {
       console.warn('⚠️ [pagosHelper] Faltan idAlumno o grupoId');
+      return [];
+    }
+
+    // Fallback para inscripciones legado sin fechaInicioPago
+    const fechaBase = fechaInicioPago || fechaInscripcion;
+    if (!fechaBase) {
+      console.warn(
+        '⚠️ [pagosHelper] Sin fechaInicioPago ni fechaInscripcion.'
+      );
       return [];
     }
 
@@ -38,41 +48,47 @@ export const generarPagosHistoricos = async (
     } else if (grupo.precioMensualidad && grupo.precioMensualidad > 0) {
       precioMensual = grupo.precioMensualidad;
     } else {
-      console.warn(`⚠️ [pagosHelper] Sin precio. No se generan pagos.`);
+      console.warn(`⚠️ [pagosHelper] Sin precio.`);
       return [];
     }
 
     const nombreCurso = grupo.nombreCurso || 'Curso sin nombre';
     const diaPagoAlumno = Math.min(Math.max(Number(diaPago) || 5, 1), 31);
 
-    // Fecha del primer pago
-    let fechaPrimerPago = new Date(fechaInscripcion || new Date());
+    const base = new Date(fechaBase);
+    if (isNaN(base.getTime())) {
+      console.warn('⚠️ [pagosHelper] fechaBase inválida.');
+      return [];
+    }
+
     const ultimoDiaMesInicio = new Date(
-      fechaPrimerPago.getFullYear(),
-      fechaPrimerPago.getMonth() + 1,
+      base.getFullYear(),
+      base.getMonth() + 1,
       0
     ).getDate();
     const diaRealInicio = Math.min(diaPagoAlumno, ultimoDiaMesInicio);
-    fechaPrimerPago.setDate(diaRealInicio);
-    fechaPrimerPago.setHours(12, 0, 0, 0);
-    if (fechaPrimerPago < fechaInscripcion) {
-      fechaPrimerPago = new Date(fechaInscripcion);
-      fechaPrimerPago.setHours(12, 0, 0, 0);
-    }
+    const fechaPrimerPago = new Date(
+      base.getFullYear(),
+      base.getMonth(),
+      diaRealInicio,
+      12,
+      0,
+      0,
+      0
+    );
 
     const hoy = new Date();
     hoy.setHours(12, 0, 0, 0);
 
-    // Límite superior: hoy + mesesFuturos
+    // Límite: base + mesesFuturos (no hoy)
     const limiteSuperior = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth() + mesesFuturos,
+      base.getFullYear(),
+      base.getMonth() + mesesFuturos,
       1
     );
 
     const pagosCreados = [];
 
-    // Iteramos desde el primer mes hasta el límite
     let cursor = new Date(
       fechaPrimerPago.getFullYear(),
       fechaPrimerPago.getMonth(),
@@ -106,7 +122,8 @@ export const generarPagosHistoricos = async (
         pagosCreados.push(existente);
       } else {
         const esMesPasado = fechaVencimiento < hoy;
-        const estatus = esMesPasado && marcarComoPagado ? 'Pagado' : 'Pendiente';
+        const estatus =
+          esMesPasado && marcarComoPagado ? 'Pagado' : 'Pendiente';
 
         const pago = new Pago({
           pagoId,
