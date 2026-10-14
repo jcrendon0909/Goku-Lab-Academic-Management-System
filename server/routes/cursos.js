@@ -40,22 +40,15 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ============================================================
-// CREAR CURSO
-// ============================================================
+// Dar de alta (crear) un nuevo curso
 router.post("/", async (req, res) => {
   try {
-    const nombreCurso = String(
-      req.body?.nombreCurso || req.body?.nombre || ""
-    ).trim();
+    const nombreCurso = String(req.body?.nombreCurso || req.body?.nombre || "").trim();
 
     if (!nombreCurso) {
-      return res
-        .status(400)
-        .json({ error: "El nombre del curso es obligatorio" });
+      return res.status(400).json({ error: "El nombre del curso es obligatorio" });
     }
 
-    // Validar duplicados
     const yaExiste = await Curso.findOne({
       nombreCurso: new RegExp(
         `^${nombreCurso.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
@@ -68,41 +61,10 @@ router.post("/", async (req, res) => {
 
     const idCurso = await generarIdCursoSeguro();
 
-    // Leer campos opcionales del body
-    const precioMensualidad =
-      req.body?.precioMensualidad !== undefined
-        ? Number(req.body.precioMensualidad)
-        : 0;
-    const duracionMeses =
-      req.body?.duracionMeses !== undefined
-        ? Number(req.body.duracionMeses)
-        : 1;
-    const nivel = String(req.body?.nivel || "Básico").trim();
-    const categoria = String(req.body?.categoria || "").trim();
-    const estatus = String(req.body?.estatus || "Activo").trim();
-
-    // Validaciones
-    if (isNaN(precioMensualidad) || precioMensualidad < 0) {
-      return res.status(400).json({ error: "Precio inválido" });
-    }
-    if (isNaN(duracionMeses) || duracionMeses < 1) {
-      return res.status(400).json({ error: "Duración inválida" });
-    }
-    if (!["Básico", "Intermedio", "Avanzado"].includes(nivel)) {
-      return res.status(400).json({ error: "Nivel inválido" });
-    }
-    if (!["Activo", "Inactivo"].includes(estatus)) {
-      return res.status(400).json({ error: "Estatus inválido" });
-    }
-
     const curso = await Curso.create({
       idCurso,
       nombreCurso,
-      precioMensualidad,
-      duracionMeses,
-      nivel,
-      categoria,
-      estatus,
+      estatus: "Activo",
     });
 
     res.status(201).json(curso);
@@ -119,26 +81,11 @@ router.post("/", async (req, res) => {
 router.patch("/:idCurso", async (req, res) => {
   try {
     const { idCurso } = req.params;
-    const {
-      nombreCurso,
-      precioMensualidad,
-      duracionMeses,
-      nivel,
-      categoria,
-      estatus,
-    } = req.body;
+    const { nombreCurso, precioMensualidad, duracionMeses, nivel, categoria, estatus } = req.body;
 
-    if (
-      !nombreCurso &&
-      precioMensualidad === undefined &&
-      duracionMeses === undefined &&
-      !nivel &&
-      !categoria &&
-      !estatus
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Al menos un campo debe ser enviado" });
+    // Validar que al menos un campo sea enviado
+    if (!nombreCurso && precioMensualidad === undefined && duracionMeses === undefined && !nivel && !categoria && !estatus) {
+      return res.status(400).json({ error: "Al menos un campo debe ser enviado" });
     }
 
     const curso = await Curso.findOne({ idCurso });
@@ -146,6 +93,7 @@ router.patch("/:idCurso", async (req, res) => {
       return res.status(404).json({ error: "Curso no encontrado" });
     }
 
+    // Si se envía nombreCurso, validar duplicados (excluyendo el propio curso)
     if (nombreCurso && nombreCurso.trim() !== curso.nombreCurso) {
       const duplicado = await Curso.findOne({
         idCurso: { $ne: idCurso },
@@ -155,27 +103,27 @@ router.patch("/:idCurso", async (req, res) => {
         ),
       });
       if (duplicado) {
-        return res
-          .status(409)
-          .json({ error: "Ya existe un curso con ese nombre" });
+        return res.status(409).json({ error: "Ya existe un curso con ese nombre" });
       }
     }
 
+    // Construir objeto de actualización
     const updateData = {};
     if (nombreCurso !== undefined) updateData.nombreCurso = nombreCurso.trim();
-    if (precioMensualidad !== undefined)
-      updateData.precioMensualidad = precioMensualidad;
+    if (precioMensualidad !== undefined) updateData.precioMensualidad = precioMensualidad;
     if (duracionMeses !== undefined) updateData.duracionMeses = duracionMeses;
     if (nivel !== undefined) updateData.nivel = nivel;
     if (categoria !== undefined) updateData.categoria = categoria;
     if (estatus !== undefined) updateData.estatus = estatus;
 
+    // Actualizar el curso
     const cursoActualizado = await Curso.findOneAndUpdate(
       { idCurso },
       { $set: updateData },
       { new: true }
     );
 
+    // Si se cambió el nombre, reflejar en grupos y pagos (solo el nombre)
     if (nombreCurso && nombreCurso.trim() !== curso.nombreCurso) {
       await Grupo.updateMany(
         { idCurso: idCurso },
@@ -187,6 +135,9 @@ router.patch("/:idCurso", async (req, res) => {
       );
     }
 
+    // Nota: Los demás campos (precio, duración, nivel, categoría, estatus) NO se propagan a grupos/pagos,
+    // ya que son datos referenciales del curso. Los grupos y pagos solo guardan el nombre del curso.
+
     res.status(200).json(cursoActualizado);
   } catch (error) {
     console.error("ERROR PATCH CURSO:", error);
@@ -197,16 +148,14 @@ router.patch("/:idCurso", async (req, res) => {
   }
 });
 
-// Cambiar estatus
+// Dar de alta / inactivar un curso (cambiar estatus) - esta ruta ya no es necesaria si usamos la general, pero la dejamos por compatibilidad
 router.patch("/:idCurso/estatus", async (req, res) => {
   try {
     const { idCurso } = req.params;
     const estatus = String(req.body?.estatus || "").trim();
 
     if (!["Activo", "Inactivo"].includes(estatus)) {
-      return res
-        .status(400)
-        .json({ error: "Estatus inválido (Activo o Inactivo)" });
+      return res.status(400).json({ error: "Estatus inválido (Activo o Inactivo)" });
     }
 
     const curso = await Curso.findOneAndUpdate(
@@ -229,7 +178,7 @@ router.patch("/:idCurso/estatus", async (req, res) => {
   }
 });
 
-// Borrar un curso
+// Borrar un curso. Los grupos que lo usaban quedan SIN curso asignado.
 router.delete("/:idCurso", async (req, res) => {
   try {
     const { idCurso } = req.params;
