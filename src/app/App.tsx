@@ -13,7 +13,7 @@ import { CalendarioProfesor } from './components/CalendarioProfesor';
 import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 // 🆕 IMPORT AGREGADO AQUÍ
-import { InstanciasPage } from './pages/admin/Instancias';
+import { InstanciasPage } from '../pages/admin/Instancias';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
 import { ReporteCobranza } from './components/ReporteCobranza';
