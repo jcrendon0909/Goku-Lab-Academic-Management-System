@@ -12,6 +12,8 @@ import { AdminUsuarios } from './components/AdminUsuarios';
 import { CalendarioProfesor } from './components/CalendarioProfesor';
 import RentabilidadProfesores from '../pages/RentabilidadProfesores';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+// 🆕 IMPORT AGREGADO AQUÍ
+import { InstanciasPage } from './pages/admin/Instancias';
 import { Toaster } from './components/ui/sonner';
 import { ClassProvider } from './context/ClassContext';
 import { ReporteCobranza } from './components/ReporteCobranza';
@@ -27,7 +29,6 @@ import { PagosProfesoresPage } from './components/PagosProfesoresPage';
 import { GastosPage } from './components/GastosPage';
 import { ReporteAsistenciaAlumno } from './components/ReporteAsistenciaAlumno';
 import { ConsultaAsistencias } from './components/ConsultaAsistencias';
-// 🆕 NUEVO: Reporte Global
 import { ReporteGlobal } from './components/ReporteGlobal';
 import { ReporteAsistenciaProfesor } from './components/ReporteAsistenciaProfesor';
 
@@ -56,27 +57,27 @@ export const router = createBrowserRouter([
       { path: '/grupos', element: <GruposPage /> },
       { path: '/reportes/rentabilidad', element: <RentabilidadProfesores /> },
       { path: '/reportes/cobranza', element: <ReporteCobranza /> },
-      // 🆕 NUEVA RUTA: Reporte Global
       { path: '/reportes/global', element: <ReporteGlobal /> },
+      
+      // RUTAS DE ADMIN
       { path: '/admin/usuarios', element: <AdminUsuarios /> },
+      // 🆕 RUTA AGREGADA AQUÍ
+      { path: '/admin/instancias', element: <InstanciasPage /> },
+      
       { path: '/calendario', element: <CalendarioProfesor /> },
       { path: '/asistencia', element: <AsistenciaPage /> },
       { path: '/reportes/asistencia-alumno', element: <ReporteAsistenciaAlumno /> },
       { path: '/reportes/asistencia-profesor', element: <ReporteAsistenciaProfesor /> },
       { path: '/consultas/asistencias', element: <ConsultaAsistencias /> },
 
-      // ============================================================
       // CURSOS DE VERANO
-      // ============================================================
       { path: '/cursos-verano', element: <CursosVeranoPage /> },
       { path: '/cursos-verano/nuevo', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id/editar', element: <CursoVeranoForm /> },
       { path: '/cursos-verano/:id', element: <CursoVeranoDetalle /> },
       { path: '/cursos-verano/:id/rentabilidad', element: <RentabilidadCursoVerano /> },
 
-      // ============================================================
       // CONSULTAS Y ADMIN
-      // ============================================================
       { path: '/inscripciones-consulta', element: <ConsultaInscripciones /> },
       { path: '/admin/editor-inscripciones', element: <EditorInscripciones /> },
       { path: '/pagos-profesores', element: <PagosProfesoresPage /> },
