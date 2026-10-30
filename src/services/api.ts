@@ -1,18 +1,124 @@
 import { notifyDataChanged } from "../utils/dataSync";
 
-// ✅ Usa VITE_API_URL (Cloudflare la inyecta en producción).
-// En desarrollo, cae al default.
-const API_URL =
+// ============================================================
+// CONFIGURACIÓN DINÁMICA DE LA URL DEL BACKEND
+// ============================================================
+// Prioridad de resolución (de mayor a menor):
+//   1. localStorage["goku_api_url"]   → override manual del usuario (selector)
+//   2. /config.json                   → valor por defecto editable vía deploy
+//   3. VITE_API_URL (build-time)      → inyectado por Cloudflare Pages
+//   4. http://localhost:4000          → solo en desarrollo
+// ============================================================
+
+const DEFAULT_API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV ? "http://localhost:4000" : "");
 
-if (!API_URL) {
-  console.error(
-    "⛔ VITE_API_URL no está definida. Configúrala en Cloudflare Pages → Settings → Environment variables."
-  );
+const API_URL_STORAGE_KEY = "goku_api_url";
+
+export interface ApiInstance {
+  id: string;
+  label: string;
+  url: string;
 }
 
+export interface ApiConfig {
+  apiUrl: string;
+  instances: ApiInstance[];
+}
+
+let cachedApiUrl: string | null = null;
+let cachedConfig: ApiConfig | null = null;
+let apiUrlPromise: Promise<string> | null = null;
+
+async function loadConfig(): Promise<ApiConfig | null> {
+  try {
+    const res = await fetch("/config.json", { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || typeof data !== "object") return null;
+    return data as ApiConfig;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveApiUrl(): Promise<string> {
+  if (cachedApiUrl) return cachedApiUrl;
+
+  const stored = localStorage.getItem(API_URL_STORAGE_KEY);
+  if (stored) {
+    cachedApiUrl = stored;
+    return stored;
+  }
+
+  const cfg = await loadConfig();
+  cachedConfig = cfg;
+
+  if (cfg?.apiUrl) {
+    cachedApiUrl = cfg.apiUrl;
+    return cfg.apiUrl;
+  }
+
+  if (!DEFAULT_API_URL) {
+    console.error(
+      "⛔ No hay URL de API. Define VITE_API_URL en Cloudflare o crea /config.json."
+    );
+  }
+  cachedApiUrl = DEFAULT_API_URL;
+  return DEFAULT_API_URL;
+}
+
+function getApiUrl(): Promise<string> {
+  if (!apiUrlPromise) apiUrlPromise = resolveApiUrl();
+  return apiUrlPromise;
+}
+
+// ---------- API pública para el selector de instancia ----------
+
+export async function obtenerConfiguracionApi(): Promise<{
+  activa: string;
+  instancias: ApiInstance[];
+  origen: "localStorage" | "config.json" | "env" | "default";
+}> {
+  if (!cachedConfig) cachedConfig = await loadConfig();
+
+  const stored = localStorage.getItem(API_URL_STORAGE_KEY);
+  const activa = await getApiUrl();
+
+  let origen: "localStorage" | "config.json" | "env" | "default" = "default";
+  if (stored) origen = "localStorage";
+  else if (cachedConfig?.apiUrl) origen = "config.json";
+  else if (DEFAULT_API_URL) origen = "env";
+
+  return {
+    activa,
+    instancias: cachedConfig?.instances ?? [],
+    origen,
+  };
+}
+
+export function cambiarInstanciaApi(url: string) {
+  localStorage.setItem(API_URL_STORAGE_KEY, url);
+  cachedApiUrl = url;
+  apiUrlPromise = Promise.resolve(url);
+  if (typeof window !== "undefined") window.location.reload();
+}
+
+export function usarInstanciaPorDefecto() {
+  localStorage.removeItem(API_URL_STORAGE_KEY);
+  cachedApiUrl = null;
+  cachedConfig = null;
+  apiUrlPromise = null;
+  if (typeof window !== "undefined") window.location.reload();
+}
+
+// ============================================================
+// FETCH BASE (usa la URL resuelta dinámicamente)
+// ============================================================
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const baseUrl = await getApiUrl();
   const token = localStorage.getItem("token");
   const headers = new Headers(init?.headers);
 
@@ -20,7 +126,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${baseUrl}${path}`, { ...init, headers });
 
   if (res.status === 401) {
     localStorage.removeItem("token");
@@ -35,7 +141,8 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 }
 
 export const loginService = async (usuario: string, password: string) => {
-  const response = await fetch(`${API_URL}/auth/login`, {
+  const baseUrl = await getApiUrl();
+  const response = await fetch(`${baseUrl}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ usuario, password }),
@@ -686,7 +793,7 @@ export async function editarAbono(
 }
 
 // ============================================================
-// REPORTES FINANCIEROS (AGREGADO — módulo de rentabilidad global)
+// REPORTES FINANCIEROS (módulo de rentabilidad global)
 // ============================================================
 
 export interface FuenteMonto {

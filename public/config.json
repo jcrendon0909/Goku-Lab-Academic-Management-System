@@ -1,0 +1,15 @@
+{
+  "apiUrl": "https://goku-lab-academic-management-system-vqxv.onrender.com",
+  "instances": [
+    {
+      "id": "render-nueva",
+      "label": "Render nueva (Cuenta principal)",
+      "url": "https://goku-lab-academic-management-system-vqxv.onrender.com"
+    },
+    {
+      "id": "render-antigua",
+      "label": "Render antigua (Cuenta vencida)",
+      "url": "https://goku-lab-academic-management-system.onrender.com"
+    }
+  ]
+}

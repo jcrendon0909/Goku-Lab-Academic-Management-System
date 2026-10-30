@@ -2,7 +2,7 @@ import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   LogOut, Home, Users, BookOpen, UserCog, Calendar, Repeat, Sun, Eye, Edit2,
-  DollarSign, BarChart, LineChart, ClipboardCheck, CreditCard, Receipt, Wallet
+  DollarSign, BarChart, LineChart, ClipboardCheck, CreditCard, Receipt, Wallet, Server
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -56,6 +56,7 @@ export function Header() {
     { path: '/calendario', icon: <Calendar className="w-4 h-4" />, label: 'Calendario', roles: ['admin', 'profesor'], category: 'admin' },
     { path: '/reschedule', icon: <Repeat className="w-4 h-4" />, label: 'Reagendaciones', roles: ['admin'], category: 'admin' },
     { path: '/admin/usuarios', icon: <Users className="w-4 h-4" />, label: 'Usuarios', roles: ['admin'], category: 'admin' },
+    { path: '/admin/instancias', icon: <Server className="w-4 h-4" />, label: 'Instancias', roles: ['admin'], category: 'admin' },
     { path: '/cursos-verano', icon: <Sun className="w-4 h-4" />, label: 'Cursos Verano', roles: ['admin'], category: 'admin' },
     { path: '/inscripciones-consulta', icon: <Eye className="w-4 h-4" />, label: 'Inscripciones', roles: ['admin'], category: 'admin' },
     { path: '/admin/editor-inscripciones', icon: <Edit2 className="w-4 h-4" />, label: 'Editor', roles: ['admin'], category: 'admin' },
