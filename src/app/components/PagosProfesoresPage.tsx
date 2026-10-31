@@ -3,6 +3,8 @@ import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import BackgroundVideo from './BackgroundVideo';
 import { RefreshCw, Plus, Edit2, Trash2, DollarSign, BarChart3, Loader2 } from 'lucide-react';
+// 🆕 IMPORTAMOS LAS UTILIDADES SEGURAS
+import { parsearFechaLocal, extraerFechaString, formatearFechaDisplay } from '../../utils/fechas';
 
 // ============================================================
 // TIPOS
@@ -35,14 +37,8 @@ interface Profesor {
 }
 
 // ============================================================
-// HELPERS DE FECHA
+// HELPERS DE SEMANA
 // ============================================================
-
-/** Parsea la fecha de un pago sin corrimiento de timezone */
-function parseFechaPago(fechaRaw: string): Date {
-  const fechaStr = String(fechaRaw).split('T')[0];
-  return new Date(fechaStr + 'T12:00:00');
-}
 
 /** Devuelve el lunes de la semana de una fecha en "YYYY-MM-DD" */
 function lunesDeSemana(fecha: Date): string {
@@ -151,10 +147,9 @@ export function PagosProfesoresPage() {
         return;
       }
 
-      // Recolectar pares únicos (profesor, lunes de la semana)
       const claves = new Set<string>();
       pagosPorHora.forEach((p) => {
-        const lunes = lunesDeSemana(parseFechaPago(p.fecha));
+        const lunes = lunesDeSemana(parsearFechaLocal(p.fecha));
         claves.add(`${p.idProfesor}__${lunes}`);
       });
 
@@ -172,7 +167,7 @@ export function PagosProfesoresPage() {
               nuevas[clave] = data.horasTrabajadas || 0;
             }
           } catch {
-            // silencio: si falla, simplemente no mostramos comparativa
+            // silencio
           }
         })
       );
@@ -333,7 +328,7 @@ export function PagosProfesoresPage() {
   const handleEditar = (pago: PagoProfesor) => {
     setEditando(pago);
     setFormIdProfesor(pago.idProfesor);
-    setFormFecha(String(pago.fecha).split('T')[0]);
+    setFormFecha(extraerFechaString(pago.fecha));
     setFormHoras(String(pago.horasTrabajadas));
     setFormMetodo(pago.metodoPago);
     setFormObservaciones(pago.observaciones);
@@ -341,8 +336,8 @@ export function PagosProfesoresPage() {
     setFormTipoPago(pago.tipoPago);
     setFormSalarioBase(pago.tipoPago === 'por_hora' ? pago.salarioPorHora : pago.salarioMensual);
     setSugerirInfo('');
-    // Preseleccionar la semana del pago
-    const lunes = lunesDeSemana(parseFechaPago(pago.fecha));
+    
+    const lunes = lunesDeSemana(parsearFechaLocal(pago.fecha));
     setSugerirDesde(lunes);
     setSugerirHasta(domingoDeSemana(lunes));
     setMostrarForm(true);
@@ -369,13 +364,13 @@ export function PagosProfesoresPage() {
     .filter((p) => (filtroProfesor ? p.idProfesor === filtroProfesor : true))
     .filter((p) => {
       if (fechaInicio) {
-        return String(p.fecha).split('T')[0] >= fechaInicio;
+        return extraerFechaString(p.fecha) >= fechaInicio;
       }
       return true;
     })
     .filter((p) => {
       if (fechaFin) {
-        return String(p.fecha).split('T')[0] <= fechaFin;
+        return extraerFechaString(p.fecha) <= fechaFin;
       }
       return true;
     });
@@ -498,10 +493,9 @@ export function PagosProfesoresPage() {
                   </tr>
                 ) : (
                   pagosFiltrados.map((p) => {
-                    // Buscar horas de asistencia para este pago
                     let horasAsist: number | null = null;
                     if (p.tipoPago === 'por_hora') {
-                      const lunes = lunesDeSemana(parseFechaPago(p.fecha));
+                      const lunes = lunesDeSemana(parsearFechaLocal(p.fecha));
                       const clave = `${p.idProfesor}__${lunes}`;
                       if (clave in horasAsistencia) {
                         horasAsist = horasAsistencia[clave];
@@ -520,11 +514,8 @@ export function PagosProfesoresPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-white/80">
-                          {parseFechaPago(p.fecha).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {/* 🆕 FORMATO 100% SEGURO (SIN DATE) */}
+                          {formatearFechaDisplay(p.fecha)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-right text-white/80">
                           {p.horasTrabajadas}
@@ -641,7 +632,6 @@ export function PagosProfesoresPage() {
                   </div>
                 </div>
 
-                {/* Sugerir horas desde asistencia (solo para por_hora) */}
                 {formTipoPago === 'por_hora' && formIdProfesor && (
                   <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 space-y-2">
                     <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
@@ -724,7 +714,7 @@ export function PagosProfesoresPage() {
                     value={formObservaciones}
                     onChange={(e) => setFormObservaciones(e.target.value)}
                     className="w-full border-2 border-[#1E293B]/30 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F8B50E] focus:border-transparent bg-white/90"
-                    placeholder="Notas adicionales (ej. semana del 1 al 7 de julio)"
+                    placeholder="Notas adicionales"
                   />
                 </div>
 
