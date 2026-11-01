@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, Loader2, TrendingUp, TrendingDown, Wallet,
-  Receipt, Users, AlertCircle
+  Receipt, Users, AlertCircle, Sun, BookOpen
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -48,17 +48,21 @@ export function ReporteGlobal() {
         if (!cancelado) setCargando(false);
       }
     })();
-    return () => {
-      cancelado = true;
-    };
+    return () => { cancelado = true; };
   }, [mes, anio]);
 
   const aniosDisponibles = Array.from({ length: 5 }, (_, i) => hoy.getFullYear() - i);
 
+  // Helper para elegir el icono según la fuente
+  const getIconoFuente = (id: string) => {
+    if (id.includes('verano')) return <Sun className="h-4 w-4 text-orange-500" />;
+    if (id.includes('regular')) return <BookOpen className="h-4 w-4 text-emerald-500" />;
+    return <Wallet className="h-4 w-4 text-gray-500" />;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-
         {/* Header */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <div className="flex items-center gap-4">
@@ -71,25 +75,12 @@ export function ReporteGlobal() {
             </h1>
           </div>
 
-          {/* Filtros */}
           <div className="flex items-center gap-3 bg-white rounded-xl shadow-sm p-2 border border-gray-100">
-            <select
-              value={mes}
-              onChange={(e) => setMes(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              {MESES.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
+            <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
-            <select
-              value={anio}
-              onChange={(e) => setAnio(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              {aniosDisponibles.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
+            <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+              {aniosDisponibles.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
         </div>
@@ -97,7 +88,7 @@ export function ReporteGlobal() {
         {cargando ? (
           <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
             <Loader2 className="h-8 w-8 animate-spin text-[#26AAA3] mx-auto" />
-            <p className="text-gray-500 mt-2">Calculando rentabilidad...</p>
+            <p className="text-gray-500 mt-2">Calculando rentabilidad consolidada...</p>
           </div>
         ) : error || !global ? (
           <div className="bg-red-50 rounded-xl p-8 text-center border border-red-100">
@@ -108,53 +99,40 @@ export function ReporteGlobal() {
           <>
             {/* Tarjetas resumen */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <ResumenCard
-                titulo="Ingresos"
-                monto={global.ingresos.total}
-                color="text-emerald-600"
-                bg="bg-emerald-50"
-                icono={<TrendingUp className="h-5 w-5" />}
-              />
-              <ResumenCard
-                titulo="Egresos"
-                monto={global.egresos.total}
-                color="text-red-600"
-                bg="bg-red-50"
-                icono={<TrendingDown className="h-5 w-5" />}
-              />
-              <ResumenCard
-                titulo="Utilidad"
-                monto={global.utilidad}
-                color={global.utilidad >= 0 ? "text-[#26AAA3]" : "text-red-600"}
-                bg={global.utilidad >= 0 ? "bg-[#26AAA3]/10" : "bg-red-50"}
-                icono={<Wallet className="h-5 w-5" />}
-                subtitulo={`${global.porcentajeUtilidad.toFixed(1)}% de margen`}
-              />
+              <ResumenCard titulo="Ingresos Totales" monto={global.ingresos.total} color="text-emerald-600" bg="bg-emerald-50" icono={<TrendingUp className="h-5 w-5" />} subtitulo="Regular + Verano" />
+              <ResumenCard titulo="Egresos Totales" monto={global.egresos.total} color="text-red-600" bg="bg-red-50" icono={<TrendingDown className="h-5 w-5" />} subtitulo="Gastos + Nómina" />
+              <ResumenCard titulo="Utilidad" monto={global.utilidad} color={global.utilidad >= 0 ? "text-[#26AAA3]" : "text-red-600"} bg={global.utilidad >= 0 ? "bg-[#26AAA3]/10" : "bg-red-50"} icono={<Wallet className="h-5 w-5" />} subtitulo={`${global.porcentajeUtilidad.toFixed(1)}% de margen`} />
             </div>
 
             {/* Desglose fuentes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                  Desglose de ingresos
+                  Origen de los ingresos
                 </h2>
                 {global.ingresos.fuentes.map((f) => (
-                  <LineaDesglose key={f.id} label={f.label} monto={f.monto} color="text-emerald-600" />
+                  <div key={f.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
+                    <span className="text-gray-600 flex items-center gap-2">{getIconoFuente(f.id)} {f.label}</span>
+                    <span className="font-semibold text-emerald-600">{fmt(f.monto)}</span>
+                  </div>
                 ))}
-                <div className="border-t mt-3 pt-3 flex justify-between font-bold">
-                  <span>Total</span>
+                <div className="border-t-2 border-gray-100 mt-2 pt-3 flex justify-between font-bold">
+                  <span>Total Ingresos</span>
                   <span className="text-emerald-600">{fmt(global.ingresos.total)}</span>
                 </div>
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                  Desglose de egresos
+                  Destino de los egresos
                 </h2>
                 {global.egresos.fuentes.map((f) => (
-                  <LineaDesglose key={f.id} label={f.label} monto={f.monto} color="text-red-600" />
+                  <div key={f.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
+                    <span className="text-gray-600 flex items-center gap-2">{getIconoFuente(f.id)} {f.label}</span>
+                    <span className="font-semibold text-red-600">{fmt(f.monto)}</span>
+                  </div>
                 ))}
-                <div className="border-t mt-3 pt-3 flex justify-between font-bold">
-                  <span>Total</span>
+                <div className="border-t-2 border-gray-100 mt-2 pt-3 flex justify-between font-bold">
+                  <span>Total Egresos</span>
                   <span className="text-red-600">{fmt(global.egresos.total)}</span>
                 </div>
               </div>
@@ -164,7 +142,7 @@ export function ReporteGlobal() {
             {serie && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">
-                  Utilidad mensual — {serie.anio}
+                  Utilidad mensual consolidada — {serie.anio}
                 </h2>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -172,14 +150,10 @@ export function ReporteGlobal() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="mesLabel" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip
-                        formatter={(value: number) => fmt(value)}
-                        labelFormatter={(label) => `Mes: ${label}`}
-                        contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
-                      />
+                      <Tooltip formatter={(value: number) => fmt(value)} labelFormatter={(label) => `Mes: ${label}`} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }} />
                       <Legend />
                       <ReferenceLine y={0} stroke="#9ca3af" />
-                      <Bar dataKey="utilidad" name="Utilidad" radius={[6, 6, 0, 0]}>
+                      <Bar dataKey="utilidad" name="Utilidad Neta" radius={[6, 6, 0, 0]}>
                         {serie.meses.map((m, i) => (
                           <Cell key={i} fill={m.utilidad >= 0 ? "#26AAA3" : "#D61A1F"} />
                         ))}
@@ -194,8 +168,7 @@ export function ReporteGlobal() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Receipt className="h-4 w-4" />
-                  Gastos por categoría
+                  <Receipt className="h-4 w-4" /> Gastos operativos
                 </h2>
                 {global.desgloseGastos.length === 0 ? (
                   <p className="text-sm text-gray-400">Sin gastos este mes</p>
@@ -207,19 +180,13 @@ export function ReporteGlobal() {
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Nómina por profesor
+                  <Users className="h-4 w-4" /> Nómina Regular (Profesores)
                 </h2>
                 {global.desgloseProfesores.length === 0 ? (
                   <p className="text-sm text-gray-400">Sin pagos a profesores este mes</p>
                 ) : (
                   global.desgloseProfesores.map((p) => (
-                    <LineaDesglose
-                      key={p.idProfesor}
-                      label={p.nombre}
-                      monto={p.costo}
-                      color="text-red-600"
-                    />
+                    <LineaDesglose key={p.idProfesor} label={p.nombre} monto={p.costo} color="text-red-600" />
                   ))
                 )}
               </div>
@@ -231,12 +198,7 @@ export function ReporteGlobal() {
   );
 }
 
-function ResumenCard({
-  titulo, monto, color, bg, icono, subtitulo,
-}: {
-  titulo: string; monto: number; color: string; bg: string;
-  icono: React.ReactNode; subtitulo?: string;
-}) {
+function ResumenCard({ titulo, monto, color, bg, icono, subtitulo }: { titulo: string; monto: number; color: string; bg: string; icono: React.ReactNode; subtitulo?: string; }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-start justify-between">
