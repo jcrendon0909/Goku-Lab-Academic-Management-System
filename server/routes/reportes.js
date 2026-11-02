@@ -9,6 +9,8 @@ import Gasto from "../models/Gasto.js";
 import PagoProfesor from "../models/PagoProfesor.js";
 import InscripcionVerano from "../models/InscripcionVerano.js";
 import AsignacionProfesorVerano from "../models/AsignacionProfesorVerano.js";
+// 🆕 IMPORTAMOS EL MODELO DEL CURSO
+import CursoVerano from "../models/CursoVerano.js";
 
 const router = express.Router();
 
@@ -17,7 +19,6 @@ const MESES_LABEL = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-// Helper para calcular proyecciones de un mes
 const calcularProyeccionMes = (inscripciones, fechaInicioMes, fechaFinMes) => {
   return inscripciones.reduce((sum, ins) => {
     const inicioPago = new Date(ins.fechaInicioPago);
@@ -29,11 +30,7 @@ const calcularProyeccionMes = (inscripciones, fechaInicioMes, fechaFinMes) => {
   }, 0);
 };
 
-// ============================================================
-// HELPER: Rango de fechas blindado contra Timezone (UTC-6)
-// ============================================================
 const getRangoFechasMexico = (anio, mes) => {
-  // Medianoche en México (UTC-6) equivale a las 06:00 UTC del mismo día.
   const inicio = new Date(Date.UTC(anio, mes - 1, 1, 6, 0, 0));
   const fin = new Date(Date.UTC(anio, mes, 1, 5, 59, 59, 999));
   return { inicio, fin };
@@ -50,9 +47,7 @@ router.get("/pagos", async (req, res) => {
       const { inicio, fin } = getRangoFechasMexico(parseInt(anio), parseInt(mes));
       filtro.fechaAbono = { $gte: inicio, $lte: fin };
     }
-
     const abonos = await Abono.find(filtro).lean();
-
     const abonosConNombre = abonos.map((abono) => ({
       abonoId: abono.abonoId || "",
       fecha: abono.fechaAbono || abono.createdAt,
@@ -70,7 +65,6 @@ router.get("/pagos", async (req, res) => {
       grupoId: abono.grupoId || "",
       pagoId: abono.pagoId || "",
     }));
-
     res.json({ abonos: abonosConNombre });
   } catch (error) {
     console.error("❌ Error en GET /reportes/pagos:", error);
@@ -94,8 +88,13 @@ router.get("/rentabilidad-global", async (req, res) => {
     const abonos = await Abono.find({ fechaAbono: { $gte: inicio, $lte: fin } }).lean();
     const totalIngresosRegulares = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
 
-    // 2. INGRESOS DE CURSOS EXTRAS (Verano/Preverano/Talleres)
-    const inscripcionesVerano = await InscripcionVerano.find({ createdAt: { $gte: inicio, $lte: fin } }).lean();
+    // 2. INGRESOS DE CURSOS EXTRAS (Basado en la fecha del CURSO, no en createdAt)
+    const cursosDelMes = await CursoVerano.find({
+      fechaInicio: { $gte: inicio, $lte: fin }
+    }).lean();
+    const idsCursos = cursosDelMes.map(c => c.idCursoVerano);
+
+    const inscripcionesVerano = await InscripcionVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
     const totalIngresosVerano = inscripcionesVerano.reduce((sum, ins) => sum + (ins.montoPago || 0), 0);
 
     // 3. PROYECCIÓN DE INGRESOS
@@ -104,7 +103,7 @@ router.get("/rentabilidad-global", async (req, res) => {
 
     const totalIngresos = totalIngresosRegulares + totalIngresosVerano;
 
-    // 4. GASTOS OPERATIVOS (Usamos mes y anio para evitar bugs de UTC)
+    // 4. GASTOS OPERATIVOS
     const gastos = await Gasto.find({ anio, mes: mesLabel, activo: true, categoria: { $ne: "Profesores" } }).lean();
     const desgloseGastosMap = {};
     let totalGastos = 0;
@@ -114,7 +113,7 @@ router.get("/rentabilidad-global", async (req, res) => {
       totalGastos += (g.monto || 0);
     });
 
-    // 5. COSTO PROFESORES REGULARES (Nómina)
+    // 5. COSTO PROFESORES REGULARES
     const pagosProf = await PagoProfesor.find({ fecha: { $gte: inicio, $lte: fin }, activo: true }).lean();
     const desgloseProfesoresMap = {};
     let totalProfesoresRegulares = 0;
@@ -124,8 +123,8 @@ router.get("/rentabilidad-global", async (req, res) => {
       totalProfesoresRegulares += (p.montoCalculado || 0);
     });
 
-    // 6. COSTO PROFESORES CURSOS EXTRAS
-    const asignacionesVerano = await AsignacionProfesorVerano.find({ createdAt: { $gte: inicio, $lte: fin } }).lean();
+    // 6. COSTO PROFESORES CURSOS EXTRAS (Basado en el CURSO del mes)
+    const asignacionesVerano = await AsignacionProfesorVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
     let totalProfesoresVerano = 0;
     asignacionesVerano.forEach(asig => {
       totalProfesoresVerano += ((asig.dias.length * asig.horasPorDia * asig.semanas) * asig.costoHora);
@@ -177,23 +176,31 @@ router.get("/utilidad-mensual", async (req, res) => {
 
     const todasInscripciones = await Inscripcion.find().lean();
 
+    // Pre-cargar todos los cursos para optimizar
+    const todosCursosVerano = await CursoVerano.find({ año: anio }).lean();
+
     for (let mes = 1; mes <= 12; mes++) {
       const { inicio, fin } = getRangoFechasMexico(anio, mes);
       const mesLabel = MESES_LABEL[mes - 1];
 
+      // Buscar cursos que inician en este mes
+      const cursosDelMes = todosCursosVerano.filter(c => {
+        const fInicio = new Date(c.fechaInicio);
+        return fInicio >= inicio && fInicio <= fin;
+      });
+      const idsCursos = cursosDelMes.map(c => c.idCursoVerano);
+
       const abonos = await Abono.find({ fechaAbono: { $gte: inicio, $lte: fin } }).lean();
-      const inscripcionesVerano = await InscripcionVerano.find({ createdAt: { $gte: inicio, $lte: fin } }).lean();
+      const inscripcionesVerano = await InscripcionVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
       
       const ingresosRegulares = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
       const ingresosVerano = inscripcionesVerano.reduce((sum, ins) => sum + (ins.montoPago || 0), 0);
       const ingresos = ingresosRegulares + ingresosVerano;
       const ingresosProyectados = calcularProyeccionMes(todasInscripciones, inicio, fin) + ingresosVerano;
 
-      // Gastos filtrados por mes/anio
       const gastos = await Gasto.find({ anio, mes: mesLabel, activo: true, categoria: { $ne: "Profesores" } }).lean();
-      
       const pagosProf = await PagoProfesor.find({ fecha: { $gte: inicio, $lte: fin }, activo: true }).lean();
-      const asignacionesVerano = await AsignacionProfesorVerano.find({ createdAt: { $gte: inicio, $lte: fin } }).lean();
+      const asignacionesVerano = await AsignacionProfesorVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
 
       const gastosMonto = gastos.reduce((sum, g) => sum + (g.monto || 0), 0);
       const costoProfesoresRegulares = pagosProf.reduce((sum, p) => sum + (p.montoCalculado || 0), 0);
