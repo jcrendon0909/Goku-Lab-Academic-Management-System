@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, Loader2, TrendingUp, TrendingDown, Wallet,
-  Receipt, Users, AlertCircle, Sun, BookOpen, Target
+  Receipt, Users, AlertCircle, Award, BookOpen, Target
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -54,12 +54,11 @@ export function ReporteGlobal() {
   const aniosDisponibles = Array.from({ length: 5 }, (_, i) => hoy.getFullYear() - i);
 
   const getIconoFuente = (id: string) => {
-    if (id.includes('verano')) return <Sun className="h-4 w-4 text-orange-500" />;
+    if (id.includes('extras') || id.includes('verano')) return <Award className="h-4 w-4 text-orange-500" />;
     if (id.includes('regular')) return <BookOpen className="h-4 w-4 text-emerald-500" />;
     return <Wallet className="h-4 w-4 text-gray-500" />;
   };
 
-  // Calcular porcentaje de cobro
   const porcentajeCobro = global && global.ingresos.proyectado > 0 
     ? (global.ingresos.total / global.ingresos.proyectado) * 100 
     : 0;
