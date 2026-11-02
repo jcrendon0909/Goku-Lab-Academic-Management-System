@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, Loader2, TrendingUp, TrendingDown, Wallet,
-  Receipt, Users, AlertCircle, Sun, BookOpen
+  Receipt, Users, AlertCircle, Sun, BookOpen, Target
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -53,12 +53,16 @@ export function ReporteGlobal() {
 
   const aniosDisponibles = Array.from({ length: 5 }, (_, i) => hoy.getFullYear() - i);
 
-  // Helper para elegir el icono según la fuente
   const getIconoFuente = (id: string) => {
     if (id.includes('verano')) return <Sun className="h-4 w-4 text-orange-500" />;
     if (id.includes('regular')) return <BookOpen className="h-4 w-4 text-emerald-500" />;
     return <Wallet className="h-4 w-4 text-gray-500" />;
   };
+
+  // Calcular porcentaje de cobro
+  const porcentajeCobro = global && global.ingresos.proyectado > 0 
+    ? (global.ingresos.total / global.ingresos.proyectado) * 100 
+    : 0;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -98,17 +102,36 @@ export function ReporteGlobal() {
         ) : (
           <>
             {/* Tarjetas resumen */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <ResumenCard titulo="Ingresos Totales" monto={global.ingresos.total} color="text-emerald-600" bg="bg-emerald-50" icono={<TrendingUp className="h-5 w-5" />} subtitulo="Regular + Verano" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <ResumenCard titulo="Ingresos Cobrados" monto={global.ingresos.total} color="text-emerald-600" bg="bg-emerald-50" icono={<TrendingUp className="h-5 w-5" />} subtitulo={`${porcentajeCobro.toFixed(0)}% de ${fmt(global.ingresos.proyectado)}`} />
+              <ResumenCard titulo="Proyección de Ingresos" monto={global.ingresos.proyectado} color="text-blue-600" bg="bg-blue-50" icono={<Target className="h-5 w-5" />} subtitulo="Meta esperada este mes" />
               <ResumenCard titulo="Egresos Totales" monto={global.egresos.total} color="text-red-600" bg="bg-red-50" icono={<TrendingDown className="h-5 w-5" />} subtitulo="Gastos + Nómina" />
-              <ResumenCard titulo="Utilidad" monto={global.utilidad} color={global.utilidad >= 0 ? "text-[#26AAA3]" : "text-red-600"} bg={global.utilidad >= 0 ? "bg-[#26AAA3]/10" : "bg-red-50"} icono={<Wallet className="h-5 w-5" />} subtitulo={`${global.porcentajeUtilidad.toFixed(1)}% de margen`} />
+              <ResumenCard titulo="Utilidad Real" monto={global.utilidad} color={global.utilidad >= 0 ? "text-[#26AAA3]" : "text-red-600"} bg={global.utilidad >= 0 ? "bg-[#26AAA3]/10" : "bg-red-50"} icono={<Wallet className="h-5 w-5" />} subtitulo={`Proyectada: ${fmt(global.utilidadProyectada)}`} />
+            </div>
+
+            {/* Barra de progreso de cobro */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                  <Target className="h-4 w-4" /> Eficiencia de Cobro del Mes
+                </h3>
+                <span className="text-sm font-bold text-emerald-600">
+                  {fmt(global.ingresos.total)} / {fmt(global.ingresos.proyectado)} ({porcentajeCobro.toFixed(1)}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className="bg-emerald-500 h-3 rounded-full transition-all duration-1000" 
+                  style={{ width: `${Math.min(porcentajeCobro, 100)}%` }}
+                ></div>
+              </div>
             </div>
 
             {/* Desglose fuentes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                  Origen de los ingresos
+                  Origen de los ingresos (Real)
                 </h2>
                 {global.ingresos.fuentes.map((f) => (
                   <div key={f.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
@@ -117,7 +140,7 @@ export function ReporteGlobal() {
                   </div>
                 ))}
                 <div className="border-t-2 border-gray-100 mt-2 pt-3 flex justify-between font-bold">
-                  <span>Total Ingresos</span>
+                  <span>Total Cobrado</span>
                   <span className="text-emerald-600">{fmt(global.ingresos.total)}</span>
                 </div>
               </div>
@@ -142,7 +165,7 @@ export function ReporteGlobal() {
             {serie && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">
-                  Utilidad mensual consolidada — {serie.anio}
+                  Utilidad mensual (Real vs Proyectada) — {serie.anio}
                 </h2>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
@@ -153,11 +176,8 @@ export function ReporteGlobal() {
                       <Tooltip formatter={(value: number) => fmt(value)} labelFormatter={(label) => `Mes: ${label}`} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }} />
                       <Legend />
                       <ReferenceLine y={0} stroke="#9ca3af" />
-                      <Bar dataKey="utilidad" name="Utilidad Neta" radius={[6, 6, 0, 0]}>
-                        {serie.meses.map((m, i) => (
-                          <Cell key={i} fill={m.utilidad >= 0 ? "#26AAA3" : "#D61A1F"} />
-                        ))}
-                      </Bar>
+                      <Bar dataKey="utilidad" name="Utilidad Real" fill="#26AAA3" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="utilidadProyectada" name="Utilidad Proyectada" fill="#93C5FD" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -204,7 +224,7 @@ function ResumenCard({ titulo, monto, color, bg, icono, subtitulo }: { titulo: s
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{titulo}</p>
-          <p className={`text-3xl font-bold ${color} mt-1`}>{fmt(monto)}</p>
+          <p className={`text-2xl font-bold ${color} mt-1`}>{fmt(monto)}</p>
           {subtitulo && <p className="text-xs text-gray-500 mt-1">{subtitulo}</p>}
         </div>
         <div className={`p-2 rounded-lg ${bg} ${color}`}>{icono}</div>

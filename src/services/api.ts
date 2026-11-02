@@ -804,9 +804,14 @@ export interface FuenteMonto {
 
 export interface RentabilidadGlobal {
   periodo: { anio: number; mes: number; mesLabel: string; label: string };
-  ingresos: { fuentes: FuenteMonto[]; total: number };
+  ingresos: { 
+    fuentes: FuenteMonto[]; 
+    total: number; 
+    proyectado: number; // 🆕 Agregado para la meta del mes
+  };
   egresos: { fuentes: FuenteMonto[]; total: number };
   utilidad: number;
+  utilidadProyectada: number; // 🆕 Agregado para comparar el estimado
   porcentajeUtilidad: number;
   desgloseGastos: { categoria: string; monto: number }[];
   desgloseProfesores: { idProfesor: string; nombre: string; costo: number }[];
@@ -820,10 +825,12 @@ export interface UtilidadMensual {
     mesLabel: string;
     label: string;
     ingresos: number;
+    ingresosProyectados: number; // 🆕 Agregado
     gastos: number;
     costoProfesores: number;
     egresos: number;
     utilidad: number;
+    utilidadProyectada: number; // 🆕 Agregado
     porcentajeUtilidad: number;
   }[];
 }
