@@ -29,7 +29,6 @@ export function ReporteGlobal() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados para los acordeones
   const [showGastos, setShowGastos] = useState(false);
   const [showNomina, setShowNomina] = useState(false);
 
@@ -68,17 +67,8 @@ export function ReporteGlobal() {
     ? (global.ingresos.total / global.ingresos.proyectado) * 100 
     : 0;
 
-  // Cálculos para agrupar los egresos
-  const totalGastosOperativos = global?.egresos.fuentes
-    .filter(f => f.id.startsWith('gasto-'))
-    .reduce((sum, f) => sum + f.monto, 0) || 0;
-
-  const totalNomina = global?.egresos.fuentes
-    .filter(f => f.id.includes('nomina'))
-    .reduce((sum, f) => sum + f.monto, 0) || 0;
-
-  const desgloseGastosList = global?.egresos.fuentes.filter(f => f.id.startsWith('gasto-')) || [];
-  const desgloseNominaList = global?.egresos.fuentes.filter(f => f.id.includes('nomina')) || [];
+  const totalGastosOperativos = global?.desgloseGastos.reduce((sum, g) => sum + g.monto, 0) || 0;
+  const totalNomina = global?.desgloseProfesores.reduce((sum, p) => sum + p.costo, 0) || 0;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -143,9 +133,8 @@ export function ReporteGlobal() {
               </div>
             </div>
 
-            {/* Resumen de Fuentes (Ingresos vs Egresos Simplificado) */}
+            {/* Resumen de Fuentes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Origen de Ingresos */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
                   Origen de los ingresos
@@ -162,7 +151,6 @@ export function ReporteGlobal() {
                 </div>
               </div>
 
-              {/* Destino de Egresos (Solo totales resumidos) */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
                   Destino de los egresos
@@ -205,7 +193,7 @@ export function ReporteGlobal() {
               </div>
             )}
 
-            {/* Acordeones de Detalle (Gastos y Nómina) */}
+            {/* Acordeones de Detalle */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
               {/* Acordeón Gastos */}
@@ -223,12 +211,12 @@ export function ReporteGlobal() {
                   </div>
                 </button>
                 {showGastos && (
-                  <div className="p-5 pt-0 border-t border-gray-100">
-                    {desgloseGastosList.length === 0 ? (
+                  <div className="p-5 pt-0 border-t border-gray-100 max-h-80 overflow-y-auto">
+                    {global.desgloseGastos.length === 0 ? (
                       <p className="text-sm text-gray-400 py-2">Sin gastos este mes</p>
                     ) : (
-                      desgloseGastosList.map((g) => (
-                        <LineaDesglose key={g.id} label={g.label.replace('Gasto: ', '')} monto={g.monto} color="text-red-600" />
+                      global.desgloseGastos.map((g) => (
+                        <LineaDesglose key={g.categoria} label={g.categoria} monto={g.monto} color="text-red-600" />
                       ))
                     )}
                   </div>
@@ -250,12 +238,12 @@ export function ReporteGlobal() {
                   </div>
                 </button>
                 {showNomina && (
-                  <div className="p-5 pt-0 border-t border-gray-100">
-                    {desgloseNominaList.length === 0 ? (
+                  <div className="p-5 pt-0 border-t border-gray-100 max-h-80 overflow-y-auto">
+                    {global.desgloseProfesores.length === 0 ? (
                       <p className="text-sm text-gray-400 py-2">Sin pagos a profesores este mes</p>
                     ) : (
-                      desgloseNominaList.map((p) => (
-                        <LineaDesglose key={p.id} label={p.label} monto={p.monto} color="text-red-600" />
+                      global.desgloseProfesores.map((p) => (
+                        <LineaDesglose key={p.idProfesor} label={p.nombre} monto={p.costo} color="text-red-600" />
                       ))
                     )}
                   </div>
