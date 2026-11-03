@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { apiFetch } from '../../services/api';
+// 🆕 CORREGIDO: Ahora sube solo un nivel porque está en src/pages/
+import { apiFetch } from '../services/api';
 import { toast } from 'sonner';
 import { 
   TrendingUp, TrendingDown, Wallet, Target, ChevronDown, ChevronUp, 
