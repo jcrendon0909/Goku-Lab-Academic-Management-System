@@ -1,172 +1,143 @@
-import { Link } from 'react-router-dom';
-import {
-  Users, BookOpen, DollarSign, UserCog,
-  BarChart3, Calendar, Clock, ShieldCheck, Sparkles, Rocket,
-  Star, Zap, ClipboardCheck, Grid, Layers, FileText,
-  TrendingUp, UserPlus, PieChart, Sun, Gift, Award, User,
-  Receipt, Wallet
-} from 'lucide-react';
-import { esAdmin } from '../../utils/roles';
-import { TarjetaUtilidad } from './TarjetaUtilidad';
-
-const DASHBOARD_CARDS = [
-  { to: "/alumnos", icon: <Users className="h-7 w-7" />, title: "Alumnos", description: "👥 Gestión", color: "from-[#26AAA3] to-[#67A934]", emoji: "🎓", roles: ["admin", "profesor"] },
-  { to: "/grupos", icon: <Grid className="h-7 w-7" />, title: "Grupos", description: "📚 Horarios", color: "from-[#67A934] to-[#26AAA3]", emoji: "📋", roles: ["admin", "profesor"] },
-  { to: "/cursos", icon: <BookOpen className="h-7 w-7" />, title: "Cursos", description: "📖 Catálogo", color: "from-[#26AAA3] to-[#67A934]", emoji: "📘", roles: ["admin", "profesor"] },
-  { to: "/maestros", icon: <UserCog className="h-7 w-7" />, title: "Maestros", description: "🧑‍🏫 Gestión", color: "from-[#D61A1F] to-[#F8B50E]", emoji: "👨‍🏫", roles: ["admin"] },
-  { to: "/pagos", icon: <DollarSign className="h-7 w-7" />, title: "Pagos", description: "💰 Estado", color: "from-[#F8B50E] to-[#D61A1F]", emoji: "💵", roles: ["admin"] },
-  { to: "/asistencia", icon: <ClipboardCheck className="h-7 w-7" />, title: "Asistencia", description: "✅ Tomar", color: "from-[#26AAA3] to-[#67A934]", emoji: "📝", roles: ["admin", "profesor"] },
-  { to: "/reschedule", icon: <Calendar className="h-7 w-7" />, title: "Reagend.", description: "🔄 Cambios", color: "from-[#67A934] to-[#26AAA3]", emoji: "🗓️", roles: ["admin"] },
-  { to: "/calendario", icon: <Clock className="h-7 w-7" />, title: "Calendario", description: "📅 Agenda", color: "from-[#F8B50E] to-[#D61A1F]", emoji: "⏰", roles: ["admin", "profesor"] },
-  { to: "/gastos", icon: <Receipt className="h-7 w-7" />, title: "Gastos", description: "🧾 Egresos", color: "from-[#D61A1F] to-[#F8B50E]", emoji: "💸", roles: ["admin"] },
-  { to: "/reportes/global", icon: <Wallet className="h-7 w-7" />, title: "Reporte Global", description: "📊 Utilidad", color: "from-[#26AAA3] to-[#F8B50E]", emoji: "💎", roles: ["admin"] },
-  { to: "/reportes/rentabilidad", icon: <TrendingUp className="h-7 w-7" />, title: "Rentabilidad", description: "📊 Análisis", color: "from-[#26AAA3] to-[#67A934]", emoji: "📈", roles: ["admin"] },
-  { to: "/reportes/cobranza", icon: <PieChart className="h-7 w-7" />, title: "Cobranza", description: "💳 Reporte", color: "from-[#F8B50E] to-[#26AAA3]", emoji: "🧾", roles: ["admin"] },
-  { to: "/admin/usuarios", icon: <ShieldCheck className="h-7 w-7" />, title: "Usuarios", description: "🔐 Cuentas", color: "from-[#67A934] to-[#F8B50E]", emoji: "👥", roles: ["admin"] },
-  { to: "/cursos-verano", icon: <Sun className="h-7 w-7" />, title: "Cursos Verano", description: "☀️ Gestión", color: "from-yellow-400 to-orange-500", emoji: "🏖️", roles: ["admin"] },
-  { to: "/reportes/asistencia-alumno", icon: <User className="h-7 w-7" />, title: "Asistencia Alumno", description: "📋 Reporte", color: "from-blue-400 to-cyan-500", emoji: "📊", roles: ["admin"] },
-  { to: "/pagos-profesores", icon: <DollarSign className="h-7 w-7" />, title: "Pagos Profesores", description: "💵 Nómina", color: "from-[#1E293B] to-[#334155]", emoji: "💼", roles: ["admin"] },
-];
+import React from "react";
+import { Link } from "react-router-dom";
+import { 
+  Users, CreditCard, Wallet, Sun, AlertCircle, TrendingUp, 
+  Calendar, CheckCircle2, ChevronRight, Activity 
+} from "lucide-react";
 
 export function Dashboard() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = esAdmin(user.rol);
-  const rol = user.rol || '';
-
-  const cardsVisibles = DASHBOARD_CARDS.filter(card => card.roles.includes(rol));
-
   return (
-    <div className="relative h-[80vh] w-full overflow-hidden">
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover opacity-15"
-        poster="https://media.gokulab.mx/Galery/videos/poster.jpg"
-      >
-        <source src="https://media.gokulab.mx/Galery/videos/gokulabfondo.mp4" type="video/mp4" />
-      </video>
-
-      <div className="absolute inset-0 bg-gradient-to-br from-[#26AAA3]/10 via-[#67A934]/5 to-[#F8B50E]/5" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/5" />
-
-      <div className="relative z-10 h-full w-full p-4 md:p-6 lg:p-8 overflow-y-auto">
-        <div className="w-full max-w-[1440px] mx-auto">
-
-          {/* HEADER */}
-          <div className="flex items-center justify-between mb-4 bg-white/5 backdrop-blur-sm rounded-2xl p-3 md:p-4 border border-white/10 shadow-xl">
-            <div className="flex-shrink-0 transform hover:scale-105 transition-all duration-500 hover:rotate-6">
-              <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-2xl ring-2 ring-[#26AAA3]/30 hover:ring-[#F8B50E]/50 transition-all duration-500">
-                <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                  <source src="https://media.gokulab.mx/Galery/videos/gokulabanimado.mp4" type="video/mp4" />
-                </video>
-              </div>
-            </div>
-            <div className="flex-1"></div>
-            <div className="hidden lg:block flex-shrink-0">
-              <div className="bg-gradient-to-r from-[#26AAA3]/20 to-[#67A934]/20 rounded-full px-3 py-1.5 border border-white/20 backdrop-blur-sm">
-                <p className="text-xs font-bold text-white/90 flex items-center gap-1.5">
-                  <Award className="h-3.5 w-3.5 text-[#26AAA3]" />
-                  {isAdmin ? '🎯 Admin' : '📚 Profesor'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bienvenida */}
-          <div className="mb-4 flex flex-col md:flex-row items-center justify-between gap-2 bg-white/5 backdrop-blur-sm rounded-2xl p-3 px-4 border border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-[#F8B50E] to-[#D61A1F] p-1.5 rounded-full shadow-lg shadow-[#F8B50E]/20">
-                <Star className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <p className="text-base md:text-lg font-bold text-white drop-shadow-lg flex items-center gap-2">
-                  ¡Hola, <span className="text-[#26AAA3]">{user.nombreCompleto || 'Gokulabero'}!</span> 🎮
-                </p>
-                <p className="text-xs text-white/80 flex items-center gap-1.5">
-                  <Zap className="h-3 w-3 text-[#F8B50E]" />
-                  {isAdmin ? '¡Administra tu academia!' : '¡Gestiona tus clases!'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-white/60 bg-white/10 px-2 py-1 rounded-full border border-white/10">
-              <Gift className="h-3 w-3 text-[#F8B50E]" />
-              <span>{new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-            </div>
-          </div>
-
-          {/* ✅ Tarjeta de Utilidad (solo admin) */}
-          {isAdmin && (
-            <div className="mb-4">
-              <TarjetaUtilidad />
-            </div>
-          )}
-
-          {/* Grid de tarjetas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
-            {cardsVisibles.map((card) => (
-              <CardGoku key={card.to} {...card} />
-            ))}
-          </div>
-
-          {/* Mensaje profesores */}
-          {!isAdmin && (
-            <div className="mt-4 text-center bg-white/10 backdrop-blur-sm rounded-2xl p-3 border border-white/20">
-              <Rocket className="h-10 w-10 mx-auto mb-2 text-[#F8B50E] animate-bounce-slow" />
-              <p className="text-base font-medium text-white">Bienvenido, profesor. 🎯</p>
-              <p className="text-xs text-white/70">Gestiona tus clases y alumnos desde aquí.</p>
-              <p className="text-[10px] text-white/50 mt-1 flex items-center justify-center gap-1">
-                <Star className="h-2.5 w-2.5 text-[#F8B50E]" />
-                <span>GōkuLab - Juega, Aprende y Emprende</span>
-                <Star className="h-2.5 w-2.5 text-[#F8B50E]" />
-              </p>
-            </div>
-          )}
+    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      
+      {/* Header de Bienvenida */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Panel de Control</h1>
+          <p className="text-gray-500 text-sm mt-1">Resumen operativo y financiero de GōkuLab</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to="/reportes/global" className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-sm">
+            <TrendingUp className="w-4 h-4" /> Ver Reporte Global
+          </Link>
         </div>
       </div>
 
-      <style>{`
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.02); }
-        }
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
-        .animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
-      `}</style>
+      {/* KPI Cards (Row 1) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard titulo="Ingresos del Mes" valor="$155,321" trend="+12.5% vs mes anterior" icon={<Wallet className="w-6 h-6" />} color="text-emerald-600" bg="bg-emerald-50" />
+        <KpiCard titulo="Alumnos Activos" valor="248" trend="+5 esta semana" icon={<Users className="w-6 h-6" />} color="text-blue-600" bg="bg-blue-50" />
+        <KpiCard titulo="Cursos Extras" valor="3" trend="Activos este mes" icon={<Sun className="w-6 h-6" />} color="text-orange-600" bg="bg-orange-50" />
+        <KpiCard titulo="Tasa de Cobranza" valor="87.9%" trend="Meta: 100%" icon={<CreditCard className="w-6 h-6" />} color="text-purple-600" bg="bg-purple-50" />
+      </div>
+
+      {/* Grid Principal (Row 2) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Columna Izquierda (Ancha): Operación Diaria */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-[#26AAA3]" /> Operación de Hoy
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Clases de Hoy</p>
+                    <p className="text-sm text-gray-500">12 grupos programados</p>
+                  </div>
+                </div>
+                <Link to="/asistencia" className="text-sm font-medium text-[#26AAA3] hover:underline flex items-center bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                  Pasar lista <ChevronRight className="w-4 h-4 ml-1" />
+                </Link>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <AlertCircle className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Pagos Pendientes</p>
+                    <p className="text-sm text-gray-500">8 alumnos con saldo vencido</p>
+                  </div>
+                </div>
+                <Link to="/pagos" className="text-sm font-medium text-[#26AAA3] hover:underline flex items-center bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                  Revisar <ChevronRight className="w-4 h-4 ml-1" />
+                </Link>
+              </div>
+            </div>
+          </div>
+          
+          {/* Accesos Rápidos */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Accesos Rápidos</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <QuickLink to="/alumnos" label="Alumnos" icon={<Users />} />
+              <QuickLink to="/pagos" label="Pagos" icon={<CreditCard />} />
+              <QuickLink to="/calendario" label="Calendario" icon={<Calendar />} />
+              <QuickLink to="/cursos-verano" label="Cursos Extra" icon={<Sun />} />
+            </div>
+          </div>
+        </div>
+
+        {/* Columna Derecha (Estrecha): Alertas y Novedades */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-[#1E293B] to-[#334155] rounded-xl shadow-lg p-5 text-white">
+            <h2 className="text-lg font-bold mb-2">Inteligencia de Negocio</h2>
+            <p className="text-sm text-gray-300 mb-4">Revisa el desglose de gastos y la rentabilidad por profesor para tomar decisiones.</p>
+            <Link to="/reportes/rentabilidad" className="block w-full text-center py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors">
+              Ver Rentabilidad
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Avisos Recientes</h2>
+            <ul className="space-y-3 text-sm">
+              <li className="flex gap-3">
+                <div className="w-2 h-2 mt-1.5 rounded-full bg-orange-400 flex-shrink-0" />
+                <p className="text-gray-600"><span className="font-medium text-gray-900">Cursos Extras:</span> Nuevo curso "Campamento STEAM" creado.</p>
+              </li>
+              <li className="flex gap-3">
+                <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                <p className="text-gray-600"><span className="font-medium text-gray-900">Nómina:</span> Pagos a profesores listos para revisión.</p>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
 
-function CardGoku({ to, icon, title, description, color, emoji }: any) {
+// --- Componentes Auxiliares para mantener el código limpio ---
+
+function KpiCard({ titulo, valor, trend, icon, color, bg }: { titulo: string, valor: string, trend: string, icon: React.ReactNode, color: string, bg: string }) {
   return (
-    <Link
-      to={to}
-      className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${color} p-3 md:p-4 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 hover:scale-[1.02]`}
-    >
-      <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative flex items-start justify-between mb-1.5">
-        <div className="transform group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500 text-white">
-          {icon}
-        </div>
-        {emoji && (
-          <span className="text-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500">
-            {emoji}
-          </span>
-        )}
+    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-start justify-between hover:shadow-md transition-shadow">
+      <div>
+        <p className="text-sm font-medium text-gray-500 mb-1">{titulo}</p>
+        <h3 className="text-2xl font-bold text-gray-900">{valor}</h3>
+        <p className="text-xs font-medium text-gray-400 mt-2">{trend}</p>
       </div>
-      <div className="relative text-white">
-        <h3 className="text-sm md:text-base font-bold" style={{ fontFamily: "'Poppins', sans-serif" }}>
-          {title}
-        </h3>
-        <p className="text-[10px] text-white/90 mt-0.5">{description}</p>
+      <div className={`p-3 rounded-lg ${bg} ${color}`}>
+        {icon}
       </div>
-      <div className="absolute bottom-0 left-0 w-full h-0.5 bg-white/30 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-      <div className="absolute -top-6 -right-6 w-12 h-12 rounded-full bg-white/10 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+    </div>
+  );
+}
+
+function QuickLink({ to, label, icon }: { to: string, label: string, icon: React.ReactNode }) {
+  return (
+    <Link to={to} className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-100 transition-colors group">
+      <div className="text-gray-400 group-hover:text-[#26AAA3] transition-colors mb-2">
+        {icon}
+      </div>
+      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">{label}</span>
     </Link>
   );
 }
