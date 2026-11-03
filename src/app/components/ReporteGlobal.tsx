@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, Loader2, TrendingUp, TrendingDown, Wallet,
-  Receipt, Users, AlertCircle, Award, BookOpen, Target
+  Receipt, Users, AlertCircle, Award, BookOpen, Target,
+  ChevronDown, ChevronUp
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -27,6 +28,10 @@ export function ReporteGlobal() {
   const [serie, setSerie] = useState<UtilidadMensual | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estados para los acordeones
+  const [showGastos, setShowGastos] = useState(false);
+  const [showNomina, setShowNomina] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -62,6 +67,18 @@ export function ReporteGlobal() {
   const porcentajeCobro = global && global.ingresos.proyectado > 0 
     ? (global.ingresos.total / global.ingresos.proyectado) * 100 
     : 0;
+
+  // Cálculos para agrupar los egresos
+  const totalGastosOperativos = global?.egresos.fuentes
+    .filter(f => f.id.startsWith('gasto-'))
+    .reduce((sum, f) => sum + f.monto, 0) || 0;
+
+  const totalNomina = global?.egresos.fuentes
+    .filter(f => f.id.includes('nomina'))
+    .reduce((sum, f) => sum + f.monto, 0) || 0;
+
+  const desgloseGastosList = global?.egresos.fuentes.filter(f => f.id.startsWith('gasto-')) || [];
+  const desgloseNominaList = global?.egresos.fuentes.filter(f => f.id.includes('nomina')) || [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -126,11 +143,12 @@ export function ReporteGlobal() {
               </div>
             </div>
 
-            {/* Desglose fuentes */}
+            {/* Resumen de Fuentes (Ingresos vs Egresos Simplificado) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Origen de Ingresos */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
-                  Origen de los ingresos (Real)
+                  Origen de los ingresos
                 </h2>
                 {global.ingresos.fuentes.map((f) => (
                   <div key={f.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
@@ -143,16 +161,20 @@ export function ReporteGlobal() {
                   <span className="text-emerald-600">{fmt(global.ingresos.total)}</span>
                 </div>
               </div>
+
+              {/* Destino de Egresos (Solo totales resumidos) */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
                   Destino de los egresos
                 </h2>
-                {global.egresos.fuentes.map((f) => (
-                  <div key={f.id} className="flex justify-between items-center text-sm py-2 border-b border-gray-50 last:border-0">
-                    <span className="text-gray-600 flex items-center gap-2">{getIconoFuente(f.id)} {f.label}</span>
-                    <span className="font-semibold text-red-600">{fmt(f.monto)}</span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center text-sm py-3 border-b border-gray-50">
+                  <span className="text-gray-600 flex items-center gap-2"><Receipt className="h-4 w-4 text-red-500" /> Gastos Operativos</span>
+                  <span className="font-semibold text-red-600">{fmt(totalGastosOperativos)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm py-3 border-b border-gray-50">
+                  <span className="text-gray-600 flex items-center gap-2"><Users className="h-4 w-4 text-red-500" /> Nómina (Profesores)</span>
+                  <span className="font-semibold text-red-600">{fmt(totalNomina)}</span>
+                </div>
                 <div className="border-t-2 border-gray-100 mt-2 pt-3 flex justify-between font-bold">
                   <span>Total Egresos</span>
                   <span className="text-red-600">{fmt(global.egresos.total)}</span>
@@ -183,32 +205,63 @@ export function ReporteGlobal() {
               </div>
             )}
 
-            {/* Desgloses detallados */}
+            {/* Acordeones de Detalle (Gastos y Nómina) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Receipt className="h-4 w-4" /> Gastos operativos
-                </h2>
-                {global.desgloseGastos.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin gastos este mes</p>
-                ) : (
-                  global.desgloseGastos.map((g) => (
-                    <LineaDesglose key={g.categoria} label={g.categoria} monto={g.monto} color="text-red-600" />
-                  ))
+              
+              {/* Acordeón Gastos */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-300">
+                <button 
+                  onClick={() => setShowGastos(!showGastos)}
+                  className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+                >
+                  <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                    <Receipt className="h-4 w-4 text-red-500" /> Detalle de Gastos Operativos
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-red-600">{fmt(totalGastosOperativos)}</span>
+                    {showGastos ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+                  </div>
+                </button>
+                {showGastos && (
+                  <div className="p-5 pt-0 border-t border-gray-100">
+                    {desgloseGastosList.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-2">Sin gastos este mes</p>
+                    ) : (
+                      desgloseGastosList.map((g) => (
+                        <LineaDesglose key={g.id} label={g.label.replace('Gasto: ', '')} monto={g.monto} color="text-red-600" />
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Nómina Regular (Profesores)
-                </h2>
-                {global.desgloseProfesores.length === 0 ? (
-                  <p className="text-sm text-gray-400">Sin pagos a profesores este mes</p>
-                ) : (
-                  global.desgloseProfesores.map((p) => (
-                    <LineaDesglose key={p.idProfesor} label={p.nombre} monto={p.costo} color="text-red-600" />
-                  ))
+
+              {/* Acordeón Nómina */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-300">
+                <button 
+                  onClick={() => setShowNomina(!showNomina)}
+                  className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+                >
+                  <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                    <Users className="h-4 w-4 text-red-500" /> Detalle de Nómina
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-red-600">{fmt(totalNomina)}</span>
+                    {showNomina ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+                  </div>
+                </button>
+                {showNomina && (
+                  <div className="p-5 pt-0 border-t border-gray-100">
+                    {desgloseNominaList.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-2">Sin pagos a profesores este mes</p>
+                    ) : (
+                      desgloseNominaList.map((p) => (
+                        <LineaDesglose key={p.id} label={p.label} monto={p.monto} color="text-red-600" />
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
+
             </div>
           </>
         )}
@@ -234,7 +287,7 @@ function ResumenCard({ titulo, monto, color, bg, icono, subtitulo }: { titulo: s
 
 function LineaDesglose({ label, monto, color }: { label: string; monto: number; color: string }) {
   return (
-    <div className="flex justify-between text-sm py-1">
+    <div className="flex justify-between text-sm py-2 border-b border-gray-50 last:border-0">
       <span className="text-gray-600 truncate pr-3">{label}</span>
       <span className={`font-semibold ${color}`}>{fmt(monto)}</span>
     </div>
