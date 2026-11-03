@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
-// 🆕 CORREGIDO: Subimos dos niveles para salir de src/app/components
 import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import { 
   RefreshCw, Plus, Edit2, Trash2, DollarSign, BarChart3, Loader2, 
-  Search, Filter, Calendar, Clock, AlertCircle
+  Search, Calendar, Filter, Users
 } from 'lucide-react';
-// 🆕 CORREGIDO: Subimos dos niveles para salir de src/app/components
 import { parsearFechaLocal, extraerFechaString, formatearFechaDisplay } from '../../utils/fechas';
 
 // ============================================================
@@ -40,7 +38,7 @@ interface Profesor {
 }
 
 // ============================================================
-// HELPERS DE SEMANA
+// HELPERS DE SEMANA Y FECHAS
 // ============================================================
 
 function lunesDeSemana(fecha: Date): string {
@@ -62,6 +60,20 @@ function semanaActual() {
   return { desde: lunes, hasta: domingoDeSemana(lunes) };
 }
 
+// Obtiene el string "YYYY-MM" del mes actual o de una fecha dada
+function getMesString(fecha: Date = new Date()): string {
+  const year = fecha.getFullYear();
+  const month = String(fecha.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+// Obtiene el string "YYYY-MM" del mes anterior
+function getMesAnteriorString(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return getMesString(d);
+}
+
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
@@ -75,10 +87,10 @@ export function PagosProfesoresPage() {
 
   const [horasAsistencia, setHorasAsistencia] = useState<Record<string, number>>({});
 
-  // Filtros
-  const [filtroProfesor, setFiltroProfesor] = useState('');
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
+  // 🆕 NUEVOS FILTROS DINÁMICOS
+  const [filtroMes, setFiltroMes] = useState(getMesString()); // "YYYY-MM"
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'por_hora' | 'fijo_mensual'>('todos');
 
   // Formulario
   const [formIdProfesor, setFormIdProfesor] = useState('');
@@ -169,7 +181,7 @@ export function PagosProfesoresPage() {
   }, [pagos]);
 
   // ============================================================
-  // LÓGICA DE NEGOCIO
+  // LÓGICA DEL FORMULARIO
   // ============================================================
 
   const calcularMonto = (idProfesor: string, horas: string) => {
@@ -321,14 +333,27 @@ export function PagosProfesoresPage() {
   };
 
   // ============================================================
-  // FILTRADO Y RESUMEN
+  // FILTRADO DINÁMICO (Mes, Búsqueda, Tipo)
   // ============================================================
 
   const pagosFiltrados = pagos
     .filter((p) => p.activo !== false)
-    .filter((p) => (filtroProfesor ? p.idProfesor === filtroProfesor : true))
-    .filter((p) => (fechaInicio ? extraerFechaString(p.fecha) >= fechaInicio : true))
-    .filter((p) => (fechaFin ? extraerFechaString(p.fecha) <= fechaFin : true));
+    // Filtro por Mes (YYYY-MM)
+    .filter((p) => {
+      if (!filtroMes) return true;
+      const fechaStr = extraerFechaString(p.fecha); // "2026-10-15"
+      const mesPago = fechaStr.substring(0, 7); // "2026-10"
+      return mesPago === filtroMes;
+    })
+    // Filtro por tipo de pago
+    .filter((p) => (filtroTipo === 'todos' ? true : p.tipoPago === filtroTipo))
+    // Filtro por texto (Nombre u Observaciones)
+    .filter((p) => {
+      if (!busqueda) return true;
+      const term = busqueda.toLowerCase();
+      return p.nombreProfesor.toLowerCase().includes(term) || 
+             (p.observaciones && p.observaciones.toLowerCase().includes(term));
+    });
 
   const totalPagos = pagosFiltrados.reduce((sum, p) => sum + p.montoCalculado, 0);
 
@@ -377,52 +402,70 @@ export function PagosProfesoresPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col md:flex-row gap-4 items-end">
-        <div className="flex-1 w-full">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Profesor</label>
+      {/* 🆕 Barra de Filtros Dinámica */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        
+        {/* Selector de Mes y Búsqueda */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto flex-1">
           <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Calendar className="h-4 w-4 text-[#26AAA3]" />
+            </div>
+            <input
+              type="month"
+              value={filtroMes}
+              onChange={(e) => setFiltroMes(e.target.value)}
+              className="w-full sm:w-44 pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#26AAA3] focus:border-transparent"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setFiltroMes(getMesString())} 
+              className={`px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${filtroMes === getMesString() ? 'bg-[#26AAA3]/10 text-[#26AAA3] border-[#26AAA3]/30' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+            >
+              Mes Actual
+            </button>
+            <button 
+              onClick={() => setFiltroMes(getMesAnteriorString())} 
+              className={`px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${filtroMes === getMesAnteriorString() ? 'bg-[#26AAA3]/10 text-[#26AAA3] border-[#26AAA3]/30' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}
+            >
+              Mes Anterior
+            </button>
+          </div>
+
+          <div className="relative flex-1 min-w-[200px]">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-gray-400" />
             </div>
-            <select
-              value={filtroProfesor}
-              onChange={(e) => setFiltroProfesor(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3] focus:border-transparent bg-white"
-            >
-              <option value="">Todos los profesores</option>
-              {profesores.map((p) => (
-                <option key={p.idProfesor} value={p.idProfesor}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              placeholder="Buscar profesor u observación..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3] focus:border-transparent"
+            />
           </div>
         </div>
-        <div className="w-full md:w-48">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Desde</label>
-          <input
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3] focus:border-transparent"
-          />
-        </div>
-        <div className="w-full md:w-48">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Hasta</label>
-          <input
-            type="date"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#26AAA3] focus:border-transparent"
-          />
-        </div>
-        <div className="w-full md:w-auto">
+
+        {/* Filtro de Tipo (Tabs) */}
+        <div className="flex bg-gray-100 p-1 rounded-lg w-full md:w-auto">
           <button
-            onClick={() => { setFiltroProfesor(''); setFechaInicio(''); setFechaFin(''); }}
-            className="w-full md:w-auto px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            onClick={() => setFiltroTipo('todos')}
+            className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filtroTipo === 'todos' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            Limpiar
+            Todos
+          </button>
+          <button
+            onClick={() => setFiltroTipo('por_hora')}
+            className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filtroTipo === 'por_hora' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Por Hora
+          </button>
+          <button
+            onClick={() => setFiltroTipo('fijo_mensual')}
+            className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filtroTipo === 'fijo_mensual' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Fijo
           </button>
         </div>
       </div>
@@ -430,11 +473,12 @@ export function PagosProfesoresPage() {
       {/* Tarjeta de Resumen */}
       <div className="bg-gradient-to-r from-[#1E293B] to-[#334155] rounded-xl shadow-md p-6 flex items-center justify-between text-white">
         <div>
-          <p className="text-sm font-medium text-gray-300 uppercase tracking-wider">Total Pagado (Filtro Actual)</p>
+          <p className="text-sm font-medium text-gray-300 uppercase tracking-wider">Total Pagado en el Período</p>
           <p className="text-3xl font-bold mt-1">${totalPagos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="hidden sm:block bg-white/10 p-4 rounded-full">
-          <DollarSign className="h-8 w-8 text-white" />
+        <div className="hidden sm:flex flex-col items-end">
+          <span className="text-sm text-gray-300">Registros encontrados</span>
+          <span className="text-2xl font-bold">{pagosFiltrados.length}</span>
         </div>
       </div>
 
@@ -458,8 +502,8 @@ export function PagosProfesoresPage() {
               {pagosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
-                    <DollarSign className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                    <p>No hay registros de pago con los filtros seleccionados.</p>
+                    <Filter className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p>No hay pagos registrados para los filtros seleccionados.</p>
                   </td>
                 </tr>
               ) : (
