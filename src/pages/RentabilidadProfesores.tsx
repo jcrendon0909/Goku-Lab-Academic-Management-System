@@ -78,12 +78,25 @@ export default function RentabilidadProfesores() {
     promedioMargen: 0,
   });
 
-  const cargarDatos = async () => {
+    const cargarDatos = async () => {
     try {
       setCargando(true);
+      
       const [anio, mes] = filtroMes.split('-');
+      
+      // 🆕 VALIDACIÓN PARA EVITAR ENVIAR VALORES VACÍOS
+      if (!anio || !mes) {
+        toast.error('Por favor, selecciona un mes válido');
+        setCargando(false);
+        return;
+      }
+
       const res = await apiFetch(`/reportes/rentabilidad-profesores?mes=${mes}&anio=${anio}`);
-      if (!res.ok) throw new Error('Error al cargar datos');
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al cargar datos del servidor');
+      }
       
       const dataRes: ProfesorRentabilidad[] = await res.json();
       setData(dataRes);
@@ -101,7 +114,7 @@ export default function RentabilidadProfesores() {
       setCargando(false);
     }
   };
-
+  
   useEffect(() => {
     cargarDatos();
   }, [filtroMes]);

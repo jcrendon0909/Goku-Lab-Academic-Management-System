@@ -72,6 +72,140 @@ router.get("/pagos", async (req, res) => {
 });
 
 // ============================================================
+// GET /rentabilidad-profesores (BLINDADO)
+// ============================================================
+router.get("/rentabilidad-profesores", async (req, res) => {
+  try {
+    const hoy = new Date();
+    const mes = parseInt(req.query.mes) || (hoy.getMonth() + 1);
+    const anio = parseInt(req.query.anio) || hoy.getFullYear();
+
+    const { inicio, fin } = getRangoFechasMexico(anio, mes);
+
+    const profesoresMap = {};
+
+    const getProfesor = (id, nombre) => {
+      if (!profesoresMap[id]) {
+        profesoresMap[id] = {
+          idProfesor: id,
+          nombre: nombre,
+          ingresosRegulares: 0,
+          ingresosExtras: 0,
+          costoRegular: 0,
+          costoExtras: 0,
+          grupos: []
+        };
+      }
+      return profesoresMap[id];
+    };
+
+    // 1. INGRESOS REGULARES
+    const abonos = await Abono.aggregate([
+      { $match: { fechaAbono: { $gte: inicio, $lte: fin } } },
+      { $lookup: { from: "grupos", localField: "grupoId", foreignField: "IdGrupo", as: "grupoInfo" } },
+      { $unwind: { path: "$grupoInfo", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "profesores", localField: "grupoInfo.idProfesor", foreignField: "idProfesor", as: "profesorInfo" } },
+      { $unwind: { path: "$profesorInfo", preserveNullAndEmptyArrays: true } },
+    ]);
+
+    for (const abono of abonos) {
+      const profId = abono.profesorInfo?.idProfesor || "sin-profesor";
+      const profNombre = abono.profesorInfo?.nombre || "Sin profesor";
+      const prof = getProfesor(profId, profNombre);
+      
+      const monto = abono.montoAbono || 0;
+      prof.ingresosRegulares += monto;
+
+      const grupoId = abono.grupoId;
+      let grupo = prof.grupos.find(g => g.idGrupo === grupoId);
+      if (!grupo) {
+        grupo = { idGrupo: grupoId, nombreCurso: abono.grupoInfo?.nombreCurso || "Sin grupo", ingresosGrupo: 0, alumnos: new Set(), tipo: 'regular' };
+        prof.grupos.push(grupo);
+      }
+      grupo.ingresosGrupo += monto;
+      if (abono.idAlumno) grupo.alumnos.add(abono.idAlumno);
+    }
+
+    // 2. COSTOS REGULARES
+    const pagosProf = await PagoProfesor.find({ 
+      $or: [ { fecha: { $gte: inicio, $lte: fin } }, { createdAt: { $gte: inicio, $lte: fin } } ],
+      activo: { $ne: false } 
+    }).lean();
+
+    for (const pago of pagosProf) {
+      const prof = getProfesor(pago.idProfesor, pago.nombreProfesor || "Sin nombre");
+      prof.costoRegular += (pago.montoCalculado || 0);
+    }
+
+    // 3. CURSOS EXTRAS (BLINDADO CON || 0 y || [])
+    const cursosDelMes = await CursoVerano.find({ fechaInicio: { $gte: inicio, $lte: fin } }).lean();
+    
+    for (const curso of cursosDelMes) {
+      const inscripciones = await InscripcionVerano.find({ idCursoVerano: curso.idCursoVerano }).lean();
+      const ingresoCursoTotal = inscripciones.reduce((sum, ins) => sum + (ins.montoPago || 0), 0);
+      const alumnosCurso = inscripciones.length;
+      
+      const asignaciones = await AsignacionProfesorVerano.find({ idCursoVerano: curso.idCursoVerano }).lean();
+      
+      let horasTotalesCurso = 0;
+      asignaciones.forEach(asig => { 
+        const diasCount = Array.isArray(asig.dias) ? asig.dias.length : 0;
+        horasTotalesCurso += (diasCount * (asig.horasPorDia || 0) * (asig.semanas || 1)); 
+      });
+
+      for (const asig of asignaciones) {
+        const prof = getProfesor(asig.idProfesor, asig.nombreProfesor || "Sin nombre");
+        
+        const diasCount = Array.isArray(asig.dias) ? asig.dias.length : 0;
+        const horasAsignacion = diasCount * (asig.horasPorDia || 0) * (asig.semanas || 1);
+        
+        const costoAsignacion = horasAsignacion * (asig.costoHora || 0);
+        prof.costoExtras += costoAsignacion;
+
+        const ingresoProporcional = horasTotalesCurso > 0 ? (horasAsignacion / horasTotalesCurso) * ingresoCursoTotal : 0;
+        prof.ingresosExtras += ingresoProporcional;
+
+        prof.grupos.push({
+          idGrupo: curso.idCursoVerano,
+          nombreCurso: curso.nombre,
+          ingresosGrupo: ingresoProporcional,
+          cantidadAlumnos: alumnosCurso,
+          tipo: 'extra'
+        });
+      }
+    }
+
+    // Formatear respuesta final
+    const dataFinal = Object.values(profesoresMap).map(prof => {
+      const gruposFormateados = prof.grupos.map(g => ({
+        idGrupo: g.idGrupo, nombreCurso: g.nombreCurso, ingresosGrupo: g.ingresosGrupo,
+        cantidadAlumnos: g.alumnos ? g.alumnos.size : g.cantidadAlumnos, tipo: g.tipo
+      }));
+
+      const totalIngresos = prof.ingresosRegulares + prof.ingresosExtras;
+      const totalCostos = prof.costoRegular + prof.costoExtras;
+      const utilidad = totalIngresos - totalCostos;
+      const porcentaje = totalIngresos > 0 ? (utilidad / totalIngresos) * 100 : 0;
+
+      return {
+        idProfesor: prof.idProfesor, nombre: prof.nombre,
+        ingresos: totalIngresos, ingresosRegulares: prof.ingresosRegulares, ingresosExtras: prof.ingresosExtras,
+        costo: totalCostos, costoRegular: prof.costoRegular, costoExtras: prof.costoExtras,
+        utilidad, porcentaje,
+        cantidadGrupos: gruposFormateados.length,
+        cantidadAlumnos: gruposFormateados.reduce((sum, g) => sum + g.cantidadAlumnos, 0),
+        grupos: gruposFormateados
+      };
+    }).filter(p => p.ingresos > 0 || p.costo > 0 || p.cantidadGrupos > 0).sort((a, b) => b.ingresos - a.ingresos);
+
+    res.json(dataFinal);
+  } catch (error) {
+    console.error("❌ Error en GET /reportes/rentabilidad-profesores:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
 // GET /rentabilidad-global
 // ============================================================
 router.get("/rentabilidad-global", async (req, res) => {
@@ -117,7 +251,6 @@ router.get("/rentabilidad-global", async (req, res) => {
 
     const asignacionesVerano = await AsignacionProfesorVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
     
-    // 🆕 OBTENER NOMBRES DE PROFESORES PARA EL DESGLOSE
     const profesoresDB = await Profesor.find().lean();
     const profesoresNombreMap = {};
     profesoresDB.forEach(p => profesoresNombreMap[p.idProfesor] = p.nombre);
@@ -125,18 +258,19 @@ router.get("/rentabilidad-global", async (req, res) => {
     const desgloseProfesoresMap = {};
     let totalProfesoresRegulares = 0;
     
-    // Sumar regulares
     pagosProf.forEach(p => {
       const nom = p.nombreProfesor || 'Sin nombre';
       desgloseProfesoresMap[nom] = (desgloseProfesoresMap[nom] || 0) + (p.montoCalculado || 0);
       totalProfesoresRegulares += (p.montoCalculado || 0);
     });
 
-    // Sumar extras (verano)
     let totalProfesoresVerano = 0;
     asignacionesVerano.forEach(asig => {
       const nom = profesoresNombreMap[asig.idProfesor] || asig.nombreProfesor || 'Sin nombre';
-      const costo = ((asig.dias.length * asig.horasPorDia * asig.semanas) * asig.costoHora);
+      // BLINDADO AQUÍ TAMBIÉN
+      const diasCount = Array.isArray(asig.dias) ? asig.dias.length : 0;
+      const costo = (diasCount * (asig.horasPorDia || 0) * (asig.semanas || 1)) * (asig.costoHora || 0);
+      
       desgloseProfesoresMap[nom] = (desgloseProfesoresMap[nom] || 0) + costo;
       totalProfesoresVerano += costo;
     });
@@ -157,7 +291,6 @@ router.get("/rentabilidad-global", async (req, res) => {
     ].filter(f => f.monto > 0);
 
     const desgloseGastos = Object.keys(desgloseGastosMap).map(k => ({ categoria: k, monto: desgloseGastosMap[k] }));
-    // Ordenamos de mayor a menor
     const desgloseProfesores = Object.keys(desgloseProfesoresMap)
       .map(k => ({ idProfesor: k, nombre: k, costo: desgloseProfesoresMap[k] }))
       .sort((a, b) => b.costo - a.costo);
@@ -223,8 +356,10 @@ router.get("/utilidad-mensual", async (req, res) => {
 
       const gastosMonto = gastos.reduce((sum, g) => sum + (g.monto || 0), 0);
       const costoProfesoresRegulares = pagosProf.reduce((sum, p) => sum + (p.montoCalculado || 0), 0);
+      
       const costoProfesoresVerano = asignacionesVerano.reduce((sum, asig) => {
-        return sum + ((asig.dias.length * asig.horasPorDia * asig.semanas) * asig.costoHora);
+        const diasCount = Array.isArray(asig.dias) ? asig.dias.length : 0;
+        return sum + ((diasCount * (asig.horasPorDia || 0) * (asig.semanas || 1)) * (asig.costoHora || 0));
       }, 0);
 
       const egresos = gastosMonto + costoProfesoresRegulares + costoProfesoresVerano;
