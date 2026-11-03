@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { apiFetch } from '../services/api';
+// 🆕 CORREGIDO: Subimos dos niveles para salir de src/app/components
+import { apiFetch } from '../../services/api';
 import { toast } from 'sonner';
 import { 
   RefreshCw, Plus, Edit2, Trash2, DollarSign, BarChart3, Loader2, 
   Search, Filter, Calendar, Clock, AlertCircle
 } from 'lucide-react';
-import { parsearFechaLocal, extraerFechaString, formatearFechaDisplay } from '../utils/fechas';
+// 🆕 CORREGIDO: Subimos dos niveles para salir de src/app/components
+import { parsearFechaLocal, extraerFechaString, formatearFechaDisplay } from '../../utils/fechas';
 
 // ============================================================
 // TIPOS
