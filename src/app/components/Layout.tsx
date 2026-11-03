@@ -128,7 +128,7 @@ export function Layout() {
                 )}
                 <div className="space-y-1">
                   {visibleItems.map((item) => {
-                    const isActive = location.pathname.startsWith(item.path);
+                    const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
                     return (
                       <Link
                         key={item.path}
