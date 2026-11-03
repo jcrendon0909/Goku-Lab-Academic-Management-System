@@ -9,7 +9,6 @@ import Gasto from "../models/Gasto.js";
 import PagoProfesor from "../models/PagoProfesor.js";
 import InscripcionVerano from "../models/InscripcionVerano.js";
 import AsignacionProfesorVerano from "../models/AsignacionProfesorVerano.js";
-// 🆕 IMPORTAMOS EL MODELO DEL CURSO
 import CursoVerano from "../models/CursoVerano.js";
 
 const router = express.Router();
@@ -73,6 +72,134 @@ router.get("/pagos", async (req, res) => {
 });
 
 // ============================================================
+// GET /rentabilidad-profesores
+// ============================================================
+router.get("/rentabilidad-profesores", async (req, res) => {
+  try {
+    const hoy = new Date();
+    const mes = parseInt(req.query.mes) || (hoy.getMonth() + 1);
+    const anio = parseInt(req.query.anio) || hoy.getFullYear();
+
+    const { inicio, fin } = getRangoFechasMexico(anio, mes);
+    const mesLabel = MESES_LABEL[mes - 1];
+
+    const profesoresMap = {};
+
+    const getProfesor = (id, nombre) => {
+      if (!profesoresMap[id]) {
+        profesoresMap[id] = {
+          idProfesor: id,
+          nombre: nombre,
+          ingresosRegulares: 0,
+          ingresosExtras: 0,
+          costoRegular: 0,
+          costoExtras: 0,
+          grupos: []
+        };
+      }
+      return profesoresMap[id];
+    };
+
+    // 1. INGRESOS REGULARES
+    const abonos = await Abono.aggregate([
+      { $match: { fechaAbono: { $gte: inicio, $lte: fin } } },
+      { $lookup: { from: "grupos", localField: "grupoId", foreignField: "IdGrupo", as: "grupoInfo" } },
+      { $unwind: { path: "$grupoInfo", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "profesores", localField: "grupoInfo.idProfesor", foreignField: "idProfesor", as: "profesorInfo" } },
+      { $unwind: { path: "$profesorInfo", preserveNullAndEmptyArrays: true } },
+    ]);
+
+    for (const abono of abonos) {
+      const profId = abono.profesorInfo?.idProfesor || "sin-profesor";
+      const profNombre = abono.profesorInfo?.nombre || "Sin profesor";
+      const prof = getProfesor(profId, profNombre);
+      
+      const monto = abono.montoAbono || 0;
+      prof.ingresosRegulares += monto;
+
+      const grupoId = abono.grupoId;
+      let grupo = prof.grupos.find(g => g.idGrupo === grupoId);
+      if (!grupo) {
+        grupo = { idGrupo: grupoId, nombreCurso: abono.grupoInfo?.nombreCurso || "Sin grupo", ingresosGrupo: 0, alumnos: new Set(), tipo: 'regular' };
+        prof.grupos.push(grupo);
+      }
+      grupo.ingresosGrupo += monto;
+      if (abono.idAlumno) grupo.alumnos.add(abono.idAlumno);
+    }
+
+    // 2. COSTOS REGULARES
+    // Usamos $or y $ne:false para asegurar que atrapamos todos los pagos
+    const pagosProf = await PagoProfesor.find({ 
+      $or: [ { fecha: { $gte: inicio, $lte: fin } }, { createdAt: { $gte: inicio, $lte: fin } } ],
+      activo: { $ne: false } 
+    }).lean();
+
+    for (const pago of pagosProf) {
+      const prof = getProfesor(pago.idProfesor, pago.nombreProfesor || "Sin nombre");
+      prof.costoRegular += (pago.montoCalculado || 0);
+    }
+
+    // 3. CURSOS EXTRAS
+    const cursosDelMes = await CursoVerano.find({ fechaInicio: { $gte: inicio, $lte: fin } }).lean();
+    
+    for (const curso of cursosDelMes) {
+      const inscripciones = await InscripcionVerano.find({ idCursoVerano: curso.idCursoVerano }).lean();
+      const ingresoCursoTotal = inscripciones.reduce((sum, ins) => sum + (ins.montoPago || 0), 0);
+      const alumnosCurso = inscripciones.length;
+      const asignaciones = await AsignacionProfesorVerano.find({ idCursoVerano: curso.idCursoVerano }).lean();
+      
+      let horasTotalesCurso = 0;
+      asignaciones.forEach(asig => { horasTotalesCurso += (asig.dias.length * asig.horasPorDia * asig.semanas); });
+
+      for (const asig of asignaciones) {
+        const prof = getProfesor(asig.idProfesor, asig.nombreProfesor || "Sin nombre");
+        const costoAsignacion = (asig.dias.length * asig.horasPorDia * asig.semanas) * asig.costoHora;
+        prof.costoExtras += costoAsignacion;
+
+        const horasAsignacion = (asig.dias.length * asig.horasPorDia * asig.semanas);
+        const ingresoProporcional = horasTotalesCurso > 0 ? (horasAsignacion / horasTotalesCurso) * ingresoCursoTotal : 0;
+        prof.ingresosExtras += ingresoProporcional;
+
+        prof.grupos.push({
+          idGrupo: curso.idCursoVerano,
+          nombreCurso: curso.nombre,
+          ingresosGrupo: ingresoProporcional,
+          cantidadAlumnos: alumnosCurso,
+          tipo: 'extra'
+        });
+      }
+    }
+
+    const dataFinal = Object.values(profesoresMap).map(prof => {
+      const gruposFormateados = prof.grupos.map(g => ({
+        idGrupo: g.idGrupo, nombreCurso: g.nombreCurso, ingresosGrupo: g.ingresosGrupo,
+        cantidadAlumnos: g.alumnos ? g.alumnos.size : g.cantidadAlumnos, tipo: g.tipo
+      }));
+
+      const totalIngresos = prof.ingresosRegulares + prof.ingresosExtras;
+      const totalCostos = prof.costoRegular + prof.costoExtras;
+      const utilidad = totalIngresos - totalCostos;
+      const porcentaje = totalIngresos > 0 ? (utilidad / totalIngresos) * 100 : 0;
+
+      return {
+        idProfesor: prof.idProfesor, nombre: prof.nombre,
+        ingresos: totalIngresos, ingresosRegulares: prof.ingresosRegulares, ingresosExtras: prof.ingresosExtras,
+        costo: totalCostos, costoRegular: prof.costoRegular, costoExtras: prof.costoExtras,
+        utilidad, porcentaje,
+        cantidadGrupos: gruposFormateados.length,
+        cantidadAlumnos: gruposFormateados.reduce((sum, g) => sum + g.cantidadAlumnos, 0),
+        grupos: gruposFormateados
+      };
+    }).filter(p => p.ingresos > 0 || p.costo > 0 || p.cantidadGrupos > 0).sort((a, b) => b.ingresos - a.ingresos);
+
+    res.json(dataFinal);
+  } catch (error) {
+    console.error("❌ Error en GET /reportes/rentabilidad-profesores:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
 // GET /rentabilidad-global
 // ============================================================
 router.get("/rentabilidad-global", async (req, res) => {
@@ -84,27 +211,29 @@ router.get("/rentabilidad-global", async (req, res) => {
     const { inicio, fin } = getRangoFechasMexico(anio, mes);
     const mesLabel = MESES_LABEL[mes - 1];
 
-    // 1. INGRESOS REGULARES (Abonos)
     const abonos = await Abono.find({ fechaAbono: { $gte: inicio, $lte: fin } }).lean();
     const totalIngresosRegulares = abonos.reduce((sum, a) => sum + (a.montoAbono || 0), 0);
 
-    // 2. INGRESOS DE CURSOS EXTRAS (Basado en la fecha del CURSO, no en createdAt)
-    const cursosDelMes = await CursoVerano.find({
-      fechaInicio: { $gte: inicio, $lte: fin }
-    }).lean();
+    const cursosDelMes = await CursoVerano.find({ fechaInicio: { $gte: inicio, $lte: fin } }).lean();
     const idsCursos = cursosDelMes.map(c => c.idCursoVerano);
 
     const inscripcionesVerano = await InscripcionVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
     const totalIngresosVerano = inscripcionesVerano.reduce((sum, ins) => sum + (ins.montoPago || 0), 0);
 
-    // 3. PROYECCIÓN DE INGRESOS
     const todasInscripciones = await Inscripcion.find().lean();
     const totalIngresosProyectados = calcularProyeccionMes(todasInscripciones, inicio, fin);
-
     const totalIngresos = totalIngresosRegulares + totalIngresosVerano;
 
-    // 4. GASTOS OPERATIVOS
-    const gastos = await Gasto.find({ anio, mes: mesLabel, activo: true, categoria: { $ne: "Profesores" } }).lean();
+    // 🚨 FIX DEFINITIVO PARA GASTOS: Búsqueda doble ($or) y excluir nulos ($ne:false)
+    const gastos = await Gasto.find({ 
+      $or: [
+        { fecha: { $gte: inicio, $lte: fin } },
+        { anio: anio, mes: mesLabel }
+      ],
+      activo: { $ne: false }, 
+      categoria: { $ne: "Profesores" } 
+    }).lean();
+    
     const desgloseGastosMap = {};
     let totalGastos = 0;
     gastos.forEach(g => {
@@ -113,8 +242,12 @@ router.get("/rentabilidad-global", async (req, res) => {
       totalGastos += (g.monto || 0);
     });
 
-    // 5. COSTO PROFESORES REGULARES
-    const pagosProf = await PagoProfesor.find({ fecha: { $gte: inicio, $lte: fin }, activo: true }).lean();
+    // FIX NÓMINA REGULAR
+    const pagosProf = await PagoProfesor.find({ 
+      $or: [ { fecha: { $gte: inicio, $lte: fin } }, { createdAt: { $gte: inicio, $lte: fin } } ],
+      activo: { $ne: false } 
+    }).lean();
+    
     const desgloseProfesoresMap = {};
     let totalProfesoresRegulares = 0;
     pagosProf.forEach(p => {
@@ -123,7 +256,6 @@ router.get("/rentabilidad-global", async (req, res) => {
       totalProfesoresRegulares += (p.montoCalculado || 0);
     });
 
-    // 6. COSTO PROFESORES CURSOS EXTRAS (Basado en el CURSO del mes)
     const asignacionesVerano = await AsignacionProfesorVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
     let totalProfesoresVerano = 0;
     asignacionesVerano.forEach(asig => {
@@ -175,15 +307,12 @@ router.get("/utilidad-mensual", async (req, res) => {
     const meses = [];
 
     const todasInscripciones = await Inscripcion.find().lean();
-
-    // Pre-cargar todos los cursos para optimizar
     const todosCursosVerano = await CursoVerano.find({ año: anio }).lean();
 
     for (let mes = 1; mes <= 12; mes++) {
       const { inicio, fin } = getRangoFechasMexico(anio, mes);
       const mesLabel = MESES_LABEL[mes - 1];
 
-      // Buscar cursos que inician en este mes
       const cursosDelMes = todosCursosVerano.filter(c => {
         const fInicio = new Date(c.fechaInicio);
         return fInicio >= inicio && fInicio <= fin;
@@ -198,8 +327,19 @@ router.get("/utilidad-mensual", async (req, res) => {
       const ingresos = ingresosRegulares + ingresosVerano;
       const ingresosProyectados = calcularProyeccionMes(todasInscripciones, inicio, fin) + ingresosVerano;
 
-      const gastos = await Gasto.find({ anio, mes: mesLabel, activo: true, categoria: { $ne: "Profesores" } }).lean();
-      const pagosProf = await PagoProfesor.find({ fecha: { $gte: inicio, $lte: fin }, activo: true }).lean();
+      // FIX GASTOS
+      const gastos = await Gasto.find({ 
+        $or: [ { fecha: { $gte: inicio, $lte: fin } }, { anio, mes: mesLabel } ],
+        activo: { $ne: false }, 
+        categoria: { $ne: "Profesores" } 
+      }).lean();
+      
+      // FIX NÓMINA
+      const pagosProf = await PagoProfesor.find({ 
+        $or: [ { fecha: { $gte: inicio, $lte: fin } }, { createdAt: { $gte: inicio, $lte: fin } } ],
+        activo: { $ne: false } 
+      }).lean();
+      
       const asignacionesVerano = await AsignacionProfesorVerano.find({ idCursoVerano: { $in: idsCursos } }).lean();
 
       const gastosMonto = gastos.reduce((sum, g) => sum + (g.monto || 0), 0);
@@ -214,17 +354,11 @@ router.get("/utilidad-mensual", async (req, res) => {
       const porcentajeUtilidad = ingresos > 0 ? (utilidad / ingresos) * 100 : 0;
 
       meses.push({
-        mesNum: mes,
-        mesLabel: MESES_LABEL[mes - 1],
-        label: `${MESES_LABEL[mes - 1]} ${anio}`,
-        ingresos: Math.round(ingresos * 100) / 100,
-        ingresosProyectados: Math.round(ingresosProyectados * 100) / 100,
-        gastos: Math.round(gastosMonto * 100) / 100,
-        costoProfesores: Math.round((costoProfesoresRegulares + costoProfesoresVerano) * 100) / 100,
-        egresos: Math.round(egresos * 100) / 100,
-        utilidad: Math.round(utilidad * 100) / 100,
-        utilidadProyectada: Math.round(utilidadProyectada * 100) / 100,
-        porcentajeUtilidad: Math.round(porcentajeUtilidad * 100) / 100,
+        mesNum: mes, mesLabel: MESES_LABEL[mes - 1], label: `${MESES_LABEL[mes - 1]} ${anio}`,
+        ingresos: Math.round(ingresos * 100) / 100, ingresosProyectados: Math.round(ingresosProyectados * 100) / 100,
+        gastos: Math.round(gastosMonto * 100) / 100, costoProfesores: Math.round((costoProfesoresRegulares + costoProfesoresVerano) * 100) / 100,
+        egresos: Math.round(egresos * 100) / 100, utilidad: Math.round(utilidad * 100) / 100,
+        utilidadProyectada: Math.round(utilidadProyectada * 100) / 100, porcentajeUtilidad: Math.round(porcentajeUtilidad * 100) / 100,
       });
     }
 
